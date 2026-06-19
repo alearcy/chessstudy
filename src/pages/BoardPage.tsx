@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { getLesson } from "@/services/lessonService";
 import { getBoard, updateBoard } from "@/services/boardService";
 import type { Lesson, Board } from "@/types";
+import type { Square } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useChessBoard } from "@/hooks/useChessBoard";
 import ChessBoardView from "@/components/board/ChessBoard";
+import MoveNotation from "@/components/board/MoveNotation";
 
 export default function BoardPage() {
   const { id: lessonIdParam, boardId: boardIdParam } = useParams<{
@@ -22,6 +25,24 @@ export default function BoardPage() {
   const [loading, setLoading] = useState(true);
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState("");
+
+  const chess = useChessBoard();
+  const initializedRef = useRef(false);
+
+  useEffect(() => {
+    if (board && !initializedRef.current) {
+      chess.setPosition(board.fen);
+      initializedRef.current = true;
+    }
+  }, [board, chess.setPosition]);
+
+  const handleMove = useCallback(
+    (from: Square, to: Square): boolean => {
+      const newFen = chess.makeMove(from, to);
+      return !!newFen;
+    },
+    [chess.makeMove]
+  );
 
   const loadData = useCallback(async () => {
     const [loadedLesson, loadedBoard] = await Promise.all([
@@ -51,7 +72,7 @@ export default function BoardPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto text-center py-16 text-muted-foreground">
+      <div className="text-center py-16 text-muted-foreground">
         Caricamento...
       </div>
     );
@@ -60,7 +81,7 @@ export default function BoardPage() {
   if (!lesson || !board) return null;
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       <Button
         variant="ghost"
         size="sm"
@@ -109,8 +130,25 @@ export default function BoardPage() {
         )}
       </div>
 
-      <div className="flex justify-center w-full">
-        <ChessBoardView fen={board.fen} />
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        <div className="flex-shrink-0">
+          <ChessBoardView
+            fen={chess.fen}
+            canUndo={chess.canUndo}
+            canRedo={chess.canRedo}
+            onMove={handleMove}
+            onUndo={chess.undo}
+            onRedo={chess.redo}
+            onReset={chess.reset}
+          />
+        </div>
+        <div className="w-full lg:w-64 lg:flex-shrink-0">
+          <MoveNotation
+            moves={chess.moveHistory}
+            currentMoveIndex={chess.historyIndex}
+            onGoToMove={chess.goToMove}
+          />
+        </div>
       </div>
     </div>
   );

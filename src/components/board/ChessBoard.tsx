@@ -1,16 +1,20 @@
 import { useState, useCallback, useMemo } from "react";
 import { Chessboard } from "react-chessboard";
 import type { Square } from "react-chessboard/dist/chessboard/types";
-import { useChessBoard } from "@/hooks/useChessBoard";
 import { Button } from "@/components/ui/button";
 import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw } from "lucide-react";
 
 type BoardMode = "move" | "arrow" | "highlight";
 
 interface ChessBoardViewProps {
-  fen?: string;
+  fen: string;
   boardWidth?: number;
-  onPositionChange?: (fen: string) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onMove: (from: Square, to: Square) => boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+  onReset: () => void;
 }
 
 const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
@@ -18,31 +22,24 @@ const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
 const DEFAULT_BOARD_WIDTH = 560;
 
 export default function ChessBoardView({
-  fen: initialFen,
+  fen,
   boardWidth = DEFAULT_BOARD_WIDTH,
-  onPositionChange,
+  canUndo,
+  canRedo,
+  onMove,
+  onUndo,
+  onRedo,
+  onReset,
 }: ChessBoardViewProps) {
-  const {
-    fen,
-    canUndo,
-    canRedo,
-    makeMove,
-    undo,
-    redo,
-    reset,
-  } = useChessBoard(initialFen);
-
   const [mode, setMode] = useState<BoardMode>("move");
   const [highlights, setHighlights] = useState<Square[]>([]);
 
   const onPieceDrop = useCallback(
     (sourceSquare: Square, targetSquare: Square) => {
       if (mode !== "move") return false;
-      const newFen = makeMove(sourceSquare, targetSquare);
-      if (newFen && onPositionChange) onPositionChange(newFen);
-      return !!newFen;
+      return onMove(sourceSquare, targetSquare);
     },
-    [mode, makeMove, onPositionChange]
+    [mode, onMove]
   );
 
   const onSquareClick = useCallback(
@@ -102,7 +99,7 @@ export default function ChessBoardView({
           variant="ghost"
           size="icon-xs"
           disabled={!canUndo}
-          onClick={undo}
+          onClick={onUndo}
           title="Annulla mossa"
         >
           <Undo2 className="size-4" />
@@ -111,7 +108,7 @@ export default function ChessBoardView({
           variant="ghost"
           size="icon-xs"
           disabled={!canRedo}
-          onClick={redo}
+          onClick={onRedo}
           title="Ripeti mossa"
         >
           <Redo2 className="size-4" />
@@ -119,7 +116,7 @@ export default function ChessBoardView({
         <Button
           variant="ghost"
           size="icon-xs"
-          onClick={reset}
+          onClick={onReset}
           title="Ripristina posizione iniziale"
         >
           <RotateCcw className="size-4" />

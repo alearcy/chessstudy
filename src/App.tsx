@@ -14,7 +14,7 @@ function App() {
             </a>
           </div>
         </header>
-        <main className="max-w-4xl mx-auto px-6 py-8">
+        <main className="px-6 py-8">
           <Routes>
             <Route path="/" element={<LessonsPage />} />
             <Route path="/lesson/:id" element={<LessonDetailPage />} />
