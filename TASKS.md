@@ -15,28 +15,10 @@ PRINCIPLES:
 
 ## In Progress
 
-<!-- Move the task you're currently working on here.
-     Only one task should be in progress at a time for clarity.
-
-     Format:
-     - [ ] FEAT-001 Short description of the task
-       - Spec: `docs/specs/FEAT-001-feature-name.md`
-       - [ ] First subtask
-       - [ ] Second subtask
--->
+FEAT-001 Scacchiera interattiva nella lezione
+  Spec: `docs/specs/FEAT-001-chessboard-lesson.md`
 
 ## Todo
-<!-- List upcoming tasks in priority order.
-     Each task needs an ID and a one-line description.
-     Link to a spec if one exists.
-
-     Format:
-     - [ ] FEAT-002 Short description
-       - Spec: `docs/specs/FEAT-002-feature-name.md`
-     - [ ] FEAT-003 Short description
-     - [ ] BUG-001 Short description
--->
-- [ ] All'interno di una lezione fai in modo che io possa vedere una scacchiera e interagire con essa. I pezzi devono essere disposti in modalità classica. Devo poter spostare i pezzi secondo le loro regole di movimento, poter disegnare frecce o evidenziare case.
 
 ## Done
 

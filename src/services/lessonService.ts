@@ -25,6 +25,10 @@ export async function updateLesson(
 }
 
 export async function deleteLesson(id: number): Promise<void> {
+  const boards = await db.boards.where("lessonId").equals(id).toArray();
+  for (const board of boards) {
+    await db.moves.where("boardId").equals(board.id!).delete();
+  }
   await db.boards.where("lessonId").equals(id).delete();
   await db.lessons.delete(id);
 }
