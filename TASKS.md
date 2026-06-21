@@ -10,5 +10,6 @@
   - Spec: `docs/specs/move-notation-panel.md`
 
 ## Todo
-
+- [ ] Voglio che all'interno della lezione, le scacchiere che creo si vedano su sidebar a destra, al centro la tastiera con sotto una sezione note che posso scrivere liberamente, a destra le mosse come è ora.
+- [ ] Voglio fare in modo di poter importare un PGN all'interno della mia lezione e avere un'analisi delle mosse dall'ultimo modello stockfish.
 
