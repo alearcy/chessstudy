@@ -10,6 +10,7 @@ export interface Board {
   lessonId: number;
   title: string;
   fen: string;
+  notes: string;
   order: number;
   createdAt: Date;
 }

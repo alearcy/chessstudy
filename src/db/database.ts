@@ -13,4 +13,10 @@ db.version(1).stores({
   moves: "++id, boardId, parentId, order, createdAt",
 });
 
+db.version(2).stores({
+  lessons: "++id, title, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+});
+
 export default db;

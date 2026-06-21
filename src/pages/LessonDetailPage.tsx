@@ -1,9 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson } from "@/services/lessonService";
-import { getBoardsByLesson, createBoard, deleteBoard } from "@/services/boardService";
+import {
+  getBoardsByLesson,
+  createBoard,
+  updateBoard,
+  deleteBoard,
+} from "@/services/boardService";
 import type { Lesson, LessonFormData, Board } from "@/types";
+import type { Square } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,12 +21,12 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
+import { useChessBoard } from "@/hooks/useChessBoard";
+import ChessBoardView from "@/components/board/ChessBoard";
+import MoveNotation from "@/components/board/MoveNotation";
+
+const BOARD_WIDTH = 480;
+const SAVE_DEBOUNCE_MS = 800;
 
 export default function LessonDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -30,10 +36,38 @@ export default function LessonDetailPage() {
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [form, setForm] = useState<LessonFormData>({ title: "", description: "" });
   const [saving, setSaving] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
+
+  const chess = useChessBoard();
+  const initializedRef = useRef<number | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedRef = useRef<string>("");
+
+  const selectedBoard = useMemo(
+    () => boards.find((b) => b.id === selectedBoardId) ?? null,
+    [boards, selectedBoardId]
+  );
+
+  // Inizializza l'hook scacchiera quando viene selezionata una nuova board.
+  useEffect(() => {
+    if (selectedBoard && initializedRef.current !== selectedBoard.id) {
+      chess.setPosition(selectedBoard.fen);
+      initializedRef.current = selectedBoard.id ?? null;
+    }
+  }, [selectedBoard, chess.setPosition]);
+
+  // Sincronizza il draft delle note quando cambia la board selezionata.
+  useEffect(() => {
+    if (selectedBoard) {
+      setNotesDraft(selectedBoard.notes ?? "");
+      lastSavedRef.current = selectedBoard.notes ?? "";
+    }
+  }, [selectedBoard]);
 
   const loadData = useCallback(async () => {
     const [loadedLesson, loadedBoards] = await Promise.all([
@@ -47,11 +81,71 @@ export default function LessonDetailPage() {
     setLesson(loadedLesson);
     setBoards(loadedBoards);
     setLoading(false);
+    // Mantiene la selezione se valida, altrimenti seleziona la prima.
+    setSelectedBoardId((prev) => {
+      if (prev != null && loadedBoards.some((b) => b.id === prev)) return prev;
+      return loadedBoards[0]?.id ?? null;
+    });
   }, [lessonId, navigate]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Salvataggio note: blur immediato + debounce su digitazione.
+  const saveNotes = useCallback(
+    async (next: string) => {
+      if (!selectedBoardId || next === lastSavedRef.current) return;
+      lastSavedRef.current = next;
+      await updateBoard(selectedBoardId, { notes: next });
+    },
+    [selectedBoardId]
+  );
+
+  const scheduleDebouncedSave = useCallback(
+    (next: string) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveNotes(next);
+      }, SAVE_DEBOUNCE_MS);
+    },
+    [saveNotes]
+  );
+
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const next = e.target.value;
+    setNotesDraft(next);
+    scheduleDebouncedSave(next);
+  };
+
+  const handleNotesBlur = () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveNotes(notesDraft);
+  };
+
+  // Persistenza FEN/notes dopo una mossa o una modifica note: aggiorna stato boards.
+  const syncBoardInList = useCallback(
+    (boardId: number, patch: Partial<Board>) => {
+      setBoards((prev) =>
+        prev.map((b) => (b.id === boardId ? { ...b, ...patch } : b))
+      );
+    },
+    []
+  );
+
+  const handleMove = useCallback(
+    (from: Square, to: Square): boolean => {
+      const newFen = chess.makeMove(from, to);
+      if (newFen && selectedBoardId) {
+        syncBoardInList(selectedBoardId, { fen: newFen });
+        // Persiste il FEN aggiornato. La storia mosse SAN non è ancora
+        // tracciata lato DB — vedi docs/tech-debt/move-history-not-persisted.md.
+        void updateBoard(selectedBoardId, { fen: newFen });
+      }
+      return !!newFen;
+    },
+    [chess, selectedBoardId, syncBoardInList]
+  );
 
   const handleEdit = () => {
     if (!lesson) return;
@@ -77,18 +171,54 @@ export default function LessonDetailPage() {
   const handleCreateBoard = async () => {
     const boardId = await createBoard(lessonId);
     await loadData();
-    navigate(`/lesson/${lessonId}/board/${boardId}`);
+    setSelectedBoardId(boardId);
   };
 
   const handleDeleteBoard = async (boardId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     await deleteBoard(boardId);
-    await loadData();
+    // Ricarica e ricalcola la selezione.
+    const [_, updatedBoards] = await Promise.all([
+      Promise.resolve(),
+      getBoardsByLesson(lessonId),
+    ]);
+    setBoards(updatedBoards);
+    if (selectedBoardId === boardId) {
+      setSelectedBoardId(updatedBoards[0]?.id ?? null);
+      initializedRef.current = null;
+    }
+  };
+
+  const handleUndo = async () => {
+    chess.undo();
+    if (selectedBoardId) {
+      const newFen = chess.fen;
+      syncBoardInList(selectedBoardId, { fen: newFen });
+      await updateBoard(selectedBoardId, { fen: newFen });
+    }
+  };
+
+  const handleRedo = async () => {
+    chess.redo();
+    if (selectedBoardId) {
+      const newFen = chess.fen;
+      syncBoardInList(selectedBoardId, { fen: newFen });
+      await updateBoard(selectedBoardId, { fen: newFen });
+    }
+  };
+
+  const handleReset = async () => {
+    chess.reset();
+    if (selectedBoardId) {
+      const newFen = chess.fen;
+      syncBoardInList(selectedBoardId, { fen: newFen });
+      await updateBoard(selectedBoardId, { fen: newFen });
+    }
   };
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto text-center py-16 text-muted-foreground">
+      <div className="max-w-6xl mx-auto text-center py-16 text-muted-foreground">
         Caricamento...
       </div>
     );
@@ -97,73 +227,160 @@ export default function LessonDetailPage() {
   if (!lesson) return null;
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <Button variant="ghost" size="sm" className="mb-4" onClick={() => navigate("/")}>
+    <div className="max-w-6xl mx-auto">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mb-3"
+        onClick={() => navigate("/")}
+      >
         <ArrowLeft className="size-4" />
         <span className="ml-1">Lezioni</span>
       </Button>
 
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{lesson.title}</h1>
+      <div className="flex items-start justify-between mb-4 gap-2">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold truncate">{lesson.title}</h1>
           {lesson.description && (
-            <p className="text-muted-foreground mt-1">{lesson.description}</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              {lesson.description}
+            </p>
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1 shrink-0">
           <Button variant="outline" size="sm" onClick={handleEdit}>
             <Pencil className="size-4" />
             <span className="ml-1 hidden sm:inline">Modifica</span>
           </Button>
-          <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+          >
             <Trash2 className="size-4" />
             <span className="ml-1 hidden sm:inline">Elimina</span>
           </Button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Scacchiere</h2>
-        <Button size="sm" onClick={handleCreateBoard}>
-          <Plus className="size-4" />
-          <span className="ml-1">Nuova scacchiera</span>
-        </Button>
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+        {/* Colonna sinistra: sidebar scacchiere */}
+        <aside className="w-full lg:w-56 shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold">Scacchiere</h2>
+            <Button
+              size="icon-xs"
+              onClick={handleCreateBoard}
+              title="Nuova scacchiera"
+            >
+              <Plus className="size-4" />
+            </Button>
+          </div>
+          {boards.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Nessuna scacchiera. Creane una con il pulsante +.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {boards.map((board) => {
+                const active = board.id === selectedBoardId;
+                return (
+                  <li key={board.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedBoardId(board.id!)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedBoardId(board.id!);
+                        }
+                      }}
+                      className={`flex items-center justify-between gap-1 rounded-md px-2 py-1.5 cursor-pointer text-sm transition-colors ${
+                        active
+                          ? "bg-accent text-accent-foreground"
+                          : "hover:bg-accent/50"
+                      }`}
+                    >
+                      <span className="truncate">{board.title}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="text-destructive hover:text-destructive shrink-0"
+                        onClick={(e) => handleDeleteBoard(board.id!, e)}
+                        title="Elimina scacchiera"
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </aside>
+
+        {/* Centro: scacchiera + note */}
+        <section className="flex-1 min-w-0 flex flex-col gap-4 items-center">
+          {selectedBoard ? (
+            <>
+              <div className="w-full">
+                <ChessBoardView
+                  fen={chess.fen}
+                  boardWidth={BOARD_WIDTH}
+                  canUndo={chess.canUndo}
+                  canRedo={chess.canRedo}
+                  onMove={handleMove}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
+                  onReset={handleReset}
+                />
+              </div>
+              <div className="w-full max-w-[480px] flex flex-col gap-1.5">
+                <label
+                  htmlFor="board-notes"
+                  className="text-sm font-medium flex items-center gap-1.5"
+                >
+                  <NotebookPen className="size-4" />
+                  Note
+                </label>
+                <Textarea
+                  id="board-notes"
+                  value={notesDraft}
+                  onChange={handleNotesChange}
+                  onBlur={handleNotesBlur}
+                  placeholder="Note libere per questa scacchiera..."
+                  rows={6}
+                  className="resize-y"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-16 text-muted-foreground">
+              <p>
+                Seleziona o crea una scacchiera dalla sidebar per iniziare.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* Destra: mosse */}
+        <aside className="w-full lg:w-64 shrink-0">
+          {selectedBoard ? (
+            <MoveNotation
+              moves={chess.moveHistory}
+              currentMoveIndex={chess.historyIndex}
+              onGoToMove={chess.goToMove}
+            />
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              -
+            </div>
+          )}
+        </aside>
       </div>
 
-      {boards.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <p>Nessuna scacchiera. Creane una per iniziare.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {boards.map((board) => (
-            <Card
-              key={board.id}
-              className="cursor-pointer hover:bg-accent/50 transition-colors"
-              onClick={() => navigate(`/lesson/${lessonId}/board/${board.id}`)}
-            >
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-base">{board.title}</CardTitle>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className="text-destructive hover:text-destructive"
-                  onClick={(e) => handleDeleteBoard(board.id!, e)}
-                  title="Elimina scacchiera"
-                >
-                  <Trash2 className="size-3" />
-                </Button>
-              </CardHeader>
-              <CardContent className="pb-4">
-                <p className="text-xs text-muted-foreground font-mono truncate">
-                  {board.fen}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
+      {/* Dialog modifica lezione */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
@@ -191,7 +408,9 @@ export default function LessonDetailPage() {
               <Textarea
                 id="edit-description"
                 value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
                 rows={3}
               />
             </div>
@@ -204,6 +423,7 @@ export default function LessonDetailPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog elimina lezione */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>

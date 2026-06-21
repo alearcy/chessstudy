@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LessonsPage from "@/pages/LessonsPage";
 import LessonDetailPage from "@/pages/LessonDetailPage";
-import BoardPage from "@/pages/BoardPage";
 
 function App() {
   return (
@@ -18,7 +17,6 @@ function App() {
           <Routes>
             <Route path="/" element={<LessonsPage />} />
             <Route path="/lesson/:id" element={<LessonDetailPage />} />
-            <Route path="/lesson/:id/board/:boardId" element={<BoardPage />} />
           </Routes>
         </main>
       </div>

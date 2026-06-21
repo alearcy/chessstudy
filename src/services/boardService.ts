@@ -20,6 +20,7 @@ export async function createBoard(
     lessonId,
     title: title || `Scacchiera ${count + 1}`,
     fen: DEFAULT_FEN,
+    notes: "",
     order: count,
     createdAt: new Date(),
   } as Board);
@@ -28,7 +29,7 @@ export async function createBoard(
 
 export async function updateBoard(
   id: number,
-  data: Partial<Pick<Board, "title" | "fen">>
+  data: Partial<Pick<Board, "title" | "fen" | "notes">>
 ): Promise<void> {
   await db.boards.update(id, data);
 }
