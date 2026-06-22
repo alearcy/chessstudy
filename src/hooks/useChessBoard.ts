@@ -1,93 +1,199 @@
 import { useCallback, useRef, useState } from "react";
 import { Chess } from "chess.js";
 import type { Square } from "react-chessboard/dist/chessboard/types";
+import type { BoardArrow, Move } from "@/types";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+export interface MakeMoveResult {
+  san: string;
+  fen: string;
+  /** Indice (in `moves`) in cui è stata inserita la nuova mossa (placeholder). */
+  newMoveIndex: number;
+  /** id delle mosse rimosse dallo stato (troncamento linea dopo undo+nuova mossa). */
+  truncatedMoveIds: number[];
+}
 
 export function useChessBoard(initialFen: string = START_FEN) {
   const game = useRef(new Chess(initialFen));
   const [fen, setFen] = useState(initialFen);
+  // history[i] = FEN dopo i primi `i` mosse (history[0] = posizione di partenza).
   const [history, setHistory] = useState<string[]>([initialFen]);
-  const [moveHistory, setMoveHistory] = useState<string[]>([]);
+  // moves[i] = mossa che produce history[i+1].
+  const [moves, setMoves] = useState<Move[]>([]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  // Annotazioni della posizione di partenza (historyIndex === 0).
+  const [startArrows, setStartArrows] = useState<BoardArrow[]>([]);
+  const [startHighlights, setStartHighlights] = useState<string[]>([]);
 
-  const syncState = useCallback(() => {
+  const syncFen = useCallback(() => {
     setFen(game.current.fen());
   }, []);
 
+  /**
+   * Carica una posizione di partenza e una sequenza di mosse persistite.
+   * Usato dal componente quando cambia la board selezionata.
+   */
+  const loadSequence = useCallback(
+    (
+      startFen: string,
+      loadedMoves: Move[],
+      loadedStartArrows: BoardArrow[] = [],
+      loadedStartHighlights: string[] = []
+    ) => {
+      game.current.load(startFen);
+      const fens = [startFen, ...loadedMoves.map((m) => m.fen)];
+      game.current.load(fens[fens.length - 1]);
+      setHistory(fens);
+      setMoves(loadedMoves);
+      setHistoryIndex(loadedMoves.length);
+      setFen(fens[fens.length - 1]);
+      setStartArrows(loadedStartArrows);
+      setStartHighlights(loadedStartHighlights);
+    },
+    []
+  );
+
+  /**
+   * Esegue una mossa su chess.js e aggiorna lo stato in memoria con un
+   * Move placeholder (id undefined). Ritorna info per la persistenza.
+   * Se `historyIndex` non è in fondo, tronca il ramo futuro (UI lineare).
+   */
   const makeMove = useCallback(
-    (from: Square, to: Square): string | null => {
+    (from: Square, to: Square): MakeMoveResult | null => {
+      let move;
       try {
-        const move = game.current.move({ from, to, promotion: "q" });
-        if (move) {
-          const newFen = game.current.fen();
-          setFen(newFen);
-          setHistory((prev) => [
-            ...prev.slice(0, historyIndex + 1),
-            newFen,
-          ]);
-          setMoveHistory((prev) => [
-            ...prev.slice(0, historyIndex),
-            move.san,
-          ]);
-          setHistoryIndex((prev) => prev + 1);
-          return newFen;
-        }
-        return null;
+        move = game.current.move({ from, to, promotion: "q" });
       } catch {
         return null;
+      }
+      if (!move) return null;
+      const newFen = game.current.fen();
+      const truncatedMoveIds = moves
+        .slice(historyIndex)
+        .map((m) => m.id)
+        .filter((id): id is number => id != null);
+      const newMoves: Move[] = [
+        ...moves.slice(0, historyIndex),
+        {
+          id: undefined,
+          boardId: 0, // placeholder, sostituito da replaceMove
+          parentId: null,
+          order: historyIndex,
+          moveNotation: move.san,
+          fen: newFen,
+          comment: "",
+          arrows: [],
+          highlights: [],
+          createdAt: new Date(),
+        },
+      ];
+      const newHistory = [...history.slice(0, historyIndex + 1), newFen];
+      setHistory(newHistory);
+      setMoves(newMoves);
+      setHistoryIndex(historyIndex + 1);
+      setFen(newFen);
+      return {
+        san: move.san,
+        fen: newFen,
+        newMoveIndex: historyIndex,
+        truncatedMoveIds,
+      };
+    },
+    [historyIndex, history, moves]
+  );
+
+  /** Sostituisce il Move placeholder all'indice dato con il Move persistito. */
+  const replaceMove = useCallback((index: number, move: Move) => {
+    setMoves((prev) => prev.map((m, i) => (i === index ? move : m)));
+  }, []);
+
+  /** Aggiorna il commento di una mossa in memoria (dopo persistenza). */
+  const setMoveComment = useCallback((index: number, comment: string) => {
+    setMoves((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, comment } : m))
+    );
+  }, []);
+
+  // --- Annotazioni (frecce / evidenziazioni) per la posizione corrente ---
+
+  const currentArrows: BoardArrow[] =
+    historyIndex === 0
+      ? startArrows
+      : (moves[historyIndex - 1]?.arrows ?? []);
+
+  const currentHighlights: string[] =
+    historyIndex === 0
+      ? startHighlights
+      : (moves[historyIndex - 1]?.highlights ?? []);
+
+  /** Imposta le frecce della posizione corrente (in memoria). */
+  const setArrows = useCallback(
+    (arrows: BoardArrow[]) => {
+      if (historyIndex === 0) {
+        setStartArrows(arrows);
+      } else {
+        setMoves((prev) =>
+          prev.map((m, i) =>
+            i === historyIndex - 1 ? { ...m, arrows } : m
+          )
+        );
       }
     },
     [historyIndex]
   );
 
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      game.current.load(history[newIndex]);
-      syncState();
-      setHistoryIndex(newIndex);
-    }
-  }, [history, historyIndex, syncState]);
-
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const newIndex = historyIndex + 1;
-      game.current.load(history[newIndex]);
-      syncState();
-      setHistoryIndex(newIndex);
-    }
-  }, [history, historyIndex, syncState]);
-
-  const reset = useCallback(() => {
-    game.current.load(START_FEN);
-    syncState();
-    setHistory([START_FEN]);
-    setMoveHistory([]);
-    setHistoryIndex(0);
-  }, [syncState]);
-
-  const setPosition = useCallback(
-    (newFen: string) => {
-      game.current.load(newFen);
-      syncState();
-      setHistory([newFen]);
-      setMoveHistory([]);
-      setHistoryIndex(0);
+  /** Imposta le evidenziazioni della posizione corrente (in memoria). */
+  const setHighlights = useCallback(
+    (highlights: string[]) => {
+      if (historyIndex === 0) {
+        setStartHighlights(highlights);
+      } else {
+        setMoves((prev) =>
+          prev.map((m, i) =>
+            i === historyIndex - 1 ? { ...m, highlights } : m
+          )
+        );
+      }
     },
-    [syncState]
+    [historyIndex]
   );
 
   const goToMove = useCallback(
     (index: number) => {
-      if (index >= 0 && index < history.length) {
-        game.current.load(history[index]);
-        syncState();
-        setHistoryIndex(index);
-      }
+      if (index < 0 || index >= history.length) return;
+      game.current.load(history[index]);
+      setHistoryIndex(index);
+      syncFen();
     },
-    [history, syncState]
+    [history, syncFen]
   );
+
+  const undo = useCallback(() => {
+    if (historyIndex > 0) goToMove(historyIndex - 1);
+  }, [historyIndex, goToMove]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) goToMove(historyIndex + 1);
+  }, [historyIndex, history.length, goToMove]);
+
+  const reset = useCallback((startFen: string = START_FEN) => {
+    game.current.load(startFen);
+    setHistory([startFen]);
+    setMoves([]);
+    setHistoryIndex(0);
+    setFen(startFen);
+  }, []);
+
+  // Compatibilità: imposta solo il FEN di partenza, senza storia.
+  const setPosition = useCallback(
+    (newFen: string) => {
+      loadSequence(newFen, []);
+    },
+    [loadSequence]
+  );
+
+  const currentMove = historyIndex > 0 ? moves[historyIndex - 1] ?? null : null;
 
   return {
     game,
@@ -96,15 +202,25 @@ export function useChessBoard(initialFen: string = START_FEN) {
     isGameOver: game.current.isGameOver(),
     isCheck: game.current.isCheck(),
     history,
+    moves,
     historyIndex,
-    moveHistory,
+    currentMove,
+    currentArrows,
+    currentHighlights,
+    startArrows,
+    startHighlights,
     canUndo: historyIndex > 0,
     canRedo: historyIndex < history.length - 1,
     makeMove,
+    replaceMove,
+    setMoveComment,
+    setArrows,
+    setHighlights,
     undo,
     redo,
     reset,
     setPosition,
+    loadSequence,
     goToMove,
   };
 }
