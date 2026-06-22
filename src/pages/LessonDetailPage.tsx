@@ -66,13 +66,23 @@ export default function LessonDetailPage() {
     }
   }, [selectedBoard, chess.setPosition]);
 
-  // Sincronizza il draft delle note quando cambia la board selezionata.
+  // Sincronizza il draft delle note SOLO quando cambia la board selezionata
+  // (non ad ogni mutazione di FEN/titolo della stessa board, che altrimenti
+  // sovrascriverebbe le modifiche non ancora salvate).
+  const prevBoardIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (selectedBoard) {
-      setNotesDraft(selectedBoard.notes ?? "");
-      lastSavedRef.current = selectedBoard.notes ?? "";
+    if (selectedBoardId === prevBoardIdRef.current) return;
+    prevBoardIdRef.current = selectedBoardId;
+    // Flush di un eventuale salvataggio debounce pendente della board precedente.
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
     }
-  }, [selectedBoard]);
+    const board = boards.find((b) => b.id === selectedBoardId);
+    const notes = board?.notes ?? "";
+    setNotesDraft(notes);
+    lastSavedRef.current = notes;
+  }, [selectedBoardId, boards]);
 
   const loadData = useCallback(async () => {
     const [loadedLesson, loadedBoards] = await Promise.all([
