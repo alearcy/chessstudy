@@ -42,6 +42,11 @@ export default function LessonDetailPage() {
   const [form, setForm] = useState<LessonFormData>({ title: "", description: "" });
   const [saving, setSaving] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
+  const [editBoardOpen, setEditBoardOpen] = useState(false);
+  const [editBoardId, setEditBoardId] = useState<number | null>(null);
+  const [editBoardTitle, setEditBoardTitle] = useState("");
+  const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
+  const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
 
   const chess = useChessBoard();
   const initializedRef = useRef<number | null>(null);
@@ -174,14 +179,35 @@ export default function LessonDetailPage() {
     setSelectedBoardId(boardId);
   };
 
-  const handleDeleteBoard = async (boardId: number, e: React.MouseEvent) => {
+  const handleEditBoardClick = (board: Board, e: React.MouseEvent) => {
     e.stopPropagation();
+    setEditBoardId(board.id ?? null);
+    setEditBoardTitle(board.title);
+    setEditBoardOpen(true);
+  };
+
+  const handleSaveBoardTitle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editBoardId || !editBoardTitle.trim()) return;
+    await updateBoard(editBoardId, { title: editBoardTitle.trim() });
+    syncBoardInList(editBoardId, { title: editBoardTitle.trim() });
+    setEditBoardOpen(false);
+  };
+
+  const handleDeleteBoardClick = (boardId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeleteBoardId(boardId);
+    setDeleteBoardOpen(true);
+  };
+
+  const confirmDeleteBoard = async () => {
+    if (!deleteBoardId) return;
+    const boardId = deleteBoardId;
+    setDeleteBoardOpen(false);
+    setDeleteBoardId(null);
     await deleteBoard(boardId);
     // Ricarica e ricalcola la selezione.
-    const [_, updatedBoards] = await Promise.all([
-      Promise.resolve(),
-      getBoardsByLesson(lessonId),
-    ]);
+    const updatedBoards = await getBoardsByLesson(lessonId);
     setBoards(updatedBoards);
     if (selectedBoardId === boardId) {
       setSelectedBoardId(updatedBoards[0]?.id ?? null);
@@ -303,15 +329,26 @@ export default function LessonDetailPage() {
                       }`}
                     >
                       <span className="truncate">{board.title}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="text-destructive hover:text-destructive shrink-0"
-                        onClick={(e) => handleDeleteBoard(board.id!, e)}
-                        title="Elimina scacchiera"
-                      >
-                        <Trash2 className="size-3" />
-                      </Button>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          className="hover:bg-accent"
+                          onClick={(e) => handleEditBoardClick(board, e)}
+                          title="Rinomina scacchiera"
+                        >
+                          <Pencil className="size-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          className="text-destructive hover:text-destructive"
+                          onClick={(e) => handleDeleteBoardClick(board.id!, e)}
+                          title="Elimina scacchiera"
+                        >
+                          <Trash2 className="size-3" />
+                        </Button>
+                      </div>
                     </div>
                   </li>
                 );
@@ -438,6 +475,71 @@ export default function LessonDetailPage() {
               Annulla
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
+              Elimina
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog rinomina scacchiera */}
+      <Dialog open={editBoardOpen} onOpenChange={setEditBoardOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rinomina scacchiera</DialogTitle>
+            <DialogDescription>
+              Modifica il titolo della scacchiera.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveBoardTitle} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="edit-board-title" className="text-sm font-medium">
+                Titolo
+              </label>
+              <Input
+                id="edit-board-title"
+                value={editBoardTitle}
+                onChange={(e) => setEditBoardTitle(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={!editBoardTitle.trim()}>
+                Salva
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog conferma eliminazione scacchiera */}
+      <Dialog open={deleteBoardOpen} onOpenChange={setDeleteBoardOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Elimina scacchiera</DialogTitle>
+            <DialogDescription>
+              {deleteBoardId != null &&
+              boards.some((b) => b.id === deleteBoardId) ? (
+                <>
+                  Eliminare &ldquo;
+                  {boards.find((b) => b.id === deleteBoardId)?.title}
+                  &rdquo;? L&apos;operazione non è reversibile.
+                </>
+              ) : (
+                "Eliminare questa scacchiera? L&apos;operazione non è reversibile."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteBoardOpen(false);
+                setDeleteBoardId(null);
+              }}
+            >
+              Annulla
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteBoard}>
               Elimina
             </Button>
           </DialogFooter>
