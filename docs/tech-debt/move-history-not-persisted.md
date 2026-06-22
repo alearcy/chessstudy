@@ -57,6 +57,10 @@ nella sidebar). La storia mosse di ciascuna scacchiera resta **lineare**.
   `null`. Impatto: niente per la UI lineare (usa `order`), niente per le
   varianti (sono scacchiere separate). Mitigare solo se in futuro si volesse
   usare l'albero per altri scopi; altrimenti si può rimuovere il campo.
+  - **Risolto parzialmente via FEAT-004 (import PGN)**: `importPgnToLesson`
+    usa `db.moves.bulkAdd` e calcola `parentId` dagli id restituiti dal bulk,
+    garantendo parentId sempre corretto per il path di import. La UI manuale
+    (mosse veloci) resta soggetta alla race; non blocca FEAT-004.
 - **Reset alla partenza**: `reset` riporta alla posizione di partenza
   (`Board.fen`). Non c'è ancora modo di impostare una partenza custom
   diversa dal FEN standard (se non modificando il DB).

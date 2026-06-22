@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson } from "@/services/lessonService";
 import {
   getBoardsByLesson,
@@ -31,6 +31,7 @@ import {
 import { useChessBoard } from "@/hooks/useChessBoard";
 import ChessBoardView from "@/components/board/ChessBoard";
 import MoveNotation from "@/components/board/MoveNotation";
+import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 
 const BOARD_WIDTH = 480;
 const SAVE_DEBOUNCE_MS = 800;
@@ -55,6 +56,7 @@ export default function LessonDetailPage() {
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
 
@@ -383,6 +385,13 @@ export default function LessonDetailPage() {
     setSelectedBoardId(boardId);
   };
 
+  const handleImportPgn = async (boardId: number) => {
+    await loadData();
+    // Forza il ricaricamento della sequenza anche se la board era già selezionata.
+    initializedRef.current = null;
+    setSelectedBoardId(boardId);
+  };
+
   const handleEditBoardClick = (board: Board, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditBoardId(board.id ?? null);
@@ -496,13 +505,23 @@ export default function LessonDetailPage() {
         <aside className="w-full lg:w-56 shrink-0">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold">Scacchiere</h2>
-            <Button
-              size="icon-xs"
-              onClick={handleCreateBoard}
-              title="Nuova scacchiera"
-            >
-              <Plus className="size-4" />
-            </Button>
+            <div className="flex items-center gap-0.5">
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                onClick={() => setImportOpen(true)}
+                title="Importa PGN"
+              >
+                <Upload className="size-4" />
+              </Button>
+              <Button
+                size="icon-xs"
+                onClick={handleCreateBoard}
+                title="Nuova scacchiera"
+              >
+                <Plus className="size-4" />
+              </Button>
+            </div>
           </div>
           {boards.length === 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -668,6 +687,15 @@ export default function LessonDetailPage() {
       </div>
 
       {/* Dialog conferma reset scacchiera */}
+
+      {/* Dialog import PGN */}
+      <ImportPgnDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        lessonId={lessonId}
+        onImported={handleImportPgn}
+      />
+
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
         <DialogContent>
           <DialogHeader>
