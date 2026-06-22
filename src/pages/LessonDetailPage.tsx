@@ -8,7 +8,14 @@ import {
   updateBoard,
   deleteBoard,
 } from "@/services/boardService";
-import type { Lesson, LessonFormData, Board } from "@/types";
+import {
+  getMovesByBoard,
+  createMove,
+  updateMove,
+  deleteMovesFromOrder,
+  deleteMovesByBoard,
+} from "@/services/moveService";
+import type { Lesson, LessonFormData, Board, BoardArrow } from "@/types";
 import type { Square } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,24 +54,37 @@ export default function LessonDetailPage() {
   const [editBoardTitle, setEditBoardTitle] = useState("");
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [noteTab, setNoteTab] = useState<"board" | "move">("board");
+  const [moveCommentDraft, setMoveCommentDraft] = useState("");
 
   const chess = useChessBoard();
   const initializedRef = useRef<number | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>("");
+  const moveCommentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedCommentRef = useRef<string>("");
+  const commentMoveIdRef = useRef<number | null>(null);
 
   const selectedBoard = useMemo(
     () => boards.find((b) => b.id === selectedBoardId) ?? null,
     [boards, selectedBoardId]
   );
 
-  // Inizializza l'hook scacchiera quando viene selezionata una nuova board.
+  // Inizializza l'hook scacchiera quando viene selezionata una nuova board:
+  // carica il FEN di partenza, le mosse persistite e le annotazioni di partenza.
   useEffect(() => {
-    if (selectedBoard && initializedRef.current !== selectedBoard.id) {
-      chess.setPosition(selectedBoard.fen);
-      initializedRef.current = selectedBoard.id ?? null;
-    }
-  }, [selectedBoard, chess.setPosition]);
+    if (!selectedBoard || initializedRef.current === selectedBoard.id) return;
+    initializedRef.current = selectedBoard.id ?? null;
+    getMovesByBoard(selectedBoard.id!).then((loadedMoves) => {
+      chess.loadSequence(
+        selectedBoard.fen,
+        loadedMoves,
+        selectedBoard.arrows,
+        selectedBoard.highlights
+      );
+    });
+  }, [selectedBoard, chess.loadSequence]);
 
   // Sincronizza il draft delle note SOLO quando cambia la board selezionata
   // (non ad ogni mutazione di FEN/titolo della stessa board, che altrimenti
@@ -78,11 +98,43 @@ export default function LessonDetailPage() {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
+    if (moveCommentTimerRef.current) {
+      clearTimeout(moveCommentTimerRef.current);
+      moveCommentTimerRef.current = null;
+    }
     const board = boards.find((b) => b.id === selectedBoardId);
     const notes = board?.notes ?? "";
     setNotesDraft(notes);
     lastSavedRef.current = notes;
+    setNoteTab("board");
   }, [selectedBoardId, boards]);
+
+  // Sincronizza il draft del commento mossa quando cambia la mossa corrente.
+  // Dipende solo da historyIndex e dall'id della mossa (NON dal commento),
+  // altrimenti l'editing resettrebbe lastSavedCommentRef e bloccherebbe il salvataggio.
+  useEffect(() => {
+    // Flush del commento pendente della mossa precedente.
+    if (moveCommentTimerRef.current) {
+      clearTimeout(moveCommentTimerRef.current);
+      moveCommentTimerRef.current = null;
+      if (commentMoveIdRef.current != null) {
+        void saveMoveComment(commentMoveIdRef.current, moveCommentDraft);
+      }
+    }
+    const cm = chess.currentMove;
+    const comment = cm?.comment ?? "";
+    setMoveCommentDraft(comment);
+    lastSavedCommentRef.current = comment;
+    commentMoveIdRef.current = cm?.id ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chess.historyIndex, chess.currentMove?.id]);
+
+  // Se non c'è una mossa corrente (posizione di partenza), torna al tab "board".
+  useEffect(() => {
+    if (chess.historyIndex === 0 && noteTab === "move") {
+      setNoteTab("board");
+    }
+  }, [chess.historyIndex, noteTab]);
 
   const loadData = useCallback(async () => {
     const [loadedLesson, loadedBoards] = await Promise.all([
@@ -138,6 +190,121 @@ export default function LessonDetailPage() {
     saveNotes(notesDraft);
   };
 
+  // Salvataggio commento mossa: blur immediato + debounce su digitazione.
+  const saveMoveComment = useCallback(
+    async (moveId: number | null, next: string) => {
+      if (moveId == null || next === lastSavedCommentRef.current) return;
+      lastSavedCommentRef.current = next;
+      await updateMove(moveId, { comment: next });
+    },
+    []
+  );
+
+  const scheduleDebouncedMoveComment = useCallback(
+    (moveId: number | null, next: string) => {
+      if (moveCommentTimerRef.current)
+        clearTimeout(moveCommentTimerRef.current);
+      moveCommentTimerRef.current = setTimeout(() => {
+        saveMoveComment(moveId, next);
+      }, SAVE_DEBOUNCE_MS);
+    },
+    [saveMoveComment]
+  );
+
+  const handleMoveCommentChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>
+  ) => {
+    const next = e.target.value;
+    setMoveCommentDraft(next);
+    // Aggiorna lo stato in memoria (indicatore 💬 immediato).
+    const idx = chess.historyIndex - 1;
+    if (idx >= 0) chess.setMoveComment(idx, next);
+    scheduleDebouncedMoveComment(commentMoveIdRef.current, next);
+  };
+
+  const handleMoveCommentBlur = () => {
+    if (moveCommentTimerRef.current)
+      clearTimeout(moveCommentTimerRef.current);
+    saveMoveComment(commentMoveIdRef.current, moveCommentDraft);
+  };
+
+  // --- Persistenza frecce / evidenziazioni (per posizione corrente) ---
+  // Le annotazioni della posizione di partenza sono persistite su Board,
+  // quelle di ogni mossa su Move. La persistenza è immediata ( eventi
+  // discreti: un tracciato = una freccia, un click = un toggle).
+  const pendingAnnotationsRef = useRef<{
+    arrows: BoardArrow[];
+    highlights: string[];
+  } | null>(null);
+  // Refs aggiornate ogni render per leggere i valori correnti nei handler.
+  const currentArrowsRef = useRef(chess.currentArrows);
+  currentArrowsRef.current = chess.currentArrows;
+  const currentHighlightsRef = useRef(chess.currentHighlights);
+  currentHighlightsRef.current = chess.currentHighlights;
+
+  const persistAnnotations = (
+    arrows: BoardArrow[],
+    highlights: string[]
+  ) => {
+    if (!selectedBoardId) return;
+    if (chess.historyIndex === 0) {
+      void updateBoard(selectedBoardId, { arrows, highlights });
+      // Mantiene lo stato boards allineato (per il caricamento successivo).
+      syncBoardInList(selectedBoardId, { arrows, highlights });
+    } else {
+      const moveId = chess.currentMove?.id;
+      if (moveId == null) {
+        // La mossa è ancora un placeholder non persistito: ritenta quando
+        // arriva l'id (vedi effect sotto).
+        pendingAnnotationsRef.current = { arrows, highlights };
+        return;
+      }
+      void updateMove(moveId, { arrows, highlights });
+    }
+  };
+
+  // Flush delle annotazioni pendenti quando la mossa corrente ottiene un id.
+  useEffect(() => {
+    const moveId = chess.currentMove?.id;
+    if (moveId != null && pendingAnnotationsRef.current) {
+      const { arrows, highlights } = pendingAnnotationsRef.current;
+      pendingAnnotationsRef.current = null;
+      void updateMove(moveId, { arrows, highlights });
+    }
+  }, [chess.currentMove?.id]);
+
+  const handleArrowsChange = (next: BoardArrow[]) => {
+    // react-chessboard v4: onArrowsChange reporta solo le frecce disegnate
+    // dall'utente in questo gesto; le azzerà internamente a ogni cambio di
+    // customArrows/posizione. Ignora gli svuotamenti interni (next vuoto) per
+    // non loopare e non cancellare le frecce persistite.
+    if (next.length === 0) return;
+    // Merge + dedupe per from/to (la libreria previene i duplicati, ma ci
+    // proteggiamo dai doppi tracciamenti veloci).
+    const seen = new Set(chess.currentArrows.map((a) => `${a[0]}-${a[1]}`));
+    const merged = [
+      ...chess.currentArrows,
+      ...next.filter((a) => {
+        const key = `${a[0]}-${a[1]}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    ];
+    chess.setArrows(merged);
+    persistAnnotations(merged, currentHighlightsRef.current);
+  };
+
+  const handleHighlightsChange = (next: string[]) => {
+    chess.setHighlights(next);
+    persistAnnotations(currentArrowsRef.current, next);
+  };
+
+  const handleClearArrows = () => {
+    chess.setArrows([]);
+    persistAnnotations([], currentHighlightsRef.current);
+  };
+
   // Persistenza FEN/notes dopo una mossa o una modifica note: aggiorna stato boards.
   const syncBoardInList = useCallback(
     (boardId: number, patch: Partial<Board>) => {
@@ -150,16 +317,43 @@ export default function LessonDetailPage() {
 
   const handleMove = useCallback(
     (from: Square, to: Square): boolean => {
-      const newFen = chess.makeMove(from, to);
-      if (newFen && selectedBoardId) {
-        syncBoardInList(selectedBoardId, { fen: newFen });
-        // Persiste il FEN aggiornato. La storia mosse SAN non è ancora
-        // tracciata lato DB — vedi docs/tech-debt/move-history-not-persisted.md.
-        void updateBoard(selectedBoardId, { fen: newFen });
-      }
-      return !!newFen;
+      const result = chess.makeMove(from, to);
+      if (!result || !selectedBoardId) return !!result;
+      const boardId = selectedBoardId;
+      const parentId =
+        result.newMoveIndex > 0
+          ? (chess.moves[result.newMoveIndex - 1]?.id ?? null)
+          : null;
+      // Persistenza async (fire-and-forget): lo stato in memoria è già aggiornato.
+      void (async () => {
+        // Tronca eventuali mosse future (UI lineare).
+        await deleteMovesFromOrder(boardId, result.newMoveIndex);
+        const id = await createMove({
+          boardId,
+          parentId,
+          order: result.newMoveIndex,
+          moveNotation: result.san,
+          fen: result.fen,
+          comment: "",
+          arrows: [],
+          highlights: [],
+        });
+        chess.replaceMove(result.newMoveIndex, {
+          id,
+          boardId,
+          parentId,
+          order: result.newMoveIndex,
+          moveNotation: result.san,
+          fen: result.fen,
+          comment: "",
+          arrows: [],
+          highlights: [],
+          createdAt: new Date(),
+        });
+      })();
+      return true;
     },
-    [chess, selectedBoardId, syncBoardInList]
+    [chess, selectedBoardId]
   );
 
   const handleEdit = () => {
@@ -225,31 +419,23 @@ export default function LessonDetailPage() {
     }
   };
 
-  const handleUndo = async () => {
+  const handleUndo = () => {
     chess.undo();
-    if (selectedBoardId) {
-      const newFen = chess.fen;
-      syncBoardInList(selectedBoardId, { fen: newFen });
-      await updateBoard(selectedBoardId, { fen: newFen });
-    }
   };
 
-  const handleRedo = async () => {
+  const handleRedo = () => {
     chess.redo();
-    if (selectedBoardId) {
-      const newFen = chess.fen;
-      syncBoardInList(selectedBoardId, { fen: newFen });
-      await updateBoard(selectedBoardId, { fen: newFen });
-    }
   };
 
-  const handleReset = async () => {
-    chess.reset();
-    if (selectedBoardId) {
-      const newFen = chess.fen;
-      syncBoardInList(selectedBoardId, { fen: newFen });
-      await updateBoard(selectedBoardId, { fen: newFen });
-    }
+  const handleReset = () => {
+    setResetOpen(true);
+  };
+
+  const confirmReset = async () => {
+    if (!selectedBoard || !selectedBoardId) return;
+    await deleteMovesByBoard(selectedBoardId);
+    chess.reset(selectedBoard.fen);
+    setResetOpen(false);
   };
 
   if (loading) {
@@ -381,6 +567,11 @@ export default function LessonDetailPage() {
                 <ChessBoardView
                   fen={chess.fen}
                   boardWidth={BOARD_WIDTH}
+                  arrows={chess.currentArrows}
+                  highlights={chess.currentHighlights}
+                  onArrowsChange={handleArrowsChange}
+                  onHighlightsChange={handleHighlightsChange}
+                  onClearArrows={handleClearArrows}
                   canUndo={chess.canUndo}
                   canRedo={chess.canRedo}
                   onMove={handleMove}
@@ -390,22 +581,65 @@ export default function LessonDetailPage() {
                 />
               </div>
               <div className="w-full max-w-[480px] flex flex-col gap-1.5">
-                <label
-                  htmlFor="board-notes"
-                  className="text-sm font-medium flex items-center gap-1.5"
-                >
-                  <NotebookPen className="size-4" />
-                  Note
-                </label>
-                <Textarea
-                  id="board-notes"
-                  value={notesDraft}
-                  onChange={handleNotesChange}
-                  onBlur={handleNotesBlur}
-                  placeholder="Note libere per questa scacchiera..."
-                  rows={6}
-                  className="resize-y"
-                />
+                <div className="flex gap-1 p-1 bg-muted rounded-lg" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={noteTab === "board"}
+                    onClick={() => setNoteTab("board")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      noteTab === "board"
+                        ? "bg-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <NotebookPen className="size-4" />
+                    Note scacchiera
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={noteTab === "move"}
+                    disabled={!chess.currentMove}
+                    onClick={() => setNoteTab("move")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      noteTab === "move"
+                        ? "bg-background shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${!chess.currentMove ? "opacity-40 cursor-not-allowed" : ""}`}
+                    title={
+                      chess.currentMove
+                        ? "Spiegazione della mossa corrente"
+                        : "Seleziona una mossa per aggiungere una spiegazione"
+                    }
+                  >
+                    <NotebookPen className="size-4" />
+                    {chess.currentMove
+                      ? `Nota mossa ${chess.historyIndex}. ${chess.currentMove.moveNotation}`
+                      : "Nota mossa"}
+                  </button>
+                </div>
+
+                {noteTab === "board" ? (
+                  <Textarea
+                    id="board-notes"
+                    value={notesDraft}
+                    onChange={handleNotesChange}
+                    onBlur={handleNotesBlur}
+                    placeholder="Note libere per questa scacchiera..."
+                    rows={6}
+                    className="resize-y"
+                  />
+                ) : (
+                  <Textarea
+                    value={moveCommentDraft}
+                    onChange={handleMoveCommentChange}
+                    onBlur={handleMoveCommentBlur}
+                    placeholder={`Spiegazione della mossa ${chess.historyIndex}. ${chess.currentMove?.moveNotation ?? ""}...`}
+                    rows={6}
+                    className="resize-y"
+                  />
+                )}
               </div>
             </>
           ) : (
@@ -421,7 +655,7 @@ export default function LessonDetailPage() {
         <aside className="w-full lg:w-64 shrink-0">
           {selectedBoard ? (
             <MoveNotation
-              moves={chess.moveHistory}
+              moves={chess.moves}
               currentMoveIndex={chess.historyIndex}
               onGoToMove={chess.goToMove}
             />
@@ -432,6 +666,27 @@ export default function LessonDetailPage() {
           )}
         </aside>
       </div>
+
+      {/* Dialog conferma reset scacchiera */}
+      <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ripristina posizione iniziale</DialogTitle>
+            <DialogDescription>
+              Verranno cancellate tutte le mosse e le relative spiegazioni di
+              questa scacchiera. L&apos;operazione non è reversibile.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetOpen(false)}>
+              Annulla
+            </Button>
+            <Button variant="destructive" onClick={confirmReset}>
+              Ripristina
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog modifica lezione */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

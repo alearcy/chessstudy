@@ -3,12 +3,23 @@ import type { Board } from "@/types";
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
+/** Normalizza una board letta dal DB garantendo i campi arrows/highlights. */
+function normalizeBoard(b: Board): Board {
+  return {
+    ...b,
+    arrows: b.arrows ?? [],
+    highlights: b.highlights ?? [],
+  };
+}
+
 export async function getBoardsByLesson(lessonId: number): Promise<Board[]> {
-  return db.boards.where("lessonId").equals(lessonId).sortBy("order");
+  const boards = await db.boards.where("lessonId").equals(lessonId).sortBy("order");
+  return boards.map(normalizeBoard);
 }
 
 export async function getBoard(id: number): Promise<Board | undefined> {
-  return db.boards.get(id);
+  const b = await db.boards.get(id);
+  return b ? normalizeBoard(b) : undefined;
 }
 
 export async function createBoard(
@@ -21,6 +32,8 @@ export async function createBoard(
     title: title || `Scacchiera ${count + 1}`,
     fen: DEFAULT_FEN,
     notes: "",
+    arrows: [],
+    highlights: [],
     order: count,
     createdAt: new Date(),
   } as Board);
@@ -29,7 +42,7 @@ export async function createBoard(
 
 export async function updateBoard(
   id: number,
-  data: Partial<Pick<Board, "title" | "fen" | "notes">>
+  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights">>
 ): Promise<void> {
   await db.boards.update(id, data);
 }
