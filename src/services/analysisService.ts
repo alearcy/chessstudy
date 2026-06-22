@@ -1,6 +1,14 @@
 import type { EvalFields } from "@/types";
 
 /**
+ * Rileva se l'app sta girando dentro Tauri (finestra nativa).
+ * In dev mode browser, `window.__TAURI__` non è definito.
+ */
+function isTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI__" in window;
+}
+
+/**
  * Stockfish 18 (lite single-threaded) wrapper.
  *
  * Engine: `public/stockfish/stockfish-18-lite-single.js` + `stockfish.wasm`
@@ -137,10 +145,70 @@ export interface AnalyzeOptions {
 /**
  * Analizza una sequenza di posizioni (FEN) in ordine. Risolve con gli eval
  * (POV Bianco). Interruzione cooperativa via `signal.cancelled`.
+ *
+ * In contesto Tauri: chiama il comando Rust `analyze_position` (Stockfish
+ * nativo multi-threaded). In browser: fallback a Stockfish 18 WASM lite
+ * single-threaded (vedi ADR-0001).
  */
 export async function analyzePositions(
   fens: string[],
   options: AnalyzeOptions = {}
+): Promise<PositionEval[]> {
+  if (isTauri()) {
+    return analyzePositionsNative(fens, options);
+  }
+  return analyzePositionsWasm(fens, options);
+}
+
+// ── Percorso Tauri (Stockfish nativo) ────────────────────────────────────────
+
+/** Formato restituito dal comando Rust `analyze_position` (serde snake_case). */
+interface NativeEval {
+  fen: string;
+  depth: number;
+  score_cp: number | null;
+  score_mate: number | null;
+  best_move_uci: string | null;
+}
+
+/** Converte il risultato nativo (snake_case) in PositionEval. */
+function toPositionEval(ne: NativeEval): PositionEval {
+  return {
+    fen: ne.fen,
+    depth: ne.depth,
+    scoreCp: ne.score_cp,
+    scoreMate: ne.score_mate,
+    bestMoveUci: ne.best_move_uci,
+  };
+}
+
+async function analyzePositionsNative(
+  fens: string[],
+  options: AnalyzeOptions
+): Promise<PositionEval[]> {
+  const depth = options.depth ?? 15;
+  // Lazy import: @tauri-apps/api non esiste in contesto browser.
+  const { invoke } = await import("@tauri-apps/api/core");
+  const results: PositionEval[] = [];
+
+  for (let i = 0; i < fens.length; i++) {
+    if (options.signal?.cancelled) break;
+    const raw = await invoke<NativeEval>("analyze_position", {
+      fen: fens[i],
+      depth,
+    });
+    results.push(toPositionEval(raw));
+    options.onProgress?.(i + 1, fens.length);
+  }
+
+  return results;
+}
+
+// ── Percorso WASM (browser fallback) ─────────────────────────────────────────
+
+async function analyzePositionsWasm(
+  fens: string[],
+  options: AnalyzeOptions
 ): Promise<PositionEval[]> {
   const depth = options.depth ?? 15;
   const engine = getEngine();
