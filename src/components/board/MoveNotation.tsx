@@ -238,9 +238,9 @@ function EvalBadge({
   if (!hasEval) return null;
   const cls = moveClassification(cpLoss);
   return (
-    <span className="flex items-center gap-0.5 shrink-0 text-[10px] tabular-nums">
+    <span className="flex items-center gap-0.5 shrink-0 text-[12px] tabular-nums font-bold">
       <span
-        className={`px-1 rounded ${
+        className={`px-1.5 rounded ${
           active ? "bg-primary-foreground/20" : "bg-muted"
         }`}
         title={cls ? `Valutazione: ${cls.label}` : undefined}
@@ -249,8 +249,13 @@ function EvalBadge({
       </span>
       {cls && (
         <span
-          style={{ color: active ? undefined : cls.color }}
-          className={active ? "text-primary-foreground" : ""}
+          className={`px-1 rounded ${
+            active ? "text-primary-foreground" : "text-white"
+          }`}
+          style={{
+            backgroundColor: active ? "transparent" : cls.color,
+            color: active ? "inherit" : "white",
+          }}
           title={
             cls.label === "??"
               ? "Pessata"

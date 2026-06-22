@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { Chessboard } from "react-chessboard";
-import type { Square } from "react-chessboard/dist/chessboard/types";
+import type { Square, CustomSquareProps } from "react-chessboard/dist/chessboard/types";
 import type { Arrow } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
 import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain } from "lucide-react";
@@ -30,6 +30,10 @@ interface ChessBoardViewProps {
   analysisProgress?: { done: number; total: number } | null;
   canAnalyze?: boolean;
   onCancelAnalysis?: () => void;
+  /** Casa di destinazione dell'ultima mossa, per badge di classificazione. */
+  lastMoveSquare?: Square | null;
+  /** Badge di classificazione (??, ?, ?!) da mostrare sul pezzo mosso. */
+  moveBadge?: { label: string; color: string } | null;
 }
 
 const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
@@ -42,6 +46,8 @@ export default function ChessBoardView({
   arrows,
   highlights,
   extraArrows = [],
+  lastMoveSquare = null,
+  moveBadge = null,
   onArrowsChange,
   onHighlightsChange,
   onClearArrows,
@@ -94,6 +100,41 @@ export default function ChessBoardView({
   // usa BoardArrow ([string, string, string?]). Cast al confine.
   // Le extraArrows (analisi) sono merged solo per il display (read-only).
   const controlledArrows = [...arrows, ...extraArrows] as Arrow[];
+
+  // Custom square: aggiunge badge di classificazione sul pezzo mosso.
+  // Usiamo un ref per mantenere l'identity del componente stabile (evita
+  // unmount/remount di tutte le case a ogni cambio di posizione).
+  const badgeDataRef = useRef({ square: lastMoveSquare, badge: moveBadge });
+  badgeDataRef.current = { square: lastMoveSquare, badge: moveBadge };
+
+  const CustomSquare = useCallback(
+    ({ children, ref, square, squareColor: _squareColor, style }: CustomSquareProps) => {
+      const { square: badgeSquare, badge } = badgeDataRef.current;
+      const showBadge = square === badgeSquare && badge;
+      if (badgeSquare) {
+
+      }
+      return (
+        <div ref={ref} style={{ ...style, position: "relative" }}>
+          {children}
+          {showBadge && (
+            <span
+              className="absolute bottom-0 right-0 text-[14px] font-bold px-1.5 rounded leading-none mb-0.5 mr-0.5"
+              style={{
+                backgroundColor: badge!.color,
+                color: "white",
+                textShadow: "0 0 3px rgba(0,0,0,0.6)",
+                zIndex: 10,
+              }}
+            >
+              {badge!.label}
+            </span>
+          )}
+        </div>
+      );
+    },
+    []
+  );
 
   const handleArrowsChange = useCallback(
     (next: Arrow[]) => {
@@ -226,6 +267,7 @@ export default function ChessBoardView({
           areArrowsAllowed={mode === "arrow"}
           customArrows={controlledArrows}
           customArrowColor="rgb(255,170,0)"
+          customSquare={CustomSquare}
           onArrowsChange={handleArrowsChange}
           customSquareStyles={customSquareStyles}
           onPieceDrop={onPieceDrop}
