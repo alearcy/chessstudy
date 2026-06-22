@@ -14,8 +14,9 @@ flavor **`stockfish-18-lite-single`** (Stockfish 18, NNUE small net, ~7MB,
 
 File serviti come static assets da `public/stockfish/`:
 - `stockfish-18-lite-single.js` (glue emscripten, è già uno worker classic)
-- `stockfish.wasm` (rinominato da `stockfish-18-lite-single.wasm`: il glue
-  hardcoda `w="stockfish.wasm"` e lo fetcha dalla directory dello worker)
+- `stockfish-18-lite-single.wasm` (il glue deriva il nome del wasm dal proprio
+  script: `location.pathname.replace(/\.js$/i,".wasm")` → **non** rinominare in
+  `stockfish.wasm`: il nome deve combaciare con lo `.js`)
 
 Caricamento: `new Worker(BASE_URL + "stockfish/stockfish-18-lite-single.js")`,
 comunicazione UCI via `postMessage`/`onmessage` (`uci`→`uciok`, `isready`→
@@ -48,7 +49,8 @@ L'engine UCI riporta lo score dal POV del lato al tratto. Il servizio
 Nero, nega cp/mate) per renderlo confrontabile tra posizioni e mosse.
 
 ## Come passare a multi-threaded (futuro)
-1. Scaricare `stockfish-18-lite.js` + `.wasm` in `public/stockfish/`.
+1. Scaricare `stockfish-18-lite.js` + `.wasm` (nome derivato: `stockfish-18-lite.wasm`)
+   in `public/stockfish/`.
 2. Aggiungere header `Cross-Origin-Opener-Policy: same-origin` e
    `Cross-Origin-Embedder-Policy: require-corp` in `vite.config.ts`
    (`server.headers` e `preview.headers`).
