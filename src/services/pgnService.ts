@@ -16,29 +16,65 @@ export interface ParsedPgn {
   startFen: string;
   headers: Record<string, string | null>;
   moves: ParsedPgnMove[];
-  /** Titolo derivato da Event / White vs Black / fallback. */
+  /** Titolo derivato da White vs Black + risultato (con Elo). */
   title: string;
+  /** Riepilogo metadati PGN per le note della scacchiera. */
+  notes: string;
 }
 
 const MAX_TITLE_LEN = 60;
 
-/** Deriva un titolo leggibile dagli header PGN. */
+/** Restituisce null per valori assenti (null, "?", vuoto). */
+function clean(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  const t = v.trim();
+  if (!t || t === "?") return null;
+  return t;
+}
+
+/** Formatta "White (Elo)" con Elo opzionale. */
+function playerWithElo(
+  name: string | null,
+  elo: string | null
+): string | null {
+  if (!name) return null;
+  return elo ? `${name} (${elo})` : name;
+}
+
+/** Deriva un titolo leggibile dagli header PGN (senza Event). */
 function deriveTitle(headers: Record<string, string | null>): string {
-  const event = headers.Event;
-  const white = headers.White;
-  const black = headers.Black;
-  const result = headers.Result;
+  const white = clean(headers.White);
+  const black = clean(headers.Black);
+  const result = clean(headers.Result);
+  const whiteElo = clean(headers.WhiteElo);
+  const blackElo = clean(headers.BlackElo);
 
-  const vs = white && black ? `${white} vs ${black}` : null;
-  const withResult = vs && result && result !== "*" ? `${vs} ${result}` : vs;
+  const w = playerWithElo(white, whiteElo);
+  const b = playerWithElo(black, blackElo);
+  const vs = w && b ? `${w} vs ${b}` : null;
+  const withResult =
+    vs && result && result !== "*" ? `${vs} ${result}` : vs;
 
-  const raw =
-    event && event !== "?" && event.trim()
-      ? event
-      : withResult ?? "Partita importata";
+  const raw = withResult ?? "Partita importata";
   return raw.length > MAX_TITLE_LEN
     ? raw.slice(0, MAX_TITLE_LEN - 1) + "…"
     : raw;
+}
+
+/** Costruisce le note della scacchiera con i metadati PGN rilevanti. */
+function buildNotes(headers: Record<string, string | null>): string {
+  const lines: string[] = [];
+  const push = (label: string, value: string | null) => {
+    if (value) lines.push(`${label}: ${value}`);
+  };
+  push("Sito", clean(headers.Site));
+  push("Data", clean(headers.Date));
+  push("Bianco", playerWithElo(clean(headers.White), clean(headers.WhiteElo)));
+  push("Nero", playerWithElo(clean(headers.Black), clean(headers.BlackElo)));
+  push("Risultato", clean(headers.Result));
+  push("Terminazione", clean(headers.Termination));
+  push("Link", clean(headers.Link));
+  return lines.join("\n");
 }
 
 /**
@@ -73,6 +109,7 @@ export function parsePgn(pgn: string): ParsedPgn {
     headers,
     moves,
     title: deriveTitle(headers),
+    notes: buildNotes(headers),
   };
 }
 
@@ -94,12 +131,14 @@ export async function importPgnToLesson(
     return createBoardWithFen(lessonId, {
       title: parsed.title,
       fen: parsed.startFen,
+      notes: parsed.notes,
     });
   }
 
   const boardId = await createBoardWithFen(lessonId, {
     title: parsed.title,
     fen: parsed.startFen,
+    notes: parsed.notes,
   });
 
   // Costruisce i record Move con parentId placeholder (aggiornato dopo bulkAdd).
