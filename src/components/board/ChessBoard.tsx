@@ -1,9 +1,9 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { Chessboard } from "react-chessboard";
-import type { Square } from "react-chessboard/dist/chessboard/types";
+import type { Square, CustomSquareProps } from "react-chessboard/dist/chessboard/types";
 import type { Arrow } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
-import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X } from "lucide-react";
+import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain } from "lucide-react";
 import type { BoardArrow } from "@/types";
 
 type BoardMode = "move" | "arrow" | "highlight";
@@ -13,6 +13,8 @@ interface ChessBoardViewProps {
   boardWidth?: number;
   arrows: BoardArrow[];
   highlights: string[];
+  /** Frecce read-only aggiuntive (es. miglior mossa Stockfish), non persistite. */
+  extraArrows?: BoardArrow[];
   onArrowsChange: (arrows: BoardArrow[]) => void;
   onHighlightsChange: (highlights: string[]) => void;
   onClearArrows: () => void;
@@ -22,6 +24,16 @@ interface ChessBoardViewProps {
   onUndo: () => void;
   onRedo: () => void;
   onReset: () => void;
+  /** Analisi Stockfish: handler + stato. */
+  onAnalyze?: () => void;
+  analyzing?: boolean;
+  analysisProgress?: { done: number; total: number } | null;
+  canAnalyze?: boolean;
+  onCancelAnalysis?: () => void;
+  /** Casa di destinazione dell'ultima mossa, per badge di classificazione. */
+  lastMoveSquare?: Square | null;
+  /** Badge di classificazione (??, ?, ?!) da mostrare sul pezzo mosso. */
+  moveBadge?: { label: string; color: string } | null;
 }
 
 const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
@@ -33,6 +45,9 @@ export default function ChessBoardView({
   boardWidth = DEFAULT_BOARD_WIDTH,
   arrows,
   highlights,
+  extraArrows = [],
+  lastMoveSquare = null,
+  moveBadge = null,
   onArrowsChange,
   onHighlightsChange,
   onClearArrows,
@@ -42,6 +57,11 @@ export default function ChessBoardView({
   onUndo,
   onRedo,
   onReset,
+  onAnalyze,
+  analyzing = false,
+  analysisProgress = null,
+  canAnalyze = false,
+  onCancelAnalysis,
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
 
@@ -78,7 +98,43 @@ export default function ChessBoardView({
 
   // react-chessboard vuole Arrow[] ([Square, Square, string?]); il data layer
   // usa BoardArrow ([string, string, string?]). Cast al confine.
-  const controlledArrows = arrows as Arrow[];
+  // Le extraArrows (analisi) sono merged solo per il display (read-only).
+  const controlledArrows = [...arrows, ...extraArrows] as Arrow[];
+
+  // Custom square: aggiunge badge di classificazione sul pezzo mosso.
+  // Usiamo un ref per mantenere l'identity del componente stabile (evita
+  // unmount/remount di tutte le case a ogni cambio di posizione).
+  const badgeDataRef = useRef({ square: lastMoveSquare, badge: moveBadge });
+  badgeDataRef.current = { square: lastMoveSquare, badge: moveBadge };
+
+  const CustomSquare = useCallback(
+    ({ children, ref, square, squareColor: _squareColor, style }: CustomSquareProps) => {
+      const { square: badgeSquare, badge } = badgeDataRef.current;
+      const showBadge = square === badgeSquare && badge;
+      if (badgeSquare) {
+
+      }
+      return (
+        <div ref={ref} style={{ ...style, position: "relative" }}>
+          {children}
+          {showBadge && (
+            <span
+              className="absolute bottom-0 right-0 text-[14px] font-bold px-1.5 rounded leading-none mb-0.5 mr-0.5"
+              style={{
+                backgroundColor: badge!.color,
+                color: "white",
+                textShadow: "0 0 3px rgba(0,0,0,0.6)",
+                zIndex: 10,
+              }}
+            >
+              {badge!.label}
+            </span>
+          )}
+        </div>
+      );
+    },
+    []
+  );
 
   const handleArrowsChange = useCallback(
     (next: Arrow[]) => {
@@ -136,6 +192,22 @@ export default function ChessBoardView({
         <div className="w-px h-6 bg-border mx-1" />
 
         <Button
+          variant={analyzing ? "default" : "ghost"}
+          size="icon-xs"
+          disabled={!onAnalyze || (!analyzing && !canAnalyze)}
+          onClick={analyzing ? onCancelAnalysis : onAnalyze}
+          title={
+            analyzing
+              ? "Annulla analisi"
+              : canAnalyze
+                ? "Analizza partita con Stockfish 18"
+                : "Nessuna posizione da analizzare"
+          }
+        >
+          <Brain className="size-4" />
+        </Button>
+
+        <Button
           variant="ghost"
           size="icon-xs"
           disabled={!canUndo}
@@ -163,6 +235,26 @@ export default function ChessBoardView({
         </Button>
       </div>
 
+      {analyzing && analysisProgress && (
+        <div className="w-full max-w-[480px] flex items-center gap-2">
+          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all"
+              style={{
+                width: `${
+                  analysisProgress.total
+                    ? (analysisProgress.done / analysisProgress.total) * 100
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+            {analysisProgress.done}/{analysisProgress.total}
+          </span>
+        </div>
+      )}
+
       {/* react-chessboard v4 ha un wrapper interno `width:100%` con board a larghezza
           fissa: senza questo contenitore il board verrebbe allineato a sinistra
           rispetto al container (e quindi anche rispetto a toolbar e note). */}
@@ -175,6 +267,7 @@ export default function ChessBoardView({
           areArrowsAllowed={mode === "arrow"}
           customArrows={controlledArrows}
           customArrowColor="rgb(255,170,0)"
+          customSquare={CustomSquare}
           onArrowsChange={handleArrowsChange}
           customSquareStyles={customSquareStyles}
           onPieceDrop={onPieceDrop}

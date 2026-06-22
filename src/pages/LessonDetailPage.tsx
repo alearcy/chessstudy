@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson } from "@/services/lessonService";
 import {
   getBoardsByLesson,
@@ -12,6 +12,7 @@ import {
   getMovesByBoard,
   createMove,
   updateMove,
+  updateMoveEval,
   deleteMovesFromOrder,
   deleteMovesByBoard,
 } from "@/services/moveService";
@@ -31,6 +32,26 @@ import {
 import { useChessBoard } from "@/hooks/useChessBoard";
 import ChessBoardView from "@/components/board/ChessBoard";
 import MoveNotation from "@/components/board/MoveNotation";
+import ImportPgnDialog from "@/components/board/ImportPgnDialog";
+import {
+  analyzePositions,
+  uciToArrow,
+  toEvalFields,
+  formatEval,
+  evalScore,
+  moveClassification,
+  type PositionEval,
+} from "@/services/analysisService";
+
+/** Estrae la casa di destinazione dal SAN (e.g. "Nf3" → "f3", "O-O" → "g1" o "g8"). */
+function sanToSquare(san: string, byBlack: boolean): string | null {
+  if (san === "O-O") return byBlack ? "g8" : "g1";
+  if (san === "O-O-O") return byBlack ? "c8" : "c1";
+  // Rimuove scacco/scacco matto e promozione, prende ultimi 2 caratteri.
+  const clean = san.replace(/[+#]$/, "");
+  const dest = clean.split("=")[0]; // exd8=Q → exd8
+  return dest.slice(-2);
+}
 
 const BOARD_WIDTH = 480;
 const SAVE_DEBOUNCE_MS = 800;
@@ -55,6 +76,13 @@ export default function LessonDetailPage() {
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const analysisSignalRef = useRef<{ cancelled: boolean } | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
 
@@ -383,6 +411,141 @@ export default function LessonDetailPage() {
     setSelectedBoardId(boardId);
   };
 
+  const handleImportPgn = async (boardId: number) => {
+    await loadData();
+    // Forza il ricaricamento della sequenza anche se la board era già selezionata.
+    initializedRef.current = null;
+    setSelectedBoardId(boardId);
+  };
+
+  // --- Analisi Stockfish ---
+  // Posizioni da analizzare: posizione di partenza (Board.fen) + dopo ogni mossa.
+  const handleAnalyze = async () => {
+    if (!selectedBoard || analyzing) return;
+    const startFen = selectedBoard.fen;
+    const moveList = chess.moves;
+    const fens = [startFen, ...moveList.map((m) => m.fen)];
+    const signal = { cancelled: false };
+    analysisSignalRef.current = signal;
+    setAnalyzing(true);
+    setAnalysisProgress({ done: 0, total: fens.length });
+    try {
+      const evals: PositionEval[] = await analyzePositions(fens, {
+        depth: 15,
+        signal,
+        onProgress: (done, total) => setAnalysisProgress({ done, total }),
+      });
+      if (signal.cancelled) return;
+      // Persistenza + aggiornamento stato in memoria.
+      // evals[0] → Board (posizione di partenza); evals[i] → Move[i-1].
+      if (selectedBoard.id) {
+        await updateBoard(selectedBoard.id, toEvalFields(evals[0]));
+        syncBoardInList(selectedBoard.id, toEvalFields(evals[0]));
+      }
+      for (let i = 1; i < evals.length; i++) {
+        const move = moveList[i - 1];
+        if (move.id == null) continue;
+        const fields = toEvalFields(evals[i]);
+        await updateMoveEval(move.id, fields);
+        chess.replaceMove(i - 1, { ...move, ...fields });
+      }
+    } catch (e) {
+      console.error("[analyze] errore", e);
+    } finally {
+      setAnalyzing(false);
+      setAnalysisProgress(null);
+      analysisSignalRef.current = null;
+    }
+  };
+
+  const handleCancelAnalysis = () => {
+    if (analysisSignalRef.current) analysisSignalRef.current.cancelled = true;
+  };
+
+  // Eval della posizione corrente + freccia miglior mossa (overlay).
+  const currentEvalCp =
+    chess.historyIndex === 0
+      ? (selectedBoard?.evalCp ?? null)
+      : (chess.currentMove?.evalCp ?? null);
+  const currentEvalMate =
+    chess.historyIndex === 0
+      ? (selectedBoard?.evalMate ?? null)
+      : (chess.currentMove?.evalMate ?? null);
+  const currentEvalDepth =
+    chess.historyIndex === 0
+      ? (selectedBoard?.evalDepth ?? 0)
+      : (chess.currentMove?.evalDepth ?? 0);
+  const currentBestMoveUci =
+    chess.historyIndex === 0
+      ? (selectedBoard?.evalBestMoveUci ?? null)
+      : (chess.currentMove?.evalBestMoveUci ?? null);
+  const analysisArrow: BoardArrow[] = (() => {
+    if (!currentBestMoveUci) return [];
+    const a = uciToArrow(currentBestMoveUci);
+    return a ? [[a[0], a[1], "rgb(59,130,246)"]] : [];
+  })();
+
+  // Casa di destinazione + badge classificazione (??, ?, ?!) per il pezzo mosso.
+  const lastMoveSquare = useMemo((): Square | null => {
+    if (chess.historyIndex === 0) return null;
+    const move = chess.currentMove;
+    if (!move) return null;
+    // Dopo una mossa, il turno è del giocatore opposto:
+    // se ora tocca al Bianco, l'ultima mossa è del Nero.
+    const isBlackMove = chess.turn === "w";
+    const sq = sanToSquare(move.moveNotation, isBlackMove);
+
+    return sq as Square | null;
+  }, [chess.historyIndex, chess.currentMove]);
+
+  const moveBadge = useMemo(() => {
+    const i = chess.historyIndex - 1;
+    if (i < 0) { return null; }
+    const move = chess.currentMove;
+    if (!move) { return null; }
+
+    // Dopo una mossa il turno passa: se tocca al Bianco, l'ultima mossa è del Nero.
+    const isBlackMove = chess.turn === "w";
+
+    // Eval prima della mossa
+    let beforeCp: number | null;
+    let beforeMate: number | null;
+    if (i === 0) {
+      beforeCp = selectedBoard?.evalCp ?? null;
+      beforeMate = selectedBoard?.evalMate ?? null;
+    } else {
+      beforeCp = chess.moves[i - 1]?.evalCp ?? null;
+      beforeMate = chess.moves[i - 1]?.evalMate ?? null;
+    }
+
+    // Eval dopo la mossa
+    const afterCp = move.evalCp ?? null;
+    const afterMate = move.evalMate ?? null;
+
+
+
+    // Se manca uno dei due eval, non possiamo calcolare il cpLoss
+    if (
+      (beforeCp == null && beforeMate == null) ||
+      (afterCp == null && afterMate == null)
+    ) {
+
+      return null;
+    }
+
+    const beforeScore = evalScore(beforeCp, beforeMate); // POV Bianco
+    const afterScore = evalScore(afterCp, afterMate); // POV Bianco
+
+    // cpLoss POV del giocatore che ha mosso
+    const cpLoss = isBlackMove
+      ? afterScore - beforeScore
+      : beforeScore - afterScore;
+
+    const cls = moveClassification(cpLoss);
+
+    return cls;
+  }, [chess.historyIndex, chess.currentMove, chess.moves, selectedBoard]);
+
   const handleEditBoardClick = (board: Board, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditBoardId(board.id ?? null);
@@ -496,13 +659,23 @@ export default function LessonDetailPage() {
         <aside className="w-full lg:w-56 shrink-0">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold">Scacchiere</h2>
-            <Button
-              size="icon-xs"
-              onClick={handleCreateBoard}
-              title="Nuova scacchiera"
-            >
-              <Plus className="size-4" />
-            </Button>
+            <div className="flex items-center gap-0.5">
+              <Button
+                size="icon-xs"
+                variant="ghost"
+                onClick={() => setImportOpen(true)}
+                title="Importa PGN"
+              >
+                <Upload className="size-4" />
+              </Button>
+              <Button
+                size="icon-xs"
+                onClick={handleCreateBoard}
+                title="Nuova scacchiera"
+              >
+                <Plus className="size-4" />
+              </Button>
+            </div>
           </div>
           {boards.length === 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -563,12 +736,16 @@ export default function LessonDetailPage() {
         <section className="flex-1 min-w-0 flex flex-col gap-4 items-center">
           {selectedBoard ? (
             <>
+              { }
               <div className="w-full">
                 <ChessBoardView
                   fen={chess.fen}
                   boardWidth={BOARD_WIDTH}
                   arrows={chess.currentArrows}
                   highlights={chess.currentHighlights}
+                  extraArrows={analysisArrow}
+                  lastMoveSquare={lastMoveSquare}
+                  moveBadge={moveBadge}
                   onArrowsChange={handleArrowsChange}
                   onHighlightsChange={handleHighlightsChange}
                   onClearArrows={handleClearArrows}
@@ -578,8 +755,21 @@ export default function LessonDetailPage() {
                   onUndo={handleUndo}
                   onRedo={handleRedo}
                   onReset={handleReset}
+                  onAnalyze={handleAnalyze}
+                  analyzing={analyzing}
+                  analysisProgress={analysisProgress}
+                  canAnalyze={chess.moves.length > 0 || !!selectedBoard}
+                  onCancelAnalysis={handleCancelAnalysis}
                 />
               </div>
+              {(currentEvalCp != null || currentEvalMate != null) && (
+                <div className="w-full max-w-[480px] flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="font-mono tabular-nums">
+                    Valutazione: <span className="text-foreground font-semibold">{formatEval(currentEvalCp, currentEvalMate)}</span>
+                  </span>
+                  <span className="text-xs">(profondità {currentEvalDepth})</span>
+                </div>
+              )}
               <div className="w-full max-w-[480px] flex flex-col gap-1.5">
                 <div className="flex gap-1 p-1 bg-muted rounded-lg" role="tablist">
                   <button
@@ -652,12 +842,14 @@ export default function LessonDetailPage() {
         </section>
 
         {/* Destra: mosse */}
-        <aside className="w-full lg:w-64 shrink-0">
+        <aside className="w-full lg:w-80 shrink-0">
           {selectedBoard ? (
             <MoveNotation
               moves={chess.moves}
               currentMoveIndex={chess.historyIndex}
               onGoToMove={chess.goToMove}
+              startEvalCp={selectedBoard?.evalCp ?? null}
+              startEvalMate={selectedBoard?.evalMate ?? null}
             />
           ) : (
             <div className="text-sm text-muted-foreground">
@@ -668,6 +860,15 @@ export default function LessonDetailPage() {
       </div>
 
       {/* Dialog conferma reset scacchiera */}
+
+      {/* Dialog import PGN */}
+      <ImportPgnDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        lessonId={lessonId}
+        onImported={handleImportPgn}
+      />
+
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>
         <DialogContent>
           <DialogHeader>

@@ -3,12 +3,16 @@ import type { Board } from "@/types";
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-/** Normalizza una board letta dal DB garantendo i campi arrows/highlights. */
+/** Normalizza una board letta dal DB garantendo i campi arrows/highlights/eval. */
 function normalizeBoard(b: Board): Board {
   return {
     ...b,
     arrows: b.arrows ?? [],
     highlights: b.highlights ?? [],
+    evalCp: b.evalCp ?? null,
+    evalMate: b.evalMate ?? null,
+    evalDepth: b.evalDepth ?? 0,
+    evalBestMoveUci: b.evalBestMoveUci ?? null,
   };
 }
 
@@ -40,9 +44,28 @@ export async function createBoard(
   return id as number;
 }
 
+/** Crea una scacchiera con FEN di partenza custom (es. da import PGN). */
+export async function createBoardWithFen(
+  lessonId: number,
+  data: { title: string; fen: string; notes?: string }
+): Promise<number> {
+  const count = await db.boards.where("lessonId").equals(lessonId).count();
+  const id = await db.boards.add({
+    lessonId,
+    title: data.title,
+    fen: data.fen,
+    notes: data.notes ?? "",
+    arrows: [],
+    highlights: [],
+    order: count,
+    createdAt: new Date(),
+  } as Board);
+  return id as number;
+}
+
 export async function updateBoard(
   id: number,
-  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights">>
+  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
 ): Promise<void> {
   await db.boards.update(id, data);
 }

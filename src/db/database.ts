@@ -19,4 +19,13 @@ db.version(2).stores({
   moves: "++id, boardId, parentId, order, createdAt",
 });
 
+// v3: aggiunta campi eval (evalCp/evalMate/evalDepth/evalBestMoveUci) su Board e
+// Move. Sono campi NON indicizzati → gli store restano identici, ma si bumpa
+// la versione per documentare l'evoluzione dello schema (FEAT-004).
+db.version(3).stores({
+  lessons: "++id, title, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+});
+
 export default db;
