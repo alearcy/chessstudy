@@ -264,28 +264,34 @@ export default function LessonDetailPage() {
         <span className="ml-1">Lezioni</span>
       </Button>
 
-      <div className="flex items-start justify-between mb-4 gap-2">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold truncate">{lesson.title}</h1>
+      <div className="flex items-center gap-2 mb-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1">
+            <h1 className="text-2xl font-bold truncate">{lesson.title}</h1>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="hover:bg-accent shrink-0"
+              onClick={handleEdit}
+              title="Modifica lezione"
+            >
+              <Pencil className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-destructive hover:text-destructive shrink-0"
+              onClick={() => setDeleteOpen(true)}
+              title="Elimina lezione"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
           {lesson.description && (
             <p className="text-muted-foreground mt-1 text-sm">
               {lesson.description}
             </p>
           )}
-        </div>
-        <div className="flex gap-1 shrink-0">
-          <Button variant="outline" size="sm" onClick={handleEdit}>
-            <Pencil className="size-4" />
-            <span className="ml-1 hidden sm:inline">Modifica</span>
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="size-4" />
-            <span className="ml-1 hidden sm:inline">Elimina</span>
-          </Button>
         </div>
       </div>
 
