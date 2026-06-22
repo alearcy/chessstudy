@@ -1,13 +1,17 @@
 import db from "@/db/database";
 import type { Move } from "@/types";
 
-/** Normalizza una mossa letta dal DB garantendo i campi arrows/highlights. */
+/** Normalizza una mossa letta dal DB garantendo i campi arrows/highlights/eval. */
 function normalizeMove(m: Move): Move {
   return {
     ...m,
     comment: m.comment ?? "",
     arrows: m.arrows ?? [],
     highlights: m.highlights ?? [],
+    evalCp: m.evalCp ?? null,
+    evalMate: m.evalMate ?? null,
+    evalDepth: m.evalDepth ?? 0,
+    evalBestMoveUci: m.evalBestMoveUci ?? null,
   };
 }
 
@@ -35,7 +39,7 @@ export async function createMove(move: Omit<Move, "id" | "createdAt">): Promise<
 
 export async function updateMove(
   id: number,
-  data: Partial<Pick<Move, "comment" | "fen" | "moveNotation" | "arrows" | "highlights">>
+  data: Partial<Pick<Move, "comment" | "fen" | "moveNotation" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
 ): Promise<void> {
   await db.moves.update(id, data);
 }
@@ -56,4 +60,12 @@ export async function deleteMovesFromOrder(
     .filter((m) => m.order >= threshold)
     .primaryKeys();
   await db.moves.bulkDelete(toDelete);
+}
+
+/** Aggiorna la valutazione Stockfish di una mossa (persistenza eval). */
+export async function updateMoveEval(
+  id: number,
+  data: Partial<Pick<Move, "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
+): Promise<void> {
+  await db.moves.update(id, data);
 }

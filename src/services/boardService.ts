@@ -3,12 +3,16 @@ import type { Board } from "@/types";
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-/** Normalizza una board letta dal DB garantendo i campi arrows/highlights. */
+/** Normalizza una board letta dal DB garantendo i campi arrows/highlights/eval. */
 function normalizeBoard(b: Board): Board {
   return {
     ...b,
     arrows: b.arrows ?? [],
     highlights: b.highlights ?? [],
+    evalCp: b.evalCp ?? null,
+    evalMate: b.evalMate ?? null,
+    evalDepth: b.evalDepth ?? 0,
+    evalBestMoveUci: b.evalBestMoveUci ?? null,
   };
 }
 
@@ -61,7 +65,7 @@ export async function createBoardWithFen(
 
 export async function updateBoard(
   id: number,
-  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights">>
+  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
 ): Promise<void> {
   await db.boards.update(id, data);
 }

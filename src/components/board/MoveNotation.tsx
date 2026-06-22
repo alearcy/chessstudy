@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect, ReactNode } from "react";
 import { Eye, EyeOff, MessageSquare } from "lucide-react";
 import type { Move } from "@/types";
+import { formatEval, evalScore, moveClassification } from "@/services/analysisService";
 
 interface MoveNotationProps {
   moves: Move[];
   currentMoveIndex: number;
   onGoToMove: (index: number) => void;
+  /** Eval della posizione di partenza (Board), per classificare la prima mossa. */
+  startEvalCp?: number | null;
+  startEvalMate?: number | null;
 }
 
 const WHITE_PIECES: Record<string, string> = {
@@ -60,6 +64,8 @@ export default function MoveNotation({
   moves,
   currentMoveIndex,
   onGoToMove,
+  startEvalCp = null,
+  startEvalMate = null,
 }: MoveNotationProps) {
   const [useIcons, setUseIcons] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -84,23 +90,55 @@ export default function MoveNotation({
     );
   }
 
-  const pairs: { moveNumber: number; white: { san: ReactNode; index: number; hasComment: boolean } | null; black: { san: ReactNode; index: number; hasComment: boolean } | null }[] = [];
+  const pairs: { moveNumber: number; white: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null } | null; black: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null } | null }[] = [];
+
+  // eval prima della mossa i (POV Bianco): posizione di partenza per i=0,
+  // altrimenti eval della posizione dopo la mossa i-1.
+  const beforeScoreWhite = (i: number): number => {
+    if (i === 0) return evalScore(startEvalCp, startEvalMate);
+    return evalScore(moves[i - 1].evalCp ?? null, moves[i - 1].evalMate ?? null);
+  };
 
   for (let i = 0; i < moves.length; i += 2) {
     const moveNumber = Math.floor(i / 2) + 1;
+    // Mossa i (bianco): side = bianco. cpLoss = scoreBefore(POVbianco) - scoreAfter(POVbianco).
+    const whiteBefore = beforeScoreWhite(i);
+    const whiteAfter = evalScore(moves[i].evalCp ?? null, moves[i].evalMate ?? null);
+    const whiteLoss = whiteBefore - whiteAfter;
     const white = {
       san: formatSan(moves[i].moveNotation, true, useIcons),
       index: i + 1,
       hasComment: !!moves[i].comment?.trim(),
+      evalCp: moves[i].evalCp ?? null,
+      evalMate: moves[i].evalMate ?? null,
+      cpLoss:
+        (moves[i].evalCp != null || moves[i].evalMate != null) &&
+        (startEvalCp != null || startEvalMate != null || i > 0)
+          ? whiteLoss
+          : null,
     };
-    const black =
-      i + 1 < moves.length
-        ? {
-            san: formatSan(moves[i + 1].moveNotation, false, useIcons),
-            index: i + 2,
-            hasComment: !!moves[i + 1].comment?.trim(),
-          }
-        : null;
+    // Mossa i+1 (nero): side = nero. Converte eval al POV del nero (nega).
+    let black = null;
+    if (i + 1 < moves.length) {
+      const blackBefore = -beforeScoreWhite(i + 1); // POV nero
+      const blackAfter = -evalScore(
+        moves[i + 1].evalCp ?? null,
+        moves[i + 1].evalMate ?? null
+      );
+      const blackLoss = blackBefore - blackAfter;
+      black = {
+        san: formatSan(moves[i + 1].moveNotation, false, useIcons),
+        index: i + 2,
+        hasComment: !!moves[i + 1].comment?.trim(),
+        evalCp: moves[i + 1].evalCp ?? null,
+        evalMate: moves[i + 1].evalMate ?? null,
+        cpLoss:
+          (moves[i + 1].evalCp != null || moves[i + 1].evalMate != null) &&
+          (moves[i].evalCp != null || moves[i].evalMate != null)
+            ? blackLoss
+            : null,
+      };
+    }
     pairs.push({ moveNumber, white, black });
   }
 
@@ -138,6 +176,12 @@ export default function MoveNotation({
                       }`}
                     >
                       <span className="flex-1 truncate">{white.san}</span>
+                      <EvalBadge
+                        cp={white.evalCp}
+                        mate={white.evalMate}
+                        cpLoss={white.cpLoss}
+                        active={currentMoveIndex === white.index}
+                      />
                       {white.hasComment && (
                         <MessageSquare className="size-3 shrink-0 opacity-70" />
                       )}
@@ -157,6 +201,12 @@ export default function MoveNotation({
                       }`}
                     >
                       <span className="flex-1 truncate">{black.san}</span>
+                      <EvalBadge
+                        cp={black.evalCp}
+                        mate={black.evalMate}
+                        cpLoss={black.cpLoss}
+                        active={currentMoveIndex === black.index}
+                      />
                       {black.hasComment && (
                         <MessageSquare className="size-3 shrink-0 opacity-70" />
                       )}
@@ -169,5 +219,49 @@ export default function MoveNotation({
         </table>
       </div>
     </div>
+  );
+}
+
+/** Badge eval: valore numerico + eventuale sigla classificazione (?? / ? / ?!). */
+function EvalBadge({
+  cp,
+  mate,
+  cpLoss,
+  active,
+}: {
+  cp: number | null;
+  mate: number | null;
+  cpLoss: number | null;
+  active: boolean;
+}) {
+  const hasEval = cp != null || mate != null;
+  if (!hasEval) return null;
+  const cls = moveClassification(cpLoss);
+  return (
+    <span className="flex items-center gap-0.5 shrink-0 text-[10px] tabular-nums">
+      <span
+        className={`px-1 rounded ${
+          active ? "bg-primary-foreground/20" : "bg-muted"
+        }`}
+        title={cls ? `Valutazione: ${cls.label}` : undefined}
+      >
+        {formatEval(cp, mate)}
+      </span>
+      {cls && (
+        <span
+          style={{ color: active ? undefined : cls.color }}
+          className={active ? "text-primary-foreground" : ""}
+          title={
+            cls.label === "??"
+              ? "Pessata"
+              : cls.label === "?"
+                ? "Errore"
+                : "Imprecisione"
+          }
+        >
+          {cls.label}
+        </span>
+      )}
+    </span>
   );
 }
