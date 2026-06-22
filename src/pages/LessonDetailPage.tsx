@@ -620,7 +620,7 @@ const selectedBoard = useMemo(
       for (let i = 1; i < evals.length; i++) {
         const move = moveList[i - 1];
         if (move.id == null) continue;
-        await updateMoveEval(move.id, toEvalFields(evals[i]));
+await updateMoveEval(move.id, toEvalFields(evals[i]));
       }
 
       // Genera commenti rule-based usando evals freschi (non chess.moves).
@@ -651,6 +651,8 @@ const selectedBoard = useMemo(
             freshBoard.arrows ?? [],
             freshBoard.highlights ?? []
           );
+        }
+      }
         }
       }
     } catch (e) {
@@ -1333,7 +1335,7 @@ const selectedBoard = useMemo(
         </section>
 
         {/* Destra: mosse */}
-        <aside className="w-full lg:w-80 shrink-0">
+        <aside className="w-full lg:w-96 shrink-0">
           {selectedBoard ? (
             <MoveNotation
               moves={chess.moves}

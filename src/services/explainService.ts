@@ -13,7 +13,6 @@ async function isLlmReady(): Promise<boolean> {
     return false;
   }
 }
-
 // ============================================================================
 // Costanti
 // ============================================================================
@@ -80,6 +79,8 @@ function classifySeverity(cpLoss: number | null, isBestMove?: boolean): Severity
   if (cpLoss < 50) return "good";
   if (cpLoss < 100) return "inaccuracy";
   if (cpLoss < 300) return "mistake";
+  return "blunder";
+}
   return "blunder";
 }
 
@@ -394,7 +395,7 @@ function severityLabel(s: Severity): string {
     good: "Buona mossa",
     inaccuracy: "Imprecisione",
     mistake: "Errore",
-    blunder: "Errore grave!",
+blunder: "Errore grave!",
   };
   return map[s];
 }
@@ -403,7 +404,7 @@ function severityEmoji(s: Severity): string {
   const map: Record<Severity, string> = {
     best: "⭐",
     good: "✅",
-    inaccuracy: "?!",
+inaccuracy: "?!",
     mistake: "?",
     blunder: "??",
   };
@@ -419,6 +420,7 @@ function formatCpLoss(cpLoss: number | null): string {
 function playerLabel(playedBy: "w" | "b", whiteName: string | null | undefined, blackName: string | null | undefined): string {
   if (playedBy === "w") return whiteName || "il Bianco";
   return blackName || "il Nero";
+}
 }
 
 // ============================================================================
@@ -547,12 +549,12 @@ function buildDetails(
       if (stockfishExplains) details.push(stockfishExplains);
       break;
     case "mistake":
-      details.push(`${player} cede ${formatCpLoss(cpLoss)}.`);
+details.push(`${player} cede ${formatCpLoss(cpLoss)}.`);
       if (stockfishExplains) details.push(stockfishExplains);
       for (const t of tactics.slice(0, 2)) details.push(`• ${t.description}`);
       break;
     case "inaccuracy":
-      details.push(`Piccola imprecisione di ${player}: ${formatCpLoss(cpLoss)} di svantaggio.`);
+details.push(`Piccola imprecisione di ${player}: ${formatCpLoss(cpLoss)} di svantaggio.`);
       if (stockfishExplains) details.push(stockfishExplains);
       break;
     case "good": {
@@ -562,11 +564,12 @@ function buildDetails(
       } else {
         details.push(`Mossa solida di ${player}, vicina all'ottimale (solo -${formatCpLoss(cpLoss)}).`);
       }
+      }
       for (const t of tactics.slice(0, 2)) details.push(`• ${t.description}`);
       break;
     }
     case "best":
-      details.push(`${player} ha giocato la mossa esattamente corrispondente alla prima scelta di Stockfish.`);
+details.push(`${player} ha giocato la mossa esattamente corrispondente alla prima scelta di Stockfish.`);
       for (const t of tactics.slice(0, 3)) details.push(`• ${t.description}`);
       break;
   }
@@ -583,7 +586,7 @@ function stockfishExplanation(
   playedSan: string,
   bestSan: string,
   bestUci: string,
-  tactics: TacticalPattern[],
+tactics: TacticalPattern[],
   player: string
 ): string {
   let materialNote = "";
@@ -601,7 +604,7 @@ function stockfishExplanation(
     const matBest = countMaterial(gameBest);
 
     if (matPlayed < matBest) {
-      materialNote = ` Con ${bestSan} ${player} avrebbe mantenuto ${matBest} punti materiale anziché ${matPlayed}.`;
+materialNote = ` Con ${bestSan} ${player} avrebbe mantenuto ${matBest} punti materiale anziché ${matPlayed}.`;
     }
   } catch {
     // mossa non legale: ignoriamo
@@ -613,7 +616,7 @@ function stockfishExplanation(
 
   const missed = tactics.filter((t) => t.type === "hanging_piece" || t.type === "fork").slice(0, 1);
   if (missed.length > 0) {
-    reasons.push(`Con ${bestSan} ${player} avrebbe evitato: ${missed[0].description}`);
+reasons.push(`Con ${bestSan} ${player} avrebbe evitato: ${missed[0].description}`);
   }
   return reasons.join(" ");
 }
@@ -648,7 +651,7 @@ export interface BatchExplainInput {
     depth: number;
     bestMoveUci: string | null;
   };
-  /** Nome del giocatore Bianco (da PGN), o null se sconosciuto. */
+/** Nome del giocatore Bianco (da PGN), o null se sconosciuto. */
   whiteName?: string | null;
   /** Nome del giocatore Nero (da PGN), o null se sconosciuto. */
   blackName?: string | null;
@@ -766,4 +769,5 @@ export async function analyzeGame(input: GameAnalysisArgs): Promise<string> {
     { args: input }
   );
   return result.details;
+}
 }

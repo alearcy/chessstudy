@@ -21,7 +21,7 @@ function App() {
   }, []);
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <div className="min-h-screen bg-background text-foreground">
         <header className="border-b">
           <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
@@ -50,7 +50,7 @@ function App() {
           onOpenChange={setSettingsOpen}
         />
       </div>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
