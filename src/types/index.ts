@@ -42,6 +42,8 @@ export interface Board {
   whiteName?: string | null;
   /** Nome del giocatore Nero (da header PGN [Black]); null se assente. */
   blackName?: string | null;
+  /** Header PGN completi (per visualizzazione strutturata in analisi). */
+  headers?: Record<string, string | null>;
 }
 
 export interface Move {

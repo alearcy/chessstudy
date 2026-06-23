@@ -12,15 +12,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { parsePgn, importPgnToLesson, importPgnAsLesson } from "@/services/pgnService";
-import { getAllLessons } from "@/services/lessonService";
 
 interface ImportPgnDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** ID lezione esistente (sidebar scacchiera). */
   lessonId?: number;
-  /** Modalità lezione da creare (solo se lessonId non fornito). */
-  mode?: "study" | "analysis";
   /** Callback dopo import con lessonId (sidebar). */
   onImported?: (boardId: number) => void;
   /** Callback dopo import da home page: crea lezione + board. */
@@ -33,7 +30,6 @@ export default function ImportPgnDialog({
   lessonId,
   onImported,
   onImportedLesson,
-  mode: _mode = "analysis"
 }: ImportPgnDialogProps) {
   const [pgnText, setPgnText] = useState("");
   const [importing, setImporting] = useState(false);
@@ -75,19 +71,9 @@ export default function ImportPgnDialog({
         const boardId = await importPgnToLesson(lessonId, pgnText);
         onImported?.(boardId);
       } else {
-        // Flusso home page: cerca una lezione di analisi esistente, altrimenti crea una nuova
-        const lessons = await getAllLessons();
-        const existingAnalysisLesson = lessons.find(l => l.mode === "analysis");
-        
-        if (existingAnalysisLesson?.id != null) {
-          // Usa la lezione esistente
-          const boardId = await importPgnToLesson(existingAnalysisLesson.id, pgnText);
-          onImportedLesson?.(existingAnalysisLesson.id, boardId);
-        } else {
-          // Crea una nuova lezione di analisi
-          const { lessonId: newLessonId, boardId } = await importPgnAsLesson(pgnText);
-          onImportedLesson?.(newLessonId, boardId);
-        }
+        // Flusso home page: ogni PGN diventa una lezione analysis autonoma.
+        const { lessonId: newLessonId, boardId } = await importPgnAsLesson(pgnText);
+        onImportedLesson?.(newLessonId, boardId);
       }
       setPgnText("");
       setImporting(false);

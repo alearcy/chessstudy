@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 tsconfig.tsbuildinfo
+
+# Local LLM models
+models/
+
+# opencode agent config
+.agents/
+skills-lock.json
