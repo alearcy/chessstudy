@@ -176,9 +176,10 @@ export async function importPgnToLesson(
   return boardId;
 }
 
-/**
+/** 
  * Crea una lezione in modalità "analysis" con una scacchiera popolata
  * dal PGN. Usato dal flusso "Importa PGN" nella home page.
+ * La lezione conterrà una singola scacchiera con la partita importata.
  * Ritorna `{ lessonId, boardId }`.
  */
 export async function importPgnAsLesson(
@@ -186,9 +187,10 @@ export async function importPgnAsLesson(
 ): Promise<{ lessonId: number; boardId: number }> {
   const parsed = parsePgn(pgn);
   const lessonId = await createLesson(
-    { title: parsed.title, description: parsed.notes },
+    { title: "analisi", description: parsed.notes },
     "analysis"
   );
+  // Crea solo una scacchiera con la partita importata nella lezione di analisi
   const boardId = await importPgnToLesson(lessonId, pgn);
   return { lessonId, boardId };
 }

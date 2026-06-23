@@ -30,6 +30,8 @@ interface ChessBoardViewProps {
   analysisProgress?: { done: number; total: number } | null;
   canAnalyze?: boolean;
   onCancelAnalysis?: () => void;
+  /** Se true, l'analisi è in corso automaticamente (non mostra il bottone). */
+  autoAnalysis?: boolean;
   /** Modalità lezione (per decidere quali controlli mostrare). */
   lessonMode?: "study" | "analysis";
   /** Toggle AI (LLM) — solo in modalità analysis. */
@@ -70,6 +72,7 @@ export default function ChessBoardView({
   analysisProgress = null,
   canAnalyze = false,
   onCancelAnalysis,
+  autoAnalysis: _autoAnalysis = false, // prop mantenuto per compatibilità
   lessonMode,
   aiEnabled = false,
   onAiToggle,
@@ -125,9 +128,6 @@ export default function ChessBoardView({
     ({ children, ref, square, squareColor: _squareColor, style }: CustomSquareProps) => {
       const { square: badgeSquare, badge } = badgeDataRef.current;
       const showBadge = square === badgeSquare && badge;
-      if (badgeSquare) {
-
-      }
       return (
         <div ref={ref} style={{ ...style, position: "relative" }}>
           {children}
@@ -203,23 +203,23 @@ export default function ChessBoardView({
           </>
         )}
 
-        <div className="w-px h-6 bg-border mx-1" />
-
-        <Button
-          variant={analyzing ? "default" : "ghost"}
-          size="icon-xs"
-          disabled={!onAnalyze || (!analyzing && !canAnalyze)}
-          onClick={analyzing ? onCancelAnalysis : onAnalyze}
-          title={
-            analyzing
-              ? "Annulla analisi"
-              : canAnalyze
-                ? "Analizza partita con Stockfish 18"
-                : "Nessuna posizione da analizzare"
-          }
-        >
-          <Brain className="size-4" />
-        </Button>
+        {lessonMode !== "analysis" && (
+          <Button
+            variant={analyzing ? "default" : "ghost"}
+            size="icon-xs"
+            disabled={!onAnalyze || (!analyzing && !canAnalyze)}
+            onClick={analyzing ? onCancelAnalysis : onAnalyze}
+            title={
+              analyzing
+                ? "Annulla analisi"
+                : canAnalyze
+                  ? "Analizza partita con Stockfish 18"
+                  : "Nessuna posizione da analizzare"
+            }
+          >
+            <Brain className="size-4" />
+          </Button>
+        )}
 
         {lessonMode === "analysis" && (
           <>
@@ -227,22 +227,24 @@ export default function ChessBoardView({
             <Button
               variant={aiEnabled ? "default" : "ghost"}
               size="icon-xs"
-              disabled={!llmAvailable || !isTauri || aiLoading || analyzing}
+              disabled={aiLoading || analyzing}
               onClick={onAiToggle}
               title={
-                !llmAvailable || !isTauri
-                  ? "AI non disponibile (modello LLM mancante o non in Tauri)"
+                analyzing
+                  ? "Analisi Stockfish in corso..."
                   : aiLoading
                     ? "L'AI sta generando commenti..."
                     : aiEnabled
                       ? "Disattiva commenti AI"
-                      : "Attiva commenti AI"
+                      : llmAvailable && isTauri
+                        ? "Attiva commenti AI (LLM nativo)"
+                        : "Attiva commenti AI (analisi rule-based)"
               }
             >
               {aiLoading ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Sparkles className={`size-4 ${(!llmAvailable || !isTauri) ? "opacity-40" : ""}`} />
+                <Sparkles className="size-4" />
               )}
             </Button>
           </>

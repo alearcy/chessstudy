@@ -483,7 +483,7 @@ export async function explainMove(input: MoveExplanationInput): Promise<MoveExpl
   return explainMoveRuleBased(input);
 }
 
-function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanation {
+export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanation {
   const { beforeFen, playedMoveSan, playedBy, beforeEval, afterEval } = input;
   const player = playerLabel(playedBy, input.whiteName, input.blackName);
 

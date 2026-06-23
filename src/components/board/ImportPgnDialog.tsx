@@ -12,6 +12,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { parsePgn, importPgnToLesson, importPgnAsLesson } from "@/services/pgnService";
+import { getAllLessons } from "@/services/lessonService";
 
 interface ImportPgnDialogProps {
   open: boolean;
@@ -32,6 +33,7 @@ export default function ImportPgnDialog({
   lessonId,
   onImported,
   onImportedLesson,
+  mode: _mode = "analysis"
 }: ImportPgnDialogProps) {
   const [pgnText, setPgnText] = useState("");
   const [importing, setImporting] = useState(false);
@@ -73,9 +75,19 @@ export default function ImportPgnDialog({
         const boardId = await importPgnToLesson(lessonId, pgnText);
         onImported?.(boardId);
       } else {
-        // Flusso home page: crea lezione + board in un colpo solo.
-        const { lessonId: newLessonId, boardId } = await importPgnAsLesson(pgnText);
-        onImportedLesson?.(newLessonId, boardId);
+        // Flusso home page: cerca una lezione di analisi esistente, altrimenti crea una nuova
+        const lessons = await getAllLessons();
+        const existingAnalysisLesson = lessons.find(l => l.mode === "analysis");
+        
+        if (existingAnalysisLesson?.id != null) {
+          // Usa la lezione esistente
+          const boardId = await importPgnToLesson(existingAnalysisLesson.id, pgnText);
+          onImportedLesson?.(existingAnalysisLesson.id, boardId);
+        } else {
+          // Crea una nuova lezione di analisi
+          const { lessonId: newLessonId, boardId } = await importPgnAsLesson(pgnText);
+          onImportedLesson?.(newLessonId, boardId);
+        }
       }
       setPgnText("");
       setImporting(false);

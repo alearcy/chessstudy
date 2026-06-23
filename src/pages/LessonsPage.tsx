@@ -190,8 +190,17 @@ export default function LessonsPage() {
     setDeletingLesson(null);
   };
 
-  const handlePgnImported = (lessonId: number, _boardId: number) => {
-    navigate(`/lesson/${lessonId}`);
+  const handlePgnImported = async (lessonId: number, _boardId: number) => {
+    // Dopo l'import PGN, verifico se esiste già una lezione di analisi
+    // e mi sposto su quella, altrimenti mi sposto sulla nuova lezione creata
+    const lessons = await getAllLessons();
+    const analysisLesson = lessons.find(l => l.mode === "analysis");
+    
+    if (analysisLesson) {
+      navigate(`/lesson/${analysisLesson.id}`);
+    } else {
+      navigate(`/lesson/${lessonId}`);
+    }
   };
 
   return (
@@ -229,7 +238,7 @@ export default function LessonsPage() {
             <div className="text-center">
               <p className="font-semibold">Nuova lezione</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Crea una scacchiera vuota per studiare
+                Crea una lezione vuota per studiare
               </p>
             </div>
           </CardContent>
@@ -241,7 +250,7 @@ export default function LessonsPage() {
           <BookOpen className="size-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg">Nessuna lezione</p>
           <p className="text-sm mt-1">
-            Importa un PGN o crea una nuova lezione per iniziare.
+            Importa un PGN per iniziare.
           </p>
         </div>
       ) : (
@@ -329,6 +338,7 @@ export default function LessonsPage() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onImportedLesson={handlePgnImported}
+        mode="analysis"
       />
     </div>
   );

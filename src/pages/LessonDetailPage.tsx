@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload, Loader2 } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson } from "@/services/lessonService";
 import {
+  getBoard,
   getBoardsByLesson,
   createBoard,
   updateBoard,
@@ -16,7 +17,7 @@ import {
   deleteMovesFromOrder,
   deleteMovesByBoard,
 } from "@/services/moveService";
-import type { Lesson, LessonFormData, Board, BoardArrow } from "@/types";
+import type { Lesson, LessonFormData, Board, BoardArrow, Move } from "@/types";
 import type { Square } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +43,7 @@ import {
   moveClassification,
   type PositionEval,
 } from "@/services/analysisService";
-import { explainMove } from "@/services/explainService";
+import { explainMove, explainMoveRuleBased } from "@/services/explainService";
 
 /** Estrae la casa di destinazione dal SAN (e.g. "Nf3" → "f3", "O-O" → "g1" o "g8"). */
 function sanToSquare(san: string, byBlack: boolean): string | null {
@@ -106,16 +107,19 @@ export default function LessonDetailPage() {
   // Inizializza l'hook scacchiera quando viene selezionata una nuova board:
   // carica il FEN di partenza, le mosse persistite e le annotazioni di partenza.
   useEffect(() => {
-    if (!selectedBoard || initializedRef.current === selectedBoard.id) return;
-    initializedRef.current = selectedBoard.id ?? null;
-    getMovesByBoard(selectedBoard.id!).then((loadedMoves) => {
-      chess.loadSequence(
-        selectedBoard.fen,
-        loadedMoves,
-        selectedBoard.arrows,
-        selectedBoard.highlights
-      );
-    });
+    if (!selectedBoard) return;
+    // Forza il reload se initializedRef.current è null (ad esempio dopo PGN import)
+    if (initializedRef.current === null || initializedRef.current !== selectedBoard.id) {
+      initializedRef.current = selectedBoard.id ?? null;
+      getMovesByBoard(selectedBoard.id!).then((loadedMoves) => {
+        chess.loadSequence(
+          selectedBoard.fen,
+          loadedMoves,
+          selectedBoard.arrows,
+          selectedBoard.highlights
+        );
+      });
+    }
   }, [selectedBoard, chess.loadSequence]);
 
   // Sincronizza il draft delle note SOLO quando cambia la board selezionata
@@ -143,7 +147,7 @@ export default function LessonDetailPage() {
 
   // Sincronizza il draft del commento mossa quando cambia la mossa corrente.
   // Dipende solo da historyIndex e dall'id della mossa (NON dal commento),
-  // altrimenti l'editing resettrebbe lastSavedCommentRef e bloccherebbe il salvataggio.
+  // altrimenti l'editing resetterebbe lastSavedCommentRef e bloccherebbe il salvataggio.
   useEffect(() => {
     // Flush del commento pendente della mossa precedente.
     if (moveCommentTimerRef.current) {
@@ -325,7 +329,7 @@ export default function LessonDetailPage() {
     } else {
       const moveId = chess.currentMove?.id;
       if (moveId == null) {
-        // La mossa è ancora un placeholder non persistito: ritenta quando
+        // La mossa è ancora un placeholder non persistita: ritenta quando
         // arriva l'id (vedi effect sotto).
         pendingAnnotationsRef.current = { arrows, highlights };
         return;
@@ -459,12 +463,68 @@ export default function LessonDetailPage() {
     // Forza il ricaricamento della sequenza anche se la board era già selezionata.
     initializedRef.current = null;
     setSelectedBoardId(boardId);
+    
+    // Reset auto-analysis flag to ensure it runs after import
+    autoAnalysisDoneRef.current = false;
   };
+
+  // --- Helper: genera commenti rule-based per tutte le mosse ---
+  // Lavora solo sul DB: legge eval dall'array `evals` (non da chess.moves,
+  // che in questo momento è stale). Persiste i commenti senza toccare lo stato.
+  const persistRuleBasedComments = useCallback(
+    async (
+      startFen: string,
+      moveList: Move[],
+      evals: PositionEval[],
+      board: Board
+    ) => {
+      for (let i = 0; i < moveList.length; i++) {
+        const move = moveList[i];
+        if (move.id == null) continue;
+        // Salta se ha già un commento PGN (proveniente dall'import).
+        if (move.comment?.trim()) continue;
+
+        const playedBy: "w" | "b" = i % 2 === 0 ? "w" : "b";
+        const beforeFen = i === 0 ? startFen : moveList[i - 1]?.fen ?? startFen;
+        const beforeEval = {
+          cp: evals[i].scoreCp,
+          mate: evals[i].scoreMate,
+          depth: evals[i].depth,
+          bestMoveUci: evals[i].bestMoveUci,
+        };
+        const afterEval = {
+          cp: evals[i + 1].scoreCp,
+          mate: evals[i + 1].scoreMate,
+          depth: evals[i + 1].depth,
+        };
+
+        try {
+          const exp = explainMoveRuleBased({
+            beforeFen,
+            afterFen: move.fen,
+            playedMoveSan: move.moveNotation,
+            playedBy,
+            whiteName: board.whiteName ?? null,
+            blackName: board.blackName ?? null,
+            beforeEval,
+            afterEval,
+          });
+          const commentText = [exp.summary, ...exp.details].join("\n");
+          await updateMove(move.id, { comment: commentText });
+        } catch {
+          // non critico
+        }
+      }
+    },
+    []
+  );
 
   // --- Analisi Stockfish ---
   // Posizioni da analizzare: posizione di partenza (Board.fen) + dopo ogni mossa.
   const handleAnalyze = async () => {
     if (!selectedBoard || analyzing) return;
+    const boardId = selectedBoard.id;
+    if (boardId == null) return;
     const startFen = selectedBoard.fen;
     const moveList = chess.moves;
     const fens = [startFen, ...moveList.map((m) => m.fen)];
@@ -479,18 +539,46 @@ export default function LessonDetailPage() {
         onProgress: (done, total) => setAnalysisProgress({ done, total }),
       });
       if (signal.cancelled) return;
-      // Persistenza + aggiornamento stato in memoria.
-      // evals[0] → Board (posizione di partenza); evals[i] → Move[i-1].
-      if (selectedBoard.id) {
-        await updateBoard(selectedBoard.id, toEvalFields(evals[0]));
-        syncBoardInList(selectedBoard.id, toEvalFields(evals[0]));
-      }
+
+      // Persistenza SOLO su DB. Non toccare chess.moves qui: l'array
+      // catturato nella closure è stale e i replaceMove sovrascriverebbero
+      // gli eval con valori vecchi. Ricarichiamo tutto dal DB alla fine.
+      await updateBoard(boardId, toEvalFields(evals[0]));
       for (let i = 1; i < evals.length; i++) {
         const move = moveList[i - 1];
         if (move.id == null) continue;
-        const fields = toEvalFields(evals[i]);
-        await updateMoveEval(move.id, fields);
-        chess.replaceMove(i - 1, { ...move, ...fields });
+        await updateMoveEval(move.id, toEvalFields(evals[i]));
+      }
+
+      // Genera commenti rule-based usando evals freschi (non chess.moves).
+      if (!signal.cancelled) {
+        await persistRuleBasedComments(startFen, moveList, evals, {
+          ...selectedBoard,
+          ...toEvalFields(evals[0]),
+        });
+      }
+
+      // Ricarica board + mosse dal DB in un colpo solo: questo è l'esatto
+      // path che funziona quando esci/rientri nella pagina.
+      if (!signal.cancelled) {
+        const [freshBoard, freshMoves] = await Promise.all([
+          getBoard(boardId),
+          getMovesByBoard(boardId),
+        ]);
+        if (freshBoard) {
+          syncBoardInList(boardId, {
+            evalCp: freshBoard.evalCp,
+            evalMate: freshBoard.evalMate,
+            evalDepth: freshBoard.evalDepth,
+            evalBestMoveUci: freshBoard.evalBestMoveUci,
+          });
+          chess.loadSequence(
+            freshBoard.fen,
+            freshMoves,
+            freshBoard.arrows ?? [],
+            freshBoard.highlights ?? []
+          );
+        }
       }
     } catch (e) {
       console.error("[analyze] errore", e);
@@ -501,20 +589,67 @@ export default function LessonDetailPage() {
     }
   };
 
-  /** Attiva/disattiva l'AI: quando attivata, genera commenti per tutte le mosse. */
+  /** Attiva/disattiva l'AI: ON → genera commenti con LLM (o fallback rule-based),
+   * OFF → rigenera commenti rule-based. */
   const handleAiToggle = async () => {
     if (!selectedBoard || aiLoading) return;
+
     if (aiEnabled) {
+      // Disattiva AI: rigenera commenti rule-based dal DB + eval persistiti.
       setAiEnabled(false);
+      setAiLoading(true);
+      try {
+        if (selectedBoard.id) {
+          const startFen = selectedBoard.fen;
+          const moveList = chess.moves;
+          // Costruisce evals da selectedBoard + chess.moves (qui gli eval ci sono
+          // già perché l'analisi Stockfish è stata fatta prima).
+          const evals: PositionEval[] = [
+            {
+              fen: startFen,
+              depth: selectedBoard.evalDepth ?? 0,
+              scoreCp: selectedBoard.evalCp ?? null,
+              scoreMate: selectedBoard.evalMate ?? null,
+              bestMoveUci: selectedBoard.evalBestMoveUci ?? null,
+            },
+            ...moveList.map((m) => ({
+              fen: m.fen,
+              depth: m.evalDepth ?? 0,
+              scoreCp: m.evalCp ?? null,
+              scoreMate: m.evalMate ?? null,
+              bestMoveUci: m.evalBestMoveUci ?? null,
+            })),
+          ];
+          await persistRuleBasedComments(startFen, moveList, evals, selectedBoard);
+          // Ricarica da DB.
+          const [freshBoard, freshMoves] = await Promise.all([
+            getBoard(selectedBoard.id),
+            getMovesByBoard(selectedBoard.id),
+          ]);
+          if (freshBoard) {
+            chess.loadSequence(
+              freshBoard.fen,
+              freshMoves,
+              freshBoard.arrows ?? [],
+              freshBoard.highlights ?? []
+            );
+          }
+        }
+      } catch (e) {
+        console.error("[ai] errore spegnimento", e);
+      } finally {
+        setAiLoading(false);
+      }
       return;
     }
+
+    // Attiva AI: genera commenti con LLM (o fallback rule-based).
     setAiEnabled(true);
     setAiLoading(true);
     try {
       const startFen = selectedBoard.fen;
       const moveList = chess.moves;
 
-      // Costruisce evals dagli eval già persistiti su board/mosse.
       const evals: { scoreCp: number | null; scoreMate: number | null; depth: number; bestMoveUci: string | null }[] = [
         {
           scoreCp: selectedBoard.evalCp ?? null,
@@ -533,8 +668,6 @@ export default function LessonDetailPage() {
       for (let i = 0; i < moveList.length; i++) {
         const move = moveList[i];
         if (move.id == null) continue;
-        // Salta se già ha un commento (non vuoto e non generato dal rule-based).
-        if (move.comment?.trim()) continue;
 
         const playedBy: "w" | "b" = i % 2 === 0 ? "w" : "b";
         const beforeFen = i === 0 ? startFen : moveList[i - 1]?.fen ?? startFen;
@@ -620,9 +753,9 @@ export default function LessonDetailPage() {
     if (chess.historyIndex === 0) return null;
     const move = chess.currentMove;
     if (!move) return null;
-    // Dopo una mossa, il turno è del giocatore opposto:
-    // se ora tocca al Bianco, l'ultima mossa è del Nero.
-    const isBlackMove = chess.turn === "w";
+    // La mossa corrente è stata fatta da chi TOCCA ORA (chess.turn),
+    // quindi il giocatore che ha mosso è l'avversario del turno corrente.
+    const isBlackMove = chess.turn === "b";
     const sq = sanToSquare(move.moveNotation, isBlackMove);
 
     return sq as Square | null;
@@ -633,9 +766,6 @@ export default function LessonDetailPage() {
     if (i < 0) { return null; }
     const move = chess.currentMove;
     if (!move) { return null; }
-
-    // Dopo una mossa il turno passa: se tocca al Bianco, l'ultima mossa è del Nero.
-    const isBlackMove = chess.turn === "w";
 
     // Eval prima della mossa
     let beforeCp: number | null;
@@ -652,14 +782,11 @@ export default function LessonDetailPage() {
     const afterCp = move.evalCp ?? null;
     const afterMate = move.evalMate ?? null;
 
-
-
     // Se manca uno dei due eval, non possiamo calcolare il cpLoss
     if (
       (beforeCp == null && beforeMate == null) ||
       (afterCp == null && afterMate == null)
     ) {
-
       return null;
     }
 
@@ -667,9 +794,8 @@ export default function LessonDetailPage() {
     const afterScore = evalScore(afterCp, afterMate); // POV Bianco
 
     // cpLoss POV del giocatore che ha mosso
-    const cpLoss = isBlackMove
-      ? afterScore - beforeScore
-      : beforeScore - afterScore;
+    // In POV Bianco, cpLoss è la differenza tra valutazione prima e dopo la mossa
+    const cpLoss = beforeScore - afterScore;
 
     const cls = moveClassification(cpLoss);
 
@@ -798,13 +924,15 @@ export default function LessonDetailPage() {
               >
                 <Upload className="size-4" />
               </Button>
-              <Button
-                size="icon-xs"
-                onClick={handleCreateBoard}
-                title="Nuova scacchiera"
-              >
-                <Plus className="size-4" />
-              </Button>
+              {lesson.mode === "study" && (
+                <Button
+                  size="icon-xs"
+                  onClick={handleCreateBoard}
+                  title="Nuova scacchiera"
+                >
+                  <Plus className="size-4" />
+                </Button>
+              )}
             </div>
           </div>
           {boards.length === 0 ? (
@@ -896,6 +1024,7 @@ export default function LessonDetailPage() {
                   aiLoading={aiLoading}
                   llmAvailable={llmAvailable}
                   isTauri={typeof window !== "undefined" && "__TAURI__" in window}
+                  autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
                 />
               </div>
               {(currentEvalCp != null || currentEvalMate != null) && (
