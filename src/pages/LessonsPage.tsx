@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Plus, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload } from "lucide-react";
 import {
   getAllLessons,
   createLesson,
@@ -26,6 +26,7 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
+import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 
 const emptyForm: LessonFormData = { title: "", description: "" };
 
@@ -159,6 +160,7 @@ export default function LessonsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [deletingLesson, setDeletingLesson] = useState<Lesson | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const loadLessons = useCallback(async () => {
     setLessons(await getAllLessons());
@@ -169,7 +171,7 @@ export default function LessonsPage() {
   }, [loadLessons]);
 
   const handleCreate = async (data: LessonFormData) => {
-    const id = await createLesson(data);
+    const id = await createLesson(data, "study");
     await loadLessons();
     navigate(`/lesson/${id}`);
   };
@@ -188,19 +190,50 @@ export default function LessonsPage() {
     setDeletingLesson(null);
   };
 
+  const handlePgnImported = (lessonId: number, _boardId: number) => {
+    navigate(`/lesson/${lessonId}`);
+  };
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Lezioni</h1>
-        <Button
+      </div>
+
+      {/* Azioni principali */}
+      <div className="grid grid-cols-2 gap-4 mb-8">
+        <Card
+          className="cursor-pointer hover:bg-accent/50 transition-colors border-2 border-dashed"
+          onClick={() => setImportOpen(true)}
+        >
+          <CardContent className="flex flex-col items-center gap-3 py-8">
+            <Upload className="size-10 text-primary" />
+            <div className="text-center">
+              <p className="font-semibold">Importa un PGN</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Carica una partita e analizzala
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:bg-accent/50 transition-colors border-2 border-dashed"
           onClick={() => {
             setEditingLesson(null);
             setDialogOpen(true);
           }}
         >
-          <Plus className="size-4" />
-          Nuova lezione
-        </Button>
+          <CardContent className="flex flex-col items-center gap-3 py-8">
+            <Plus className="size-10 text-primary" />
+            <div className="text-center">
+              <p className="font-semibold">Nuova lezione</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Crea una scacchiera vuota per studiare
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {lessons.length === 0 ? (
@@ -208,7 +241,7 @@ export default function LessonsPage() {
           <BookOpen className="size-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg">Nessuna lezione</p>
           <p className="text-sm mt-1">
-            Crea la tua prima lezione per iniziare.
+            Importa un PGN o crea una nuova lezione per iniziare.
           </p>
         </div>
       ) : (
@@ -290,6 +323,12 @@ export default function LessonsPage() {
         }}
         lessonTitle={deletingLesson?.title ?? ""}
         onConfirm={handleDelete}
+      />
+
+      <ImportPgnDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImportedLesson={handlePgnImported}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload, Loader2 } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson } from "@/services/lessonService";
 import {
   getBoardsByLesson,
@@ -42,6 +42,7 @@ import {
   moveClassification,
   type PositionEval,
 } from "@/services/analysisService";
+import { explainMove } from "@/services/explainService";
 
 /** Estrae la casa di destinazione dal SAN (e.g. "Nf3" → "f3", "O-O" → "g1" o "g8"). */
 function sanToSquare(san: string, byBlack: boolean): string | null {
@@ -77,6 +78,9 @@ export default function LessonDetailPage() {
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [llmAvailable, setLlmAvailable] = useState(false);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<{
     done: number;
@@ -186,6 +190,36 @@ export default function LessonDetailPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Verifica se l'LLM nativo è disponibile via Tauri.
+  useEffect(() => {
+    async function check() {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const status = await invoke<{ ready: boolean }>("llm_status");
+        setLlmAvailable(status.ready);
+      } catch {
+        setLlmAvailable(false);
+      }
+    }
+    check();
+  }, []);
+
+  // Auto-analisi Stockfish in modalità Analysis all'ingresso.
+  const autoAnalysisDoneRef = useRef(false);
+  useEffect(() => {
+    if (
+      lesson?.mode === "analysis" &&
+      selectedBoard &&
+      chess.moves.length > 0 &&
+      !autoAnalysisDoneRef.current &&
+      !analyzing
+    ) {
+      autoAnalysisDoneRef.current = true;
+      handleAnalyze();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson?.mode, selectedBoard?.id, chess.moves.length]);
 
   // Salvataggio note: blur immediato + debounce su digitazione.
   const saveNotes = useCallback(
@@ -449,12 +483,67 @@ export default function LessonDetailPage() {
         await updateMoveEval(move.id, fields);
         chess.replaceMove(i - 1, { ...move, ...fields });
       }
+
+      // Dopo l'analisi Stockfish, genera commenti AI se abilitato.
+      if (aiEnabled && llmAvailable) {
+        await generateAiCommentary(startFen, moveList, evals);
+      }
     } catch (e) {
       console.error("[analyze] errore", e);
     } finally {
       setAnalyzing(false);
       setAnalysisProgress(null);
       analysisSignalRef.current = null;
+    }
+  };
+
+  /** Genera commenti didattici con LLM per tutte le mosse analizzate. */
+  const generateAiCommentary = async (
+    startFen: string,
+    moveList: typeof chess.moves,
+    evals: PositionEval[]
+  ) => {
+    setAiLoading(true);
+    try {
+      for (let i = 0; i < moveList.length; i++) {
+        const move = moveList[i];
+        if (move.id == null) continue;
+        // Non rigenera se già ha un commento.
+        if (move.comment?.trim()) continue;
+
+        const playedBy: "w" | "b" = i % 2 === 0 ? "w" : "b";
+        const beforeFen = i === 0 ? startFen : moveList[i - 1]?.fen ?? startFen;
+        const beforeIdx = i;
+        const beforeEval = beforeIdx === 0
+          ? { cp: evals[0].scoreCp, mate: evals[0].scoreMate, depth: evals[0].depth, bestMoveUci: evals[0].bestMoveUci }
+          : { cp: evals[beforeIdx]?.scoreCp ?? null, mate: evals[beforeIdx]?.scoreMate ?? null, depth: evals[beforeIdx]?.depth ?? 0, bestMoveUci: evals[beforeIdx]?.bestMoveUci ?? null };
+        const afterEval = { cp: evals[i + 1].scoreCp, mate: evals[i + 1].scoreMate, depth: evals[i + 1].depth };
+
+        try {
+          const exp = await explainMove({
+            beforeFen,
+            afterFen: move.fen,
+            playedMoveSan: move.moveNotation,
+            playedBy,
+            whiteName: selectedBoard?.whiteName ?? null,
+            blackName: selectedBoard?.blackName ?? null,
+            beforeEval: {
+              cp: beforeEval.cp,
+              mate: beforeEval.mate,
+              depth: beforeEval.depth,
+              bestMoveUci: beforeEval.bestMoveUci,
+            },
+            afterEval,
+          });
+          const commentText = [exp.summary, ...exp.details].join("\n");
+          await updateMove(move.id, { comment: commentText });
+          chess.replaceMove(i, { ...move, comment: commentText });
+        } catch {
+          // spiegazione non critica: ignora errori
+        }
+      }
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -480,6 +569,20 @@ export default function LessonDetailPage() {
       ? (selectedBoard?.evalBestMoveUci ?? null)
       : (chess.currentMove?.evalBestMoveUci ?? null);
   const analysisArrow: BoardArrow[] = (() => {
+    // In modalità Analisi (historyIndex > 0): mostra la best move della
+    // posizione PRECEDENTE — cosa Stockfish suggeriva al giocatore che ha mosso.
+    // In modalità Studio o posizione iniziale: mostra la best move corrente.
+    if (lesson?.mode === "analysis" && chess.historyIndex > 0) {
+      const prevIdx = chess.historyIndex - 1;
+      const prevBest =
+        prevIdx === 0
+          ? (selectedBoard?.evalBestMoveUci ?? null)
+          : (chess.moves[prevIdx - 1]?.evalBestMoveUci ?? null);
+      if (!prevBest) return [];
+      const a = uciToArrow(prevBest);
+      return a ? [[a[0], a[1], "rgb(59,130,246)"]] : [];
+    }
+
     if (!currentBestMoveUci) return [];
     const a = uciToArrow(currentBestMoveUci);
     return a ? [[a[0], a[1], "rgb(59,130,246)"]] : [];
@@ -760,6 +863,12 @@ export default function LessonDetailPage() {
                   analysisProgress={analysisProgress}
                   canAnalyze={chess.moves.length > 0 || !!selectedBoard}
                   onCancelAnalysis={handleCancelAnalysis}
+                  lessonMode={lesson.mode}
+                  aiEnabled={aiEnabled}
+                  onAiToggle={() => setAiEnabled((prev) => !prev)}
+                  aiLoading={aiLoading}
+                  llmAvailable={llmAvailable}
+                  isTauri={typeof window !== "undefined" && "__TAURI__" in window}
                 />
               </div>
               {(currentEvalCp != null || currentEvalMate != null) && (
@@ -1017,6 +1126,19 @@ export default function LessonDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Loader AI full-page */}
+      {aiLoading && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4 p-8 rounded-lg bg-card shadow-lg border">
+            <Loader2 className="size-10 animate-spin text-primary" />
+            <p className="text-lg font-medium">L&apos;AI sta analizzando la partita...</p>
+            <p className="text-sm text-muted-foreground">
+              Generazione commenti didattici in corso
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { Chessboard } from "react-chessboard";
 import type { Square, CustomSquareProps } from "react-chessboard/dist/chessboard/types";
 import type { Arrow } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
-import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain } from "lucide-react";
+import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain, Sparkles, Loader2 } from "lucide-react";
 import type { BoardArrow } from "@/types";
 
 type BoardMode = "move" | "arrow" | "highlight";
@@ -30,6 +30,14 @@ interface ChessBoardViewProps {
   analysisProgress?: { done: number; total: number } | null;
   canAnalyze?: boolean;
   onCancelAnalysis?: () => void;
+  /** Modalità lezione (per decidere quali controlli mostrare). */
+  lessonMode?: "study" | "analysis";
+  /** Toggle AI (LLM) — solo in modalità analysis. */
+  aiEnabled?: boolean;
+  onAiToggle?: () => void;
+  aiLoading?: boolean;
+  llmAvailable?: boolean;
+  isTauri?: boolean;
   /** Casa di destinazione dell'ultima mossa, per badge di classificazione. */
   lastMoveSquare?: Square | null;
   /** Badge di classificazione (??, ?, ?!) da mostrare sul pezzo mosso. */
@@ -62,6 +70,12 @@ export default function ChessBoardView({
   analysisProgress = null,
   canAnalyze = false,
   onCancelAnalysis,
+  lessonMode,
+  aiEnabled = false,
+  onAiToggle,
+  aiLoading = false,
+  llmAvailable = false,
+  isTauri = false,
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
 
@@ -206,6 +220,31 @@ export default function ChessBoardView({
         >
           <Brain className="size-4" />
         </Button>
+
+        {lessonMode === "analysis" && llmAvailable && isTauri && (
+          <>
+            <div className="w-px h-6 bg-border mx-1" />
+            <Button
+              variant={aiEnabled ? "default" : "ghost"}
+              size="icon-xs"
+              disabled={aiLoading || analyzing}
+              onClick={onAiToggle}
+              title={
+                aiLoading
+                  ? "L'AI sta generando commenti..."
+                  : aiEnabled
+                    ? "Disattiva commenti AI"
+                    : "Attiva commenti AI"
+              }
+            >
+              {aiLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+            </Button>
+          </>
+        )}
 
         <Button
           variant="ghost"

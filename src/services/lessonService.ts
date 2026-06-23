@@ -9,9 +9,13 @@ export async function getLesson(id: number): Promise<Lesson | undefined> {
   return db.lessons.get(id);
 }
 
-export async function createLesson(data: LessonFormData): Promise<number> {
+export async function createLesson(
+  data: LessonFormData,
+  mode: Lesson["mode"] = "study"
+): Promise<number> {
   const id = await db.lessons.add({
     ...data,
+    mode,
     createdAt: new Date(),
   } as Lesson);
   return id as number;

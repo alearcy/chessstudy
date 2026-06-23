@@ -11,13 +11,19 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { parsePgn, importPgnToLesson } from "@/services/pgnService";
+import { parsePgn, importPgnToLesson, importPgnAsLesson } from "@/services/pgnService";
 
 interface ImportPgnDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  lessonId: number;
-  onImported: (boardId: number) => void;
+  /** ID lezione esistente (sidebar scacchiera). */
+  lessonId?: number;
+  /** Modalità lezione da creare (solo se lessonId non fornito). */
+  mode?: "study" | "analysis";
+  /** Callback dopo import con lessonId (sidebar). */
+  onImported?: (boardId: number) => void;
+  /** Callback dopo import da home page: crea lezione + board. */
+  onImportedLesson?: (lessonId: number, boardId: number) => void;
 }
 
 export default function ImportPgnDialog({
@@ -25,6 +31,7 @@ export default function ImportPgnDialog({
   onOpenChange,
   lessonId,
   onImported,
+  onImportedLesson,
 }: ImportPgnDialogProps) {
   const [pgnText, setPgnText] = useState("");
   const [importing, setImporting] = useState(false);
@@ -61,9 +68,15 @@ export default function ImportPgnDialog({
     setImporting(true);
     setImportError(null);
     try {
-      const boardId = await importPgnToLesson(lessonId, pgnText);
-      onImported(boardId);
-      // Reset e chiudi.
+      if (lessonId != null) {
+        // Flusso sidebar: importa in lezione esistente.
+        const boardId = await importPgnToLesson(lessonId, pgnText);
+        onImported?.(boardId);
+      } else {
+        // Flusso home page: crea lezione + board in un colpo solo.
+        const { lessonId: newLessonId, boardId } = await importPgnAsLesson(pgnText);
+        onImportedLesson?.(newLessonId, boardId);
+      }
       setPgnText("");
       setImporting(false);
       onOpenChange(false);

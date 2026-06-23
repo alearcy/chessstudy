@@ -2,6 +2,7 @@ export interface Lesson {
   id?: number;
   title: string;
   description: string;
+  mode: "study" | "analysis";
   createdAt: Date;
 }
 
@@ -37,6 +38,10 @@ export interface Board {
   evalMate?: number | null;
   evalDepth?: number;
   evalBestMoveUci?: string | null;
+  /** Nome del giocatore Bianco (da header PGN [White]); null se assente. */
+  whiteName?: string | null;
+  /** Nome del giocatore Nero (da header PGN [Black]); null se assente. */
+  blackName?: string | null;
 }
 
 export interface Move {
@@ -60,3 +65,71 @@ export interface Move {
 }
 
 export type LessonFormData = Pick<Lesson, "title" | "description">;
+
+// ============================================================================
+// explainService types (FEAT-005)
+// ============================================================================
+
+export interface TacticalPattern {
+  type:
+    | "fork"
+    | "pin_absolute"
+    | "pin_relative"
+    | "skewer"
+    | "discovered_attack"
+    | "double_check"
+    | "mate_threat"
+    | "hanging_piece"
+    | "trapped_piece";
+  /** Pezzo che esegue il pattern (es. "♞") */
+  actor: string;
+  /** Pezzo(i) che subiscono il pattern */
+  victims: string[];
+  /** Case coinvolte */
+  squares: string[];
+  /** Descrizione breve in italiano */
+  description: string;
+}
+
+export type Severity = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+
+export interface MoveExplanationInput {
+  /** FEN della posizione PRIMA della mossa (dove valuta Stockfish). */
+  beforeFen: string;
+  /** FEN della posizione DOPO la mossa. */
+  afterFen: string;
+  /** Mossa giocata in notazione SAN (es. "Nf6"). */
+  playedMoveSan: string;
+  /** Chi ha giocato la mossa. */
+  playedBy: "w" | "b";
+  /** Nome del giocatore Bianco (da PGN), o null se sconosciuto. */
+  whiteName?: string | null;
+  /** Nome del giocatore Nero (da PGN), o null se sconosciuto. */
+  blackName?: string | null;
+  /** Eval della posizione PRIMA della mossa (POV Bianco). */
+  beforeEval: {
+    cp: number | null;
+    mate: number | null;
+    depth: number;
+    bestMoveUci: string | null;
+  };
+  /** Eval della posizione DOPO la mossa (POV Bianco). */
+  afterEval: {
+    cp: number | null;
+    mate: number | null;
+    depth: number;
+  };
+}
+
+export interface MoveExplanation {
+  /** Frase riassuntiva (1-2 righe). */
+  summary: string;
+  /** Dettagli a punti elenco. */
+  details: string[];
+  /** Severità della mossa. */
+  severity: Severity;
+  /** Pattern tattici rilevati nella posizione DOPO la mossa. */
+  tactics: TacticalPattern[];
+  /** Perché Stockfish preferisce la best move (null se è la stessa mossa). */
+  stockfishExplains: string | null;
+}

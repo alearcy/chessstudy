@@ -28,4 +28,24 @@ db.version(3).stores({
   moves: "++id, boardId, parentId, order, createdAt",
 });
 
+// v4: aggiunta campi whiteName/blackName su Board (nomi giocatori da header PGN).
+// Campi NON indicizzati → store invariato; bump di versione a documentazione.
+db.version(4).stores({
+  lessons: "++id, title, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+});
+
+// v5: aggiunto campo mode su Lesson ("study" | "analysis").
+// Lezioni esistenti → "study" di default.
+db.version(5).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+}).upgrade((tx) => {
+  return tx.table("lessons").toCollection().modify((lesson) => {
+    if (!lesson.mode) lesson.mode = "study";
+  });
+});
+
 export default db;

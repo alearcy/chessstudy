@@ -1,6 +1,7 @@
 import { Chess, DEFAULT_POSITION } from "chess.js";
 import db from "@/db/database";
 import { createBoardWithFen } from "@/services/boardService";
+import { createLesson } from "@/services/lessonService";
 import type { Move } from "@/types";
 
 export interface ParsedPgnMove {
@@ -20,6 +21,10 @@ export interface ParsedPgn {
   title: string;
   /** Riepilogo metadati PGN per le note della scacchiera. */
   notes: string;
+  /** Nome del giocatore Bianco (header [White], senza Elo); null se assente. */
+  whiteName: string | null;
+  /** Nome del giocatore Nero (header [Black], senza Elo); null se assente. */
+  blackName: string | null;
 }
 
 const MAX_TITLE_LEN = 60;
@@ -110,6 +115,8 @@ export function parsePgn(pgn: string): ParsedPgn {
     moves,
     title: deriveTitle(headers),
     notes: buildNotes(headers),
+    whiteName: clean(headers.White),
+    blackName: clean(headers.Black),
   };
 }
 
@@ -132,6 +139,8 @@ export async function importPgnToLesson(
       title: parsed.title,
       fen: parsed.startFen,
       notes: parsed.notes,
+      whiteName: parsed.whiteName,
+      blackName: parsed.blackName,
     });
   }
 
@@ -139,6 +148,8 @@ export async function importPgnToLesson(
     title: parsed.title,
     fen: parsed.startFen,
     notes: parsed.notes,
+    whiteName: parsed.whiteName,
+    blackName: parsed.blackName,
   });
 
   // Costruisce i record Move con parentId placeholder (aggiornato dopo bulkAdd).
@@ -163,4 +174,21 @@ export async function importPgnToLesson(
   }
 
   return boardId;
+}
+
+/**
+ * Crea una lezione in modalità "analysis" con una scacchiera popolata
+ * dal PGN. Usato dal flusso "Importa PGN" nella home page.
+ * Ritorna `{ lessonId, boardId }`.
+ */
+export async function importPgnAsLesson(
+  pgn: string
+): Promise<{ lessonId: number; boardId: number }> {
+  const parsed = parsePgn(pgn);
+  const lessonId = await createLesson(
+    { title: parsed.title, description: parsed.notes },
+    "analysis"
+  );
+  const boardId = await importPgnToLesson(lessonId, pgn);
+  return { lessonId, boardId };
 }
