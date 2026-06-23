@@ -221,26 +221,28 @@ export default function ChessBoardView({
           <Brain className="size-4" />
         </Button>
 
-        {lessonMode === "analysis" && llmAvailable && isTauri && (
+        {lessonMode === "analysis" && (
           <>
             <div className="w-px h-6 bg-border mx-1" />
             <Button
               variant={aiEnabled ? "default" : "ghost"}
               size="icon-xs"
-              disabled={aiLoading || analyzing}
+              disabled={!llmAvailable || !isTauri || aiLoading || analyzing}
               onClick={onAiToggle}
               title={
-                aiLoading
-                  ? "L'AI sta generando commenti..."
-                  : aiEnabled
-                    ? "Disattiva commenti AI"
-                    : "Attiva commenti AI"
+                !llmAvailable || !isTauri
+                  ? "AI non disponibile (modello LLM mancante o non in Tauri)"
+                  : aiLoading
+                    ? "L'AI sta generando commenti..."
+                    : aiEnabled
+                      ? "Disattiva commenti AI"
+                      : "Attiva commenti AI"
               }
             >
               {aiLoading ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Sparkles className="size-4" />
+                <Sparkles className={`size-4 ${(!llmAvailable || !isTauri) ? "opacity-40" : ""}`} />
               )}
             </Button>
           </>
