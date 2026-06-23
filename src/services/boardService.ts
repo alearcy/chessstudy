@@ -15,6 +15,7 @@ function normalizeBoard(b: Board): Board {
     evalBestMoveUci: b.evalBestMoveUci ?? null,
     whiteName: b.whiteName ?? null,
     blackName: b.blackName ?? null,
+    headers: b.headers ?? {},
   };
 }
 
@@ -49,7 +50,7 @@ export async function createBoard(
 /** Crea una scacchiera con FEN di partenza custom (es. da import PGN). */
 export async function createBoardWithFen(
   lessonId: number,
-  data: { title: string; fen: string; notes?: string; whiteName?: string | null; blackName?: string | null }
+  data: { title: string; fen: string; notes?: string; whiteName?: string | null; blackName?: string | null; headers?: Record<string, string | null> }
 ): Promise<number> {
   const count = await db.boards.where("lessonId").equals(lessonId).count();
   const id = await db.boards.add({
@@ -63,13 +64,14 @@ export async function createBoardWithFen(
     createdAt: new Date(),
     whiteName: data.whiteName ?? null,
     blackName: data.blackName ?? null,
+    headers: data.headers ?? {},
   } as Board);
   return id as number;
 }
 
 export async function updateBoard(
   id: number,
-  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci" | "whiteName" | "blackName">>
+  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci" | "whiteName" | "blackName" | "headers">>
 ): Promise<void> {
   await db.boards.update(id, data);
 }

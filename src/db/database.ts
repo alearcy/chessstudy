@@ -48,4 +48,35 @@ db.version(5).stores({
   });
 });
 
+// v6: cambio semantica — ogni PGN importato è una lezione analysis autonoma
+// (nessun contenitore cumulativo). Le vecchie lezioni analysis (che
+// accumulavano più board) vengono eliminate con le relative board.
+// Demo-only: dati analysis precedenti non portati avanti.
+db.version(6).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+}).upgrade(async (tx) => {
+  const analysisLessonIds = await tx.table("lessons")
+    .where("mode").equals("analysis")
+    .primaryKeys();
+  if (analysisLessonIds.length === 0) return;
+  const boardIds = await tx.table("boards")
+    .where("lessonId").anyOf(analysisLessonIds)
+    .primaryKeys();
+  if (boardIds.length > 0) {
+    await tx.table("moves").where("boardId").anyOf(boardIds).delete();
+    await tx.table("boards").bulkDelete(boardIds);
+  }
+  await tx.table("lessons").bulkDelete(analysisLessonIds);
+});
+
+// v7: aggiunto campo `headers` su Board (header PGN strutturati come JSON).
+// Campo NON indicizzato → store invariato; bump di versione a documentazione.
+db.version(7).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+});
+
 export default db;

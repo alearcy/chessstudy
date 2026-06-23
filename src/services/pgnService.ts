@@ -138,18 +138,20 @@ export async function importPgnToLesson(
     return createBoardWithFen(lessonId, {
       title: parsed.title,
       fen: parsed.startFen,
-      notes: parsed.notes,
+      notes: "",
       whiteName: parsed.whiteName,
       blackName: parsed.blackName,
+      headers: parsed.headers,
     });
   }
 
   const boardId = await createBoardWithFen(lessonId, {
     title: parsed.title,
     fen: parsed.startFen,
-    notes: parsed.notes,
+    notes: "",
     whiteName: parsed.whiteName,
     blackName: parsed.blackName,
+    headers: parsed.headers,
   });
 
   // Costruisce i record Move con parentId placeholder (aggiornato dopo bulkAdd).
@@ -176,10 +178,11 @@ export async function importPgnToLesson(
   return boardId;
 }
 
-/** 
- * Crea una lezione in modalità "analysis" con una scacchiera popolata
- * dal PGN. Usato dal flusso "Importa PGN" nella home page.
- * La lezione conterrà una singola scacchiera con la partita importata.
+/**
+ * Crea una nuova lezione in modalità "analysis" con una singola scacchiera
+ * popolata dal PGN. Ogni import PGN dalla home page produce una lezione
+ * autonoma (nessun riuso di un contenitore "analisi" cumulativo).
+ * Il titolo è derivato dagli header PGN (White vs Black / fallback).
  * Ritorna `{ lessonId, boardId }`.
  */
 export async function importPgnAsLesson(
@@ -187,10 +190,9 @@ export async function importPgnAsLesson(
 ): Promise<{ lessonId: number; boardId: number }> {
   const parsed = parsePgn(pgn);
   const lessonId = await createLesson(
-    { title: "analisi", description: parsed.notes },
+    { title: parsed.title, description: "" },
     "analysis"
   );
-  // Crea solo una scacchiera con la partita importata nella lezione di analisi
   const boardId = await importPgnToLesson(lessonId, pgn);
   return { lessonId, boardId };
 }

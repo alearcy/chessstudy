@@ -1,6 +1,11 @@
 # TASKS
 
+## In Progress
+
 ## Completed
+
+- [x] Import PGN: ogni PGN diventa lezione analysis autonoma (non più contenitore cumulativo)
+  - Spec: `docs/specs/pgn-import-per-lesson.md`
 
 - [x] FEAT-006 Refactor home page + modalità Analisi vs Studio
   - Spec: `docs/specs/refactor-home-analysis.md`
@@ -29,3 +34,5 @@
   - Spec: `docs/specs/TAURI-002-native-stockfish.md`
 - [x] TAURI-003 Integrare LLM locale per commenti didattici
   - Spec: `docs/specs/TAURI-003-local-llm.md`
+
+## Todo

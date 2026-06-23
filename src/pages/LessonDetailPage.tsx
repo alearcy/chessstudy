@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload, Loader2 } from "lucide-react";
-import { getLesson, updateLesson, deleteLesson } from "@/services/lessonService";
+import { getLesson, updateLesson, deleteLesson, convertAnalysisToStudy } from "@/services/lessonService";
 import {
   getBoard,
   getBoardsByLesson,
@@ -34,6 +34,7 @@ import { useChessBoard } from "@/hooks/useChessBoard";
 import ChessBoardView from "@/components/board/ChessBoard";
 import MoveNotation from "@/components/board/MoveNotation";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
+import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
 import {
   analyzePositions,
   uciToArrow,
@@ -817,6 +818,20 @@ export default function LessonDetailPage() {
     setEditBoardOpen(false);
   };
 
+  const [converting, setConverting] = useState(false);
+
+  const handleConvertToStudy = useCallback(async () => {
+    if (!lesson || !selectedBoard?.id) return;
+    setConverting(true);
+    try {
+      const moves = await getMovesByBoard(selectedBoard.id);
+      const newLessonId = await convertAnalysisToStudy(lesson, selectedBoard, moves);
+      navigate(`/lesson/${newLessonId}`);
+    } finally {
+      setConverting(false);
+    }
+  }, [lesson, selectedBoard, navigate]);
+
   const handleDeleteBoardClick = (boardId: number, e: React.MouseEvent) => {
     e.stopPropagation();
     setDeleteBoardId(boardId);
@@ -902,7 +917,7 @@ export default function LessonDetailPage() {
               <Trash2 className="size-4" />
             </Button>
           </div>
-          {lesson.description && (
+          {lesson.description && lesson.mode !== "analysis" && (
             <p className="text-muted-foreground mt-1 text-sm">
               {lesson.description}
             </p>
@@ -911,28 +926,30 @@ export default function LessonDetailPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-        {/* Colonna sinistra: sidebar scacchiere */}
+        {/* Colonna sinistra: sidebar scacchiere (study) o dettagli PGN (analysis) */}
+        {lesson.mode === "analysis" && selectedBoard && (
+          <PgnHeadersSidebar headers={selectedBoard.headers ?? {}} />
+        )}
+        {lesson.mode === "study" && (
         <aside className="w-full lg:w-56 shrink-0">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold">Scacchiere</h2>
             <div className="flex items-center gap-0.5">
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                onClick={() => setImportOpen(true)}
-                title="Importa PGN"
-              >
-                <Upload className="size-4" />
-              </Button>
-              {lesson.mode === "study" && (
-                <Button
-                  size="icon-xs"
-                  onClick={handleCreateBoard}
-                  title="Nuova scacchiera"
-                >
-                  <Plus className="size-4" />
-                </Button>
-              )}
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    onClick={() => setImportOpen(true)}
+                    title="Importa PGN"
+                  >
+                    <Upload className="size-4" />
+                  </Button>
+                  <Button
+                    size="icon-xs"
+                    onClick={handleCreateBoard}
+                    title="Nuova scacchiera"
+                  >
+                    <Plus className="size-4" />
+                  </Button>
             </div>
           </div>
           {boards.length === 0 ? (
@@ -989,6 +1006,7 @@ export default function LessonDetailPage() {
             </ul>
           )}
         </aside>
+        )}
 
         {/* Centro: scacchiera + note */}
         <section className="flex-1 min-w-0 flex flex-col gap-4 items-center">
@@ -1025,6 +1043,8 @@ export default function LessonDetailPage() {
                   llmAvailable={llmAvailable}
                   isTauri={typeof window !== "undefined" && "__TAURI__" in window}
                   autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
+                  onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
+                  converting={converting}
                 />
               </div>
               {(currentEvalCp != null || currentEvalMate != null) && (
@@ -1036,64 +1056,86 @@ export default function LessonDetailPage() {
                 </div>
               )}
               <div className="w-full max-w-[480px] flex flex-col gap-1.5">
-                <div className="flex gap-1 p-1 bg-muted rounded-lg" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={noteTab === "board"}
-                    onClick={() => setNoteTab("board")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      noteTab === "board"
-                        ? "bg-background shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
+                {lesson.mode === "analysis" ? (
+                  <div
+                    className="w-full min-h-[96px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap"
                   >
-                    <NotebookPen className="size-4" />
-                    Note scacchiera
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={noteTab === "move"}
-                    disabled={!chess.currentMove}
-                    onClick={() => setNoteTab("move")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      noteTab === "move"
-                        ? "bg-background shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    } ${!chess.currentMove ? "opacity-40 cursor-not-allowed" : ""}`}
-                    title={
-                      chess.currentMove
-                        ? "Spiegazione della mossa corrente"
-                        : "Seleziona una mossa per aggiungere una spiegazione"
-                    }
-                  >
-                    <NotebookPen className="size-4" />
-                    {chess.currentMove
-                      ? `Nota mossa ${chess.historyIndex}. ${chess.currentMove.moveNotation}`
-                      : "Nota mossa"}
-                  </button>
-                </div>
-
-                {noteTab === "board" ? (
-                  <Textarea
-                    id="board-notes"
-                    value={notesDraft}
-                    onChange={handleNotesChange}
-                    onBlur={handleNotesBlur}
-                    placeholder="Note libere per questa scacchiera..."
-                    rows={6}
-                    className="resize-y"
-                  />
+                    {chess.currentMove ? (
+                      moveCommentDraft.trim() ? (
+                        moveCommentDraft
+                      ) : (
+                        <span className="text-muted-foreground italic">
+                          Nessun commento generato per la mossa {chess.historyIndex}. {chess.currentMove.moveNotation}. Attiva l'AI per generare i commenti.
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-muted-foreground italic">
+                        Seleziona una mossa per leggere il commento.
+                      </span>
+                    )}
+                  </div>
                 ) : (
-                  <Textarea
-                    value={moveCommentDraft}
-                    onChange={handleMoveCommentChange}
-                    onBlur={handleMoveCommentBlur}
-                    placeholder={`Spiegazione della mossa ${chess.historyIndex}. ${chess.currentMove?.moveNotation ?? ""}...`}
-                    rows={6}
-                    className="resize-y"
-                  />
+                  <>
+                    <div className="flex gap-1 p-1 bg-muted rounded-lg" role="tablist">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={noteTab === "board"}
+                        onClick={() => setNoteTab("board")}
+                        className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                          noteTab === "board"
+                            ? "bg-background shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <NotebookPen className="size-4" />
+                        Note scacchiera
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={noteTab === "move"}
+                        disabled={!chess.currentMove}
+                        onClick={() => setNoteTab("move")}
+                        className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                          noteTab === "move"
+                            ? "bg-background shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        } ${!chess.currentMove ? "opacity-40 cursor-not-allowed" : ""}`}
+                        title={
+                          chess.currentMove
+                            ? "Spiegazione della mossa corrente"
+                            : "Seleziona una mossa per aggiungere una spiegazione"
+                        }
+                      >
+                        <NotebookPen className="size-4" />
+                        {chess.currentMove
+                          ? `Nota mossa ${chess.historyIndex}. ${chess.currentMove.moveNotation}`
+                          : "Nota mossa"}
+                      </button>
+                    </div>
+
+                    {noteTab === "board" ? (
+                      <Textarea
+                        id="board-notes"
+                        value={notesDraft}
+                        onChange={handleNotesChange}
+                        onBlur={handleNotesBlur}
+                        placeholder="Note libere per questa scacchiera..."
+                        rows={6}
+                        className="resize-y"
+                      />
+                    ) : (
+                      <Textarea
+                        value={moveCommentDraft}
+                        onChange={handleMoveCommentChange}
+                        onBlur={handleMoveCommentBlur}
+                        placeholder={`Spiegazione della mossa ${chess.historyIndex}. ${chess.currentMove?.moveNotation ?? ""}...`}
+                        rows={6}
+                        className="resize-y"
+                      />
+                    )}
+                  </>
                 )}
               </div>
             </>

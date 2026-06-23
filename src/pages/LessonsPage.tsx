@@ -190,17 +190,9 @@ export default function LessonsPage() {
     setDeletingLesson(null);
   };
 
-  const handlePgnImported = async (lessonId: number, _boardId: number) => {
-    // Dopo l'import PGN, verifico se esiste già una lezione di analisi
-    // e mi sposto su quella, altrimenti mi sposto sulla nuova lezione creata
-    const lessons = await getAllLessons();
-    const analysisLesson = lessons.find(l => l.mode === "analysis");
-    
-    if (analysisLesson) {
-      navigate(`/lesson/${analysisLesson.id}`);
-    } else {
-      navigate(`/lesson/${lessonId}`);
-    }
+  const handlePgnImported = (lessonId: number, _boardId: number) => {
+    // Ogni PGN è ora una lezione analysis autonoma: naviga direttamente.
+    navigate(`/lesson/${lessonId}`);
   };
 
   return (
@@ -338,7 +330,6 @@ export default function LessonsPage() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onImportedLesson={handlePgnImported}
-        mode="analysis"
       />
     </div>
   );
