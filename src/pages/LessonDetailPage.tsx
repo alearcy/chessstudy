@@ -206,6 +206,7 @@ export default function LessonDetailPage() {
   }, []);
 
   // Auto-analisi Stockfish in modalità Analysis all'ingresso.
+  // Salta se tutte le posizioni hanno già eval persistito.
   const autoAnalysisDoneRef = useRef(false);
   useEffect(() => {
     if (
@@ -215,8 +216,16 @@ export default function LessonDetailPage() {
       !autoAnalysisDoneRef.current &&
       !analyzing
     ) {
-      autoAnalysisDoneRef.current = true;
-      handleAnalyze();
+      // Controlla se l'analisi è già stata fatta (eval presente su board e mosse).
+      const boardHasEval =
+        selectedBoard.evalCp != null || selectedBoard.evalMate != null;
+      const allMovesHaveEval = chess.moves.every(
+        (m) => m.evalCp != null || m.evalMate != null
+      );
+      if (!boardHasEval || !allMovesHaveEval) {
+        autoAnalysisDoneRef.current = true;
+        handleAnalyze();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson?.mode, selectedBoard?.id, chess.moves.length]);
@@ -483,11 +492,6 @@ export default function LessonDetailPage() {
         await updateMoveEval(move.id, fields);
         chess.replaceMove(i - 1, { ...move, ...fields });
       }
-
-      // Dopo l'analisi Stockfish, genera commenti AI se abilitato.
-      if (aiEnabled && llmAvailable) {
-        await generateAiCommentary(startFen, moveList, evals);
-      }
     } catch (e) {
       console.error("[analyze] errore", e);
     } finally {
@@ -497,18 +501,39 @@ export default function LessonDetailPage() {
     }
   };
 
-  /** Genera commenti didattici con LLM per tutte le mosse analizzate. */
-  const generateAiCommentary = async (
-    startFen: string,
-    moveList: typeof chess.moves,
-    evals: PositionEval[]
-  ) => {
+  /** Attiva/disattiva l'AI: quando attivata, genera commenti per tutte le mosse. */
+  const handleAiToggle = async () => {
+    if (!selectedBoard || aiLoading) return;
+    if (aiEnabled) {
+      setAiEnabled(false);
+      return;
+    }
+    setAiEnabled(true);
     setAiLoading(true);
     try {
+      const startFen = selectedBoard.fen;
+      const moveList = chess.moves;
+
+      // Costruisce evals dagli eval già persistiti su board/mosse.
+      const evals: { scoreCp: number | null; scoreMate: number | null; depth: number; bestMoveUci: string | null }[] = [
+        {
+          scoreCp: selectedBoard.evalCp ?? null,
+          scoreMate: selectedBoard.evalMate ?? null,
+          depth: selectedBoard.evalDepth ?? 0,
+          bestMoveUci: selectedBoard.evalBestMoveUci ?? null,
+        },
+        ...moveList.map((m) => ({
+          scoreCp: m.evalCp ?? null,
+          scoreMate: m.evalMate ?? null,
+          depth: m.evalDepth ?? 0,
+          bestMoveUci: m.evalBestMoveUci ?? null,
+        })),
+      ];
+
       for (let i = 0; i < moveList.length; i++) {
         const move = moveList[i];
         if (move.id == null) continue;
-        // Non rigenera se già ha un commento.
+        // Salta se già ha un commento (non vuoto e non generato dal rule-based).
         if (move.comment?.trim()) continue;
 
         const playedBy: "w" | "b" = i % 2 === 0 ? "w" : "b";
@@ -542,6 +567,8 @@ export default function LessonDetailPage() {
           // spiegazione non critica: ignora errori
         }
       }
+    } catch (e) {
+      console.error("[ai] errore", e);
     } finally {
       setAiLoading(false);
     }
@@ -865,7 +892,7 @@ export default function LessonDetailPage() {
                   onCancelAnalysis={handleCancelAnalysis}
                   lessonMode={lesson.mode}
                   aiEnabled={aiEnabled}
-                  onAiToggle={() => setAiEnabled((prev) => !prev)}
+                  onAiToggle={handleAiToggle}
                   aiLoading={aiLoading}
                   llmAvailable={llmAvailable}
                   isTauri={typeof window !== "undefined" && "__TAURI__" in window}
