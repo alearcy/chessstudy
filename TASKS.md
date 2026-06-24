@@ -2,7 +2,13 @@
 
 ## In Progress
 
+Board flip: inverti posizione bianchi/neri su ogni scacchiera
+
 ## Completed
+
+- [x] OpenRouter LLM (sostituzione llama.cpp/Gemma)
+  - Spec: `docs/specs/openrouter-llm.md`
+  - ADR: `docs/adr/0003-openrouter-llm.md`
 
 - [x] Import PGN: ogni PGN diventa lezione analysis autonoma (non più contenitore cumulativo)
   - Spec: `docs/specs/pgn-import-per-lesson.md`
@@ -36,3 +42,7 @@
   - Spec: `docs/specs/TAURI-003-local-llm.md`
 
 ## Todo
+- [ ] Permetti a qualsiasi scacchiera, sia di analisi che di studio, di poter invertire la posizione dei bianchi e dei neri.
+- [ ] Ora ci sono solo badge per alcune classificazioni di stockfish. Vorrei che ci fossero sempre usando la notazione che si usa anche su chess.com Geniale (!!), Grande (!), Migliore (stella), Ottima (pollice in su), Buona (spunta di check), Mossa interessante/rischiosa (!?). Vanno aggiunte a quelle già esistenti.
+- [ ] Se l'AI è stata configurata nei settings, scrivi nella descrizione sotto il titolo nella scacchiera di analisi un breve riassunto di 50 parole o meno che descriva la partita.
+

@@ -17,11 +17,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
-[features]
-default = ["metal"]
-cuda = ["llama-cpp-2/cuda"]
-metal = ["llama-cpp-2/metal"]
-
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -30,4 +25,4 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tokio = { version = "1", features = ["process", "io-util", "sync", "time", "fs"] }
 anyhow = "1"
-llama-cpp-2 = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

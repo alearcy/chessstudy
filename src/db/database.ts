@@ -79,4 +79,12 @@ db.version(7).stores({
   moves: "++id, boardId, parentId, order, createdAt",
 });
 
+// v8: aggiunto campo gameAnalysis su Board (analisi partita AI).
+// Campo NON indicizzato → store invariato; bump di versione a documentazione.
+db.version(8).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+});
+
 export default db;

@@ -34,12 +34,9 @@ interface ChessBoardViewProps {
   autoAnalysis?: boolean;
   /** Modalità lezione (per decidere quali controlli mostrare). */
   lessonMode?: "study" | "analysis";
-  /** Toggle AI (LLM) — solo in modalità analysis. */
-  aiEnabled?: boolean;
-  onAiToggle?: () => void;
-  aiLoading?: boolean;
-  llmAvailable?: boolean;
-  isTauri?: boolean;
+  /** Analisi partita con AI (game-level, una sola chiamata). */
+  onGameAnalysis?: () => void;
+  gameAnalysisLoading?: boolean;
   /** Casa di destinazione dell'ultima mossa, per badge di classificazione. */
   lastMoveSquare?: Square | null;
   /** Badge di classificazione (??, ?, ?!) da mostrare sul pezzo mosso. */
@@ -77,11 +74,8 @@ export default function ChessBoardView({
   onCancelAnalysis,
   autoAnalysis: _autoAnalysis = false, // prop mantenuto per compatibilità
   lessonMode,
-  aiEnabled = false,
-  onAiToggle,
-  aiLoading = false,
-  llmAvailable = false,
-  isTauri = false,
+  onGameAnalysis,
+  gameAnalysisLoading = false,
   onConvertToStudy,
   converting = false,
 }: ChessBoardViewProps) {
@@ -234,27 +228,22 @@ export default function ChessBoardView({
           <>
             <div className="w-px h-6 bg-border mx-1" />
             <Button
-              variant={aiEnabled ? "default" : "ghost"}
-              size="icon-xs"
-              disabled={aiLoading || analyzing}
-              onClick={onAiToggle}
+              variant="ghost"
+              size="sm"
+              disabled={gameAnalysisLoading || analyzing}
+              onClick={onGameAnalysis}
               title={
-                analyzing
-                  ? "Analisi Stockfish in corso..."
-                  : aiLoading
-                    ? "L'AI sta generando commenti..."
-                    : aiEnabled
-                      ? "Disattiva commenti AI"
-                      : llmAvailable && isTauri
-                        ? "Attiva commenti AI (LLM nativo)"
-                        : "Attiva commenti AI (analisi rule-based)"
+                gameAnalysisLoading
+                  ? "L'AI sta analizzando la partita..."
+                  : "Analizza la partita con l'AI"
               }
             >
-              {aiLoading ? (
+              {gameAnalysisLoading ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Sparkles className="size-4" />
               )}
+              <span className="hidden sm:inline ml-1">Analisi partita</span>
             </Button>
             <Button
               variant="ghost"
