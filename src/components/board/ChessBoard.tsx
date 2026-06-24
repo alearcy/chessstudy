@@ -3,7 +3,7 @@ import { Chessboard } from "react-chessboard";
 import type { Square, CustomSquareProps } from "react-chessboard/dist/chessboard/types";
 import type { Arrow } from "react-chessboard/dist/chessboard/types";
 import { Button } from "@/components/ui/button";
-import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain, Sparkles, Loader2, GraduationCap } from "lucide-react";
+import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain, Sparkles, Loader2, GraduationCap, ArrowUpDown } from "lucide-react";
 import type { BoardArrow } from "@/types";
 
 type BoardMode = "move" | "arrow" | "highlight";
@@ -44,6 +44,10 @@ interface ChessBoardViewProps {
   /** Converte la scacchiera di analisi in una nuova lezione di studio. */
   onConvertToStudy?: () => void;
   converting?: boolean;
+  /** Orientamento scacchiera: "white" = bianco sotto. */
+  boardOrientation?: "white" | "black";
+  /** Callback per toggle orientamento scacchiera. */
+  onFlip?: () => void;
 }
 
 const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
@@ -78,6 +82,8 @@ export default function ChessBoardView({
   gameAnalysisLoading = false,
   onConvertToStudy,
   converting = false,
+  boardOrientation = "white",
+  onFlip,
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
 
@@ -273,6 +279,14 @@ export default function ChessBoardView({
         <Button
           variant="ghost"
           size="icon-xs"
+          onClick={onFlip}
+          title="Inverti orientamento scacchiera"
+        >
+          <ArrowUpDown className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
           disabled={!canUndo}
           onClick={onUndo}
           title="Annulla mossa"
@@ -326,6 +340,7 @@ export default function ChessBoardView({
           id="lesson-chessboard"
           position={fen}
           boardWidth={boardWidth}
+          boardOrientation={boardOrientation}
           arePiecesDraggable={mode === "move"}
           areArrowsAllowed={mode === "arrow"}
           customArrows={controlledArrows}

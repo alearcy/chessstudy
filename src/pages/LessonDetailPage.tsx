@@ -931,6 +931,9 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
   };
 
   const [converting, setConverting] = useState(false);
+  const [flipped, setFlipped] = useState(false);
+
+  const handleFlip = useCallback(() => setFlipped((f) => !f), []);
 
   const handleConvertToStudy = useCallback(async () => {
     if (!lesson || !selectedBoard?.id) return;
@@ -1161,6 +1164,8 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                   autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
                   onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
                   converting={converting}
+                  boardOrientation={flipped ? "black" : "white"}
+                  onFlip={handleFlip}
                 />
               </div>
               {(currentEvalCp != null || currentEvalMate != null) && (
