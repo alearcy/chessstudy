@@ -74,12 +74,12 @@ function evalToScore(cp: number | null, mate: number | null): number {
   return 0;
 }
 
-function classifySeverity(cpLoss: number | null): Severity {
+function classifySeverity(cpLoss: number | null, isBestMove?: boolean): Severity {
   if (cpLoss == null) return "good";
-  if (cpLoss <= 10) return "best";
-  if (cpLoss <= 50) return "good";
-  if (cpLoss <= 100) return "inaccuracy";
-  if (cpLoss <= 200) return "mistake";
+  if (isBestMove) return "best";
+  if (cpLoss < 50) return "good";
+  if (cpLoss < 100) return "inaccuracy";
+  if (cpLoss < 300) return "mistake";
   return "blunder";
 }
 
@@ -381,13 +381,20 @@ function uciToSan(fen: string, uci: string): string {
   }
 }
 
+function checkIsBestMove(fenBefore: string, bestUci: string | null, playedSan: string): boolean {
+  if (!bestUci) return false;
+  const bestSan = uciToSan(fenBefore, bestUci);
+  const clean = (s: string) => s.replace(/[+#]$/, "");
+  return clean(bestSan) === clean(playedSan);
+}
+
 function severityLabel(s: Severity): string {
   const map: Record<Severity, string> = {
     best: "Mossa eccellente",
     good: "Buona mossa",
     inaccuracy: "Imprecisione",
     mistake: "Errore",
-    blunder: "Pessata!",
+    blunder: "Errore grave!",
   };
   return map[s];
 }
@@ -396,9 +403,9 @@ function severityEmoji(s: Severity): string {
   const map: Record<Severity, string> = {
     best: "⭐",
     good: "✅",
-    inaccuracy: "⚠️",
-    mistake: "❌",
-    blunder: "💀",
+    inaccuracy: "?!",
+    mistake: "?",
+    blunder: "??",
   };
   return map[s];
 }
@@ -488,7 +495,8 @@ export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanati
   const player = playerLabel(playedBy, input.whiteName, input.blackName);
 
   const cpLoss = calcCpLoss(playedBy, beforeEval.cp, beforeEval.mate, afterEval.cp, afterEval.mate);
-  const severity = classifySeverity(cpLoss);
+  const isBestMove = checkIsBestMove(beforeFen, beforeEval.bestMoveUci, playedMoveSan);
+  const severity = classifySeverity(cpLoss, isBestMove);
   const tactics = detectTactics(input.afterFen);
 
   let stockfishExplains: string | null = null;

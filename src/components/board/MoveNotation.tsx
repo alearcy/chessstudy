@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, ReactNode } from "react";
 import { Eye, EyeOff, MessageSquare } from "lucide-react";
+import { Chess } from "chess.js";
 import type { Move } from "@/types";
 import { formatEval, evalScore, moveClassification } from "@/services/analysisService";
 
@@ -7,9 +8,10 @@ interface MoveNotationProps {
   moves: Move[];
   currentMoveIndex: number;
   onGoToMove: (index: number) => void;
-  /** Eval della posizione di partenza (Board), per classificare la prima mossa. */
   startEvalCp?: number | null;
   startEvalMate?: number | null;
+  startFen?: string;
+  startEvalBestMoveUci?: string | null;
 }
 
 const WHITE_PIECES: Record<string, string> = {
@@ -29,9 +31,8 @@ const BLACK_PIECES: Record<string, string> = {
 };
 
 function formatSan(san: string, isWhite: boolean, useIcons: boolean): ReactNode {
-  // If not using icons, return plain text
   if (!useIcons) return san;
-  
+
   const pieces = isWhite ? WHITE_PIECES : BLACK_PIECES;
   let result: ReactNode = san;
   const firstChar = san[0];
@@ -44,8 +45,7 @@ function formatSan(san: string, isWhite: boolean, useIcons: boolean): ReactNode 
       </>
     );
   }
-  
-  // Handle promotions like e8=Q
+
   if (san.includes("=")) {
     result = (
       <>
@@ -56,7 +56,7 @@ function formatSan(san: string, isWhite: boolean, useIcons: boolean): ReactNode 
       </>
     );
   }
-  
+
   return result;
 }
 
@@ -66,11 +66,12 @@ export default function MoveNotation({
   onGoToMove,
   startEvalCp = null,
   startEvalMate = null,
+  startFen,
+  startEvalBestMoveUci = null,
 }: MoveNotationProps) {
   const [useIcons, setUseIcons] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to the current move
   useEffect(() => {
     if (scrollRef.current) {
       const activeRow = scrollRef.current.querySelector(
@@ -90,19 +91,27 @@ export default function MoveNotation({
     );
   }
 
-  const pairs: { moveNumber: number; white: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null } | null; black: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null } | null }[] = [];
-
-  // eval prima della mossa i (POV Bianco): posizione di partenza per i=0,
-  // altrimenti eval della posizione dopo la mossa i-1.
-  const beforeScoreWhite = (i: number): number => {
-    if (i === 0) return evalScore(startEvalCp, startEvalMate);
-    return evalScore(moves[i - 1].evalCp ?? null, moves[i - 1].evalMate ?? null);
+  const isMoveBest = (moveIndex: number, fenBefore: string, bestUciBefore: string | null | undefined): boolean => {
+    if (!bestUciBefore) return false;
+    try {
+      const chess = new Chess(fenBefore);
+      const result = chess.move(bestUciBefore);
+      const cleanSan = (s: string) => s.replace(/[+#]$/, "");
+      return cleanSan(result.san) === cleanSan(moves[moveIndex].moveNotation);
+    } catch {
+      return false;
+    }
   };
+
+  const pairs: { moveNumber: number; white: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null; isBestMove: boolean } | null; black: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null; isBestMove: boolean } | null }[] = [];
 
   for (let i = 0; i < moves.length; i += 2) {
     const moveNumber = Math.floor(i / 2) + 1;
-    // Mossa i (bianco): side = bianco. cpLoss = scoreBefore(POVbianco) - scoreAfter(POVbianco).
-    const whiteBefore = beforeScoreWhite(i);
+
+    // Mossa i (bianco)
+    const whiteBefore = i === 0
+      ? evalScore(startEvalCp, startEvalMate)
+      : evalScore(moves[i - 1].evalCp ?? null, moves[i - 1].evalMate ?? null);
     const whiteAfter = evalScore(moves[i].evalCp ?? null, moves[i].evalMate ?? null);
     const whiteLoss = whiteBefore - whiteAfter;
     const white = {
@@ -111,16 +120,23 @@ export default function MoveNotation({
       hasComment: !!moves[i].comment?.trim(),
       evalCp: moves[i].evalCp ?? null,
       evalMate: moves[i].evalMate ?? null,
+      isBestMove: i === 0
+        ? isMoveBest(i, startFen ?? "", startEvalBestMoveUci)
+        : isMoveBest(i, moves[i - 1].fen, moves[i - 1].evalBestMoveUci),
       cpLoss:
         (moves[i].evalCp != null || moves[i].evalMate != null) &&
-        (startEvalCp != null || startEvalMate != null || i > 0)
+        (startEvalCp != null || startEvalMate != null ||
+         (i > 0 && (moves[i - 1].evalCp != null || moves[i - 1].evalMate != null)))
           ? whiteLoss
           : null,
     };
-    // Mossa i+1 (nero): side = nero. Converte eval al POV del nero (nega).
+
+    // Mossa i+1 (nero)
     let black = null;
     if (i + 1 < moves.length) {
-      const blackBefore = -beforeScoreWhite(i + 1); // POV nero
+      const blackBefore = i === 0
+        ? -evalScore(startEvalCp, startEvalMate)
+        : -evalScore(moves[i].evalCp ?? null, moves[i].evalMate ?? null);
       const blackAfter = -evalScore(
         moves[i + 1].evalCp ?? null,
         moves[i + 1].evalMate ?? null
@@ -132,6 +148,7 @@ export default function MoveNotation({
         hasComment: !!moves[i + 1].comment?.trim(),
         evalCp: moves[i + 1].evalCp ?? null,
         evalMate: moves[i + 1].evalMate ?? null,
+        isBestMove: isMoveBest(i + 1, moves[i].fen, moves[i].evalBestMoveUci),
         cpLoss:
           (moves[i + 1].evalCp != null || moves[i + 1].evalMate != null) &&
           (moves[i].evalCp != null || moves[i].evalMate != null)
@@ -171,7 +188,7 @@ export default function MoveNotation({
                       onClick={() => onGoToMove(white.index)}
                       className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-left w-full transition-colors ${
                         currentMoveIndex === white.index
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-primary/15 text-foreground"
                           : "hover:bg-accent"
                       }`}
                     >
@@ -180,6 +197,7 @@ export default function MoveNotation({
                         cp={white.evalCp}
                         mate={white.evalMate}
                         cpLoss={white.cpLoss}
+                        isBestMove={white.isBestMove}
                         active={currentMoveIndex === white.index}
                       />
                       {white.hasComment && (
@@ -196,7 +214,7 @@ export default function MoveNotation({
                       onClick={() => onGoToMove(black.index)}
                       className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-left w-full transition-colors ${
                         currentMoveIndex === black.index
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-primary/15 text-foreground"
                           : "hover:bg-accent"
                       }`}
                     >
@@ -205,6 +223,7 @@ export default function MoveNotation({
                         cp={black.evalCp}
                         mate={black.evalMate}
                         cpLoss={black.cpLoss}
+                        isBestMove={black.isBestMove}
                         active={currentMoveIndex === black.index}
                       />
                       {black.hasComment && (
@@ -222,21 +241,34 @@ export default function MoveNotation({
   );
 }
 
-/** Badge eval: valore numerico + eventuale sigla classificazione (?? / ? / ?!). */
+/** Badge eval: valore numerico + sigla classificazione. */
 function EvalBadge({
   cp,
   mate,
   cpLoss,
+  isBestMove,
   active,
 }: {
   cp: number | null;
   mate: number | null;
   cpLoss: number | null;
+  isBestMove: boolean;
   active: boolean;
 }) {
   const hasEval = cp != null || mate != null;
   if (!hasEval) return null;
-  const cls = moveClassification(cpLoss);
+  const cls = moveClassification(cpLoss, isBestMove);
+
+  const badgeTitles: Record<string, string> = {
+    "⭐": "Migliore",
+    "✅": "Buona",
+    "?!": "Imprecisa",
+    "?": "Errore",
+    "??": "Errore grave",
+  };
+
+  const emojiLabels = new Set(["⭐", "✅"]);
+
   return (
     <span className="flex items-center gap-0.5 shrink-0 text-[12px] tabular-nums font-bold">
       <span
@@ -249,20 +281,16 @@ function EvalBadge({
       </span>
       {cls && (
         <span
-          className={`px-1 rounded ${
-            active ? "text-primary-foreground" : "text-white"
-          }`}
-          style={{
-            backgroundColor: active ? "transparent" : cls.color,
-            color: active ? "inherit" : "white",
-          }}
-          title={
-            cls.label === "??"
-              ? "Pessata"
-              : cls.label === "?"
-                ? "Errore"
-                : "Imprecisione"
+          className={emojiLabels.has(cls.label) ? "" : `px-1 rounded text-white`}
+          style={
+            emojiLabels.has(cls.label)
+              ? undefined
+              : {
+                  backgroundColor: cls.color,
+                  color: "white",
+                }
           }
+          title={badgeTitles[cls.label] ?? `Valutazione: ${cls.label}`}
         >
           {cls.label}
         </span>

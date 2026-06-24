@@ -181,16 +181,53 @@ export function formatEval(
   return "—";
 }
 
-/** Colore badge per una mossa in base al centipawn loss (POV del mosritore). */
-export function moveClassification(cpLoss: number | null): {
+export interface MoveBadge {
   label: string;
   color: string;
-} | null {
+}
+
+/** Mappa simbolo → colore per i badge (usata da parsing commenti). */
+export const BADGE_COLORS: Record<string, string> = {
+  "⭐": "rgb(59,130,246)",
+  "✅": "rgb(34,197,94)",
+  "?!": "rgb(202,138,4)",
+  "?": "rgb(234,88,12)",
+  "??": "rgb(220,38,38)",
+};
+
+/**
+ * Estrae un badge iniziale da un testo commento (es. "?? e4 — Errore grave!").
+ * Ritorna { label, color, rest } se il testo inizia con un simbolo badge,
+ * altrimenti null.
+ */
+export function parseBadgePrefix(
+  text: string
+): { label: string; color: string; rest: string } | null {
+  // Ordine: prima simboli più lunghi ("??" prima di "?")
+  const symbols = ["??", "?!", "⭐", "✅", "?"];
+  for (const s of symbols) {
+    if (text.startsWith(s + " ")) {
+      return { label: s, color: BADGE_COLORS[s], rest: text.slice(s.length + 1) };
+    }
+  }
+  return null;
+}
+
+/** Colore badge per una mossa in base al centipawn loss (POV del mosritore). */
+export function moveClassification(
+  cpLoss: number | null,
+  isBestMove?: boolean
+): MoveBadge | null {
   if (cpLoss == null) return null;
-  if (cpLoss >= 300) return { label: "??", color: "rgb(220,38,38)" }; // blunder
-  if (cpLoss >= 200) return { label: "?", color: "rgb(234,88,12)" }; // mistake
-  if (cpLoss >= 100) return { label: "?!", color: "rgb(202,138,4)" }; // inaccuracy
-  return null; // good
+
+  if (isBestMove) {
+    return { label: "⭐", color: "rgb(59,130,246)" };
+  }
+
+  if (cpLoss < 50) return { label: "✅", color: "rgb(34,197,94)" };
+  if (cpLoss < 100) return { label: "?!", color: "rgb(202,138,4)" };
+  if (cpLoss < 300) return { label: "?", color: "rgb(234,88,12)" };
+  return { label: "??", color: "rgb(220,38,38)" };
 }
 
 /** Converte UCI "e2e4" / "e7e8q" in [from, to] per BoardArrow. */
