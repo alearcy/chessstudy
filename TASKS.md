@@ -2,6 +2,8 @@
 
 ## In Progress
 
+Badge notazione estesa: classificazione stile chess.com per ogni mossa
+
 ## Completed
 
 - [x] Import PGN: ogni PGN diventa lezione analysis autonoma (non più contenitore cumulativo)

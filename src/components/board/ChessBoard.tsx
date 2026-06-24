@@ -129,22 +129,31 @@ export default function ChessBoardView({
   const badgeDataRef = useRef({ square: lastMoveSquare, badge: moveBadge });
   badgeDataRef.current = { square: lastMoveSquare, badge: moveBadge };
 
+  const emojiLabels = new Set(["⭐", "✅"]);
+
   const CustomSquare = useCallback(
     ({ children, ref, square, squareColor: _squareColor, style }: CustomSquareProps) => {
       const { square: badgeSquare, badge } = badgeDataRef.current;
       const showBadge = square === badgeSquare && badge;
+      const isEmoji = badge ? emojiLabels.has(badge.label) : false;
       return (
         <div ref={ref} style={{ ...style, position: "relative" }}>
           {children}
           {showBadge && (
             <span
-              className="absolute bottom-0 right-0 text-[14px] font-bold px-1.5 rounded leading-none mb-0.5 mr-0.5"
-              style={{
-                backgroundColor: badge!.color,
-                color: "white",
-                textShadow: "0 0 3px rgba(0,0,0,0.6)",
-                zIndex: 10,
-              }}
+              className="absolute bottom-0 right-0 text-[14px] font-bold leading-none mb-0.5 mr-0.5"
+              style={
+                isEmoji
+                  ? { zIndex: 10 }
+                  : {
+                      backgroundColor: badge!.color,
+                      color: "white",
+                      textShadow: "0 0 3px rgba(0,0,0,0.6)",
+                      zIndex: 10,
+                      padding: "0 0.375rem",
+                      borderRadius: "0.25rem",
+                    }
+              }
             >
               {badge!.label}
             </span>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload, Loader2 } from "lucide-react";
+import { Chess } from "chess.js";
 import { getLesson, updateLesson, deleteLesson, convertAnalysisToStudy } from "@/services/lessonService";
 import {
   getBoard,
@@ -42,6 +43,7 @@ import {
   formatEval,
   evalScore,
   moveClassification,
+  parseBadgePrefix,
   type PositionEval,
 } from "@/services/analysisService";
 import { explainMove, explainMoveRuleBased } from "@/services/explainService";
@@ -794,11 +796,29 @@ export default function LessonDetailPage() {
     const beforeScore = evalScore(beforeCp, beforeMate); // POV Bianco
     const afterScore = evalScore(afterCp, afterMate); // POV Bianco
 
-    // cpLoss POV del giocatore che ha mosso
-    // In POV Bianco, cpLoss è la differenza tra valutazione prima e dopo la mossa
-    const cpLoss = beforeScore - afterScore;
+    // cpLoss POV del giocatore che ha mosso.
+    // Dopo una mossa nera, il turno è del bianco → chi ha mosso è il nero.
+    const moverIsBlack = chess.turn === "w";
+    const cpLoss = moverIsBlack ? afterScore - beforeScore : beforeScore - afterScore;
 
-    const cls = moveClassification(cpLoss);
+    // isBestMove
+    let isBestMove = false;
+    const bestUciBefore = i === 0
+      ? selectedBoard?.evalBestMoveUci ?? null
+      : chess.moves[i - 1]?.evalBestMoveUci ?? null;
+    const fenBefore = i === 0 ? selectedBoard?.fen : chess.moves[i - 1]?.fen;
+    if (bestUciBefore && fenBefore) {
+      try {
+        const c = new Chess(fenBefore);
+        const result = c.move(bestUciBefore);
+        const cleanSan = (s: string) => s.replace(/[+#]$/, "");
+        isBestMove = cleanSan(result.san) === cleanSan(move.moveNotation);
+      } catch {
+        isBestMove = false;
+      }
+    }
+
+    const cls = moveClassification(cpLoss, isBestMove);
 
     return cls;
   }, [chess.historyIndex, chess.currentMove, chess.moves, selectedBoard]);
@@ -1062,7 +1082,25 @@ export default function LessonDetailPage() {
                   >
                     {chess.currentMove ? (
                       moveCommentDraft.trim() ? (
-                        moveCommentDraft
+                        (() => {
+                          const text = moveCommentDraft;
+                          const parsed = parseBadgePrefix(text);
+                          if (!parsed) {
+                            return <span className="whitespace-pre-wrap">{text}</span>;
+                          }
+                          const isEmoji = parsed.label === "⭐" || parsed.label === "✅";
+                          return (
+                            <span className="whitespace-pre-wrap">
+                              <span
+                                className={isEmoji ? "" : "inline-block px-1.5 rounded text-white font-bold mr-1 align-middle"}
+                                style={isEmoji ? undefined : { backgroundColor: parsed.color }}
+                              >
+                                {parsed.label}
+                              </span>
+                              {parsed.rest}
+                            </span>
+                          );
+                        })()
                       ) : (
                         <span className="text-muted-foreground italic">
                           Nessun commento generato per la mossa {chess.historyIndex}. {chess.currentMove.moveNotation}. Attiva l'AI per generare i commenti.
@@ -1157,6 +1195,8 @@ export default function LessonDetailPage() {
               onGoToMove={chess.goToMove}
               startEvalCp={selectedBoard?.evalCp ?? null}
               startEvalMate={selectedBoard?.evalMate ?? null}
+              startFen={selectedBoard.fen}
+              startEvalBestMoveUci={selectedBoard?.evalBestMoveUci ?? null}
             />
           ) : (
             <div className="text-sm text-muted-foreground">

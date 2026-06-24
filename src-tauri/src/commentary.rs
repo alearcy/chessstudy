@@ -283,14 +283,14 @@ fn parse_response(response: &str, _played_san: &str) -> (String, String) {
 }
 
 fn build_summary(played_san: &str, severity: &str) -> String {
-    let label = match severity {
-        "blunder" => "Pessata!",
-        "mistake" => "Errore",
-        "inaccuracy" => "Imprecisione",
-        "best" => "Mossa eccellente",
-        _ => "Buona mossa",
+    let (symbol, label) = match severity {
+        "blunder" => ("??", "Errore grave!"),
+        "mistake" => ("?", "Errore"),
+        "inaccuracy" => ("?!", "Imprecisione"),
+        "best" => ("⭐", "Mossa eccellente"),
+        _ => ("✅", "Buona mossa"),
     };
-    format!("{} — {}", played_san, label)
+    format!("{} {} — {}", symbol, played_san, label)
 }
 #[cfg(test)]
 mod tests {
