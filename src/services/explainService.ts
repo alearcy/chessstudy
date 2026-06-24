@@ -738,3 +738,32 @@ function batchExplainRuleBased(input: BatchExplainInput): MoveExplanation[] {
 
   return explanations;
 }
+
+// ============================================================================
+// Game analysis (one-shot)
+// ============================================================================
+
+export interface GameAnalysisArgs {
+  whiteName: string | null;
+  blackName: string | null;
+  result: string | null;
+  moves: Array<{
+    moveNumber: number;
+    san: string;
+    player: string;
+    evalBefore: string;
+    evalAfter: string;
+    classification: string;
+    bestSan: string | null;
+  }>;
+  keySwings: string[];
+}
+
+export async function analyzeGame(input: GameAnalysisArgs): Promise<string> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const result = await invoke<{ summary: string; details: string; severity: string }>(
+    "generate_game_analysis",
+    { args: input }
+  );
+  return result.details;
+}

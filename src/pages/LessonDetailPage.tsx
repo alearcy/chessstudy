@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload, Loader2 } from "lucide-react";
-import { Chess } from "chess.js";
+import ReactMarkdown from "react-markdown";
 import { getLesson, updateLesson, deleteLesson, convertAnalysisToStudy } from "@/services/lessonService";
 import {
   getBoard,
@@ -46,7 +46,9 @@ import {
   parseBadgePrefix,
   type PositionEval,
 } from "@/services/analysisService";
-import { explainMove, explainMoveRuleBased } from "@/services/explainService";
+import { explainMoveRuleBased } from "@/services/explainService";
+import { analyzeGame } from "@/services/explainService";
+import { Chess, PieceSymbol, Square as ChessSquare } from "chess.js";
 
 /** Estrae la casa di destinazione dal SAN (e.g. "Nf3" → "f3", "O-O" → "g1" o "g8"). */
 function sanToSquare(san: string, byBlack: boolean): string | null {
@@ -82,9 +84,8 @@ export default function LessonDetailPage() {
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [llmAvailable, setLlmAvailable] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [gameAnalysisLoading, setGameAnalysisLoading] = useState(false);
+  const [gameAnalysisText, setGameAnalysisText] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<{
     done: number;
@@ -102,10 +103,92 @@ export default function LessonDetailPage() {
   const lastSavedCommentRef = useRef<string>("");
   const commentMoveIdRef = useRef<number | null>(null);
 
-  const selectedBoard = useMemo(
+  /** Converte SAN inglese (chess.js) in notazione italiana.
+ *  K→R, Q→D, R→T, B→A, N→C. Promozioni: =Q→=D. Arrocco: O-O→0-0. */
+function sanToItalian(san: string): string {
+  const pieceMap: Record<string, string> = { K: "R", Q: "D", R: "T", B: "A", N: "C" };
+  let result = san;
+  if (pieceMap[result[0]]) {
+    result = pieceMap[result[0]] + result.slice(1);
+  }
+  result = result
+    .replace(/=K/g, "=R").replace(/=Q/g, "=D").replace(/=R/g, "=T")
+    .replace(/=B/g, "=A").replace(/=N/g, "=C");
+  result = result.replace(/O-O/g, "0-0");
+  return result;
+}
+
+const selectedBoard = useMemo(
     () => boards.find((b) => b.id === selectedBoardId) ?? null,
     [boards, selectedBoardId]
   );
+
+  /** Mappa mosse SAN → indice (0-based) per clickable moves nell'analisi.
+   *  Include sia notazione inglese (chess.js) che italiana (output LLM). */
+  const moveSanMap = useMemo(() => {
+    const map = new Map<string, number>();
+    chess.moves.forEach((m, i) => {
+      const base = m.moveNotation.replace(/[+#]$/, "");
+      map.set(base, i);
+      map.set(sanToItalian(base), i);
+      map.set(m.moveNotation, i);
+      map.set(sanToItalian(m.moveNotation), i);
+    });
+    return map;
+  }, [chess.moves]);
+
+  /** Trasforma riferimenti a mosse nel testo in link markdown [SAN](#move-N).
+   *  Salta il testo in *corsivo* (mosse suggerite da Stockfish).
+   *  Se è presente un prefisso numerico (es. "10.") lo confronta con il numero
+   *  di mossa reale: se non corrisponde, è un suggerimento e non viene linkato. */
+  const linkifyMoves = useCallback((text: string) => {
+    if (moveSanMap.size === 0) return text;
+
+    // Map SAN → move number (1-based fullmove) for prefix validation
+    const sanToMoveNum = new Map<string, number>();
+    chess.moves.forEach((_m, i) => {
+      const num = Math.floor(i / 2) + 1;
+      const base = _m.moveNotation.replace(/[+#]$/, "");
+      sanToMoveNum.set(base, num);
+      sanToMoveNum.set(sanToItalian(base), num);
+      sanToMoveNum.set(_m.moveNotation, num);
+      sanToMoveNum.set(sanToItalian(_m.moveNotation), num);
+    });
+
+    const patterns = [...moveSanMap.keys()]
+      .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .sort((a, b) => b.length - a.length);
+    const regex = new RegExp(
+      `(\\d+\\.\\.?\\.?\\s*)?(?<![a-zA-Z0-9])(${patterns.join("|")})`,
+      "g"
+    );
+
+    const italicRegex = /(\*[^*]+\*(?!\*)|_[^_]+_)/g;
+    const segments = text.split(italicRegex);
+
+    return segments.map((seg) => {
+      if ((seg.startsWith("*") && seg.endsWith("*") && !seg.endsWith("**")) ||
+          (seg.startsWith("_") && seg.endsWith("_"))) {
+        return seg;
+      }
+      return seg.replace(regex, (full, prefix, san) => {
+        if (prefix) {
+          const prefixNum = parseInt(prefix);
+          const actualNum = sanToMoveNum.get(san);
+          if (actualNum != null && prefixNum !== actualNum) {
+            return full;
+          }
+        }
+        const idx = moveSanMap.get(san);
+        if (idx != null) {
+          return prefix
+            ? `${prefix}[${san}](#move-${idx})`
+            : `[${san}](#move-${idx})`;
+        }
+        return full;
+      });
+    }).join("");
+  }, [moveSanMap, chess.moves]);
 
   // Inizializza l'hook scacchiera quando viene selezionata una nuova board:
   // carica il FEN di partenza, le mosse persistite e le annotazioni di partenza.
@@ -146,6 +229,7 @@ export default function LessonDetailPage() {
     setNotesDraft(notes);
     lastSavedRef.current = notes;
     setNoteTab("board");
+    setGameAnalysisText(board?.gameAnalysis ?? "");
   }, [selectedBoardId, boards]);
 
   // Sincronizza il draft del commento mossa quando cambia la mossa corrente.
@@ -197,20 +281,6 @@ export default function LessonDetailPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Verifica se l'LLM nativo è disponibile via Tauri.
-  useEffect(() => {
-    async function check() {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const status = await invoke<{ ready: boolean }>("llm_status");
-        setLlmAvailable(status.ready);
-      } catch {
-        setLlmAvailable(false);
-      }
-    }
-    check();
-  }, []);
 
   // Auto-analisi Stockfish in modalità Analysis all'ingresso.
   // Salta se tutte le posizioni hanno già eval persistito.
@@ -592,123 +662,143 @@ export default function LessonDetailPage() {
     }
   };
 
-  /** Attiva/disattiva l'AI: ON → genera commenti con LLM (o fallback rule-based),
-   * OFF → rigenera commenti rule-based. */
-  const handleAiToggle = async () => {
-    if (!selectedBoard || aiLoading) return;
+  const handleGameAnalysis = async () => {
+    if (!selectedBoard || gameAnalysisLoading) return;
+    const boardId = selectedBoard.id;
+    if (!boardId) return;
 
-    if (aiEnabled) {
-      // Disattiva AI: rigenera commenti rule-based dal DB + eval persistiti.
-      setAiEnabled(false);
-      setAiLoading(true);
-      try {
-        if (selectedBoard.id) {
-          const startFen = selectedBoard.fen;
-          const moveList = chess.moves;
-          // Costruisce evals da selectedBoard + chess.moves (qui gli eval ci sono
-          // già perché l'analisi Stockfish è stata fatta prima).
-          const evals: PositionEval[] = [
-            {
-              fen: startFen,
-              depth: selectedBoard.evalDepth ?? 0,
-              scoreCp: selectedBoard.evalCp ?? null,
-              scoreMate: selectedBoard.evalMate ?? null,
-              bestMoveUci: selectedBoard.evalBestMoveUci ?? null,
-            },
-            ...moveList.map((m) => ({
-              fen: m.fen,
-              depth: m.evalDepth ?? 0,
-              scoreCp: m.evalCp ?? null,
-              scoreMate: m.evalMate ?? null,
-              bestMoveUci: m.evalBestMoveUci ?? null,
-            })),
-          ];
-          await persistRuleBasedComments(startFen, moveList, evals, selectedBoard);
-          // Ricarica da DB.
-          const [freshBoard, freshMoves] = await Promise.all([
-            getBoard(selectedBoard.id),
-            getMovesByBoard(selectedBoard.id),
-          ]);
-          if (freshBoard) {
-            chess.loadSequence(
-              freshBoard.fen,
-              freshMoves,
-              freshBoard.arrows ?? [],
-              freshBoard.highlights ?? []
-            );
-          }
-        }
-      } catch (e) {
-        console.error("[ai] errore spegnimento", e);
-      } finally {
-        setAiLoading(false);
-      }
-      return;
-    }
+    const startFen = selectedBoard.fen;
+    setGameAnalysisLoading(true);
 
-    // Attiva AI: genera commenti con LLM (o fallback rule-based).
-    setAiEnabled(true);
-    setAiLoading(true);
+    // Yield to event loop so React renders the loading overlay before
+    // the synchronous prep work and the async LLM call.
+    await new Promise((r) => setTimeout(r, 0));
+
     try {
-      const startFen = selectedBoard.fen;
       const moveList = chess.moves;
+      const startCp = selectedBoard.evalCp ?? null;
+      const startMate = selectedBoard.evalMate ?? null;
 
-      const evals: { scoreCp: number | null; scoreMate: number | null; depth: number; bestMoveUci: string | null }[] = [
-        {
-          scoreCp: selectedBoard.evalCp ?? null,
-          scoreMate: selectedBoard.evalMate ?? null,
-          depth: selectedBoard.evalDepth ?? 0,
-          bestMoveUci: selectedBoard.evalBestMoveUci ?? null,
-        },
-        ...moveList.map((m) => ({
-          scoreCp: m.evalCp ?? null,
-          scoreMate: m.evalMate ?? null,
-          depth: m.evalDepth ?? 0,
-          bestMoveUci: m.evalBestMoveUci ?? null,
-        })),
-      ];
+      const moves = moveList.map((m, i) => {
+        const isWhite = i % 2 === 0;
+        const beforeCp = i === 0 ? startCp : (moveList[i - 1]?.evalCp ?? null);
+        const beforeMate = i === 0 ? startMate : (moveList[i - 1]?.evalMate ?? null);
+        const afterCp = m.evalCp ?? null;
+        const afterMate = m.evalMate ?? null;
 
-      for (let i = 0; i < moveList.length; i++) {
-        const move = moveList[i];
-        if (move.id == null) continue;
+        const beforeScore = evalScore(beforeCp, beforeMate);
+        const afterScore = evalScore(afterCp, afterMate);
+        const cpLoss = beforeScore - afterScore;
+        const cls = moveClassification(cpLoss);
 
-        const playedBy: "w" | "b" = i % 2 === 0 ? "w" : "b";
-        const beforeFen = i === 0 ? startFen : moveList[i - 1]?.fen ?? startFen;
-        const beforeIdx = i;
-        const beforeEval = beforeIdx === 0
-          ? { cp: evals[0].scoreCp, mate: evals[0].scoreMate, depth: evals[0].depth, bestMoveUci: evals[0].bestMoveUci }
-          : { cp: evals[beforeIdx]?.scoreCp ?? null, mate: evals[beforeIdx]?.scoreMate ?? null, depth: evals[beforeIdx]?.depth ?? 0, bestMoveUci: evals[beforeIdx]?.bestMoveUci ?? null };
-        const afterEval = { cp: evals[i + 1].scoreCp, mate: evals[i + 1].scoreMate, depth: evals[i + 1].depth };
+        const classLabel =
+          cls?.label === "??" ? "PESSATA" :
+          cls?.label === "?" ? "ERRORE" :
+          cls?.label === "?!" ? "IMPRECISIONE" :
+          isWhite ? "OTTIMA" : "BUONA";
 
-        try {
-          const exp = await explainMove({
-            beforeFen,
-            afterFen: move.fen,
-            playedMoveSan: move.moveNotation,
-            playedBy,
-            whiteName: selectedBoard?.whiteName ?? null,
-            blackName: selectedBoard?.blackName ?? null,
-            beforeEval: {
-              cp: beforeEval.cp,
-              mate: beforeEval.mate,
-              depth: beforeEval.depth,
-              bestMoveUci: beforeEval.bestMoveUci,
-            },
-            afterEval,
-          });
-          const commentText = [exp.summary, ...exp.details].join("\n");
-          await updateMove(move.id, { comment: commentText });
-          chess.replaceMove(i, { ...move, comment: commentText });
-        } catch {
-          // spiegazione non critica: ignora errori
-        }
-      }
+        const beforeFen = i === 0 ? startFen : moveList[i - 1].fen;
+        const bestUci = i === 0
+          ? (selectedBoard.evalBestMoveUci ?? null)
+          : (moveList[i - 1]?.evalBestMoveUci ?? null);
+        const bestSan = bestUci ? uciToSan(beforeFen, bestUci) : null;
+
+        return {
+          moveNumber: Math.floor(i / 2) + 1,
+          san: m.moveNotation,
+          player: isWhite ? "Bianco" : "Nero",
+          evalBefore: formatEvalForPrompt(beforeCp, beforeMate),
+          evalAfter: formatEvalForPrompt(afterCp, afterMate),
+          classification: classLabel,
+          bestSan,
+        };
+      });
+
+      const keySwings = computeKeySwings(
+        moveList,
+        startCp,
+        startMate,
+        selectedBoard.whiteName ?? "Bianco",
+        selectedBoard.blackName ?? "Nero"
+      );
+
+      const text = await analyzeGame({
+        whiteName: selectedBoard?.whiteName ?? null,
+        blackName: selectedBoard?.blackName ?? null,
+        result: selectedBoard?.headers?.["Result"] ?? null,
+        moves,
+        keySwings,
+      });
+
+      setGameAnalysisText(text);
+      await updateBoard(boardId, { gameAnalysis: text });
+      syncBoardInList(boardId, { gameAnalysis: text });
     } catch (e) {
-      console.error("[ai] errore", e);
+      console.error("[game-analysis] errore", e);
     } finally {
-      setAiLoading(false);
+      setGameAnalysisLoading(false);
     }
   };
+
+  /** Formatta eval per il prompt LLM: "+0.3", "-2.1", "M5", "M-3". */
+  function formatEvalForPrompt(cp: number | null, mate: number | null): string {
+    if (mate != null) return mate > 0 ? `M${mate}` : `M${mate}`;
+    if (cp != null) {
+      const pawns = cp / 100;
+      return pawns >= 0 ? `+${pawns.toFixed(1)}` : `${pawns.toFixed(1)}`;
+    }
+    return "?";
+  }
+
+  /** Converte UCI ("e2e4") in SAN ("e4") usando la posizione FEN. */
+  function uciToSan(fen: string, uci: string): string | null {
+    try {
+      const game = new Chess(fen);
+      const from = uci.slice(0, 2) as ChessSquare;
+      const to = uci.slice(2, 4) as ChessSquare;
+      const promotion = uci.length > 4 ? (uci[4] as PieceSymbol) : undefined;
+      const move = game.move({ from, to, promotion });
+      return move?.san ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Calcola i 5 swing di valutazione più grandi e li restituisce come stringhe descrittive. */
+  function computeKeySwings(
+    moveList: Move[],
+    startCp: number | null,
+    startMate: number | null,
+    whiteName: string,
+    blackName: string,
+  ): string[] {
+    const swings: Array<{ desc: string; absLoss: number }> = [];
+    for (let i = 0; i < moveList.length; i++) {
+      const m = moveList[i];
+      const beforeCp = i === 0 ? startCp : (moveList[i - 1]?.evalCp ?? null);
+      const beforeMate = i === 0 ? startMate : (moveList[i - 1]?.evalMate ?? null);
+      const afterCp = m.evalCp ?? null;
+      const afterMate = m.evalMate ?? null;
+      const beforeScore = evalScore(beforeCp, beforeMate);
+      const afterScore = evalScore(afterCp, afterMate);
+      const cpLoss = beforeScore - afterScore;
+
+      const cls = moveClassification(cpLoss);
+      if (cls?.label === "✓" || !cls) continue;
+      const playerName = i % 2 === 0 ? whiteName : blackName;
+      const lossPawn = cpLoss / 100;
+      const clsLabel =
+        cls.label === "??" ? "PESSATA" :
+        cls.label === "?" ? "ERRORE" :
+        cls.label === "?!" ? "IMPRECISIONE" : "BUONA";
+      swings.push({
+        desc: `Mossa ${Math.floor(i / 2) + 1}. ${m.moveNotation} di ${playerName} (${clsLabel}, ${lossPawn >= 0 ? "-" : "+"}${Math.abs(lossPawn).toFixed(1)} pedoni)`,
+        absLoss: Math.abs(cpLoss),
+      });
+    }
+    swings.sort((a, b) => b.absLoss - a.absLoss);
+    return swings.slice(0, 5).map((s) => s.desc);
+  }
 
   const handleCancelAnalysis = () => {
     if (analysisSignalRef.current) analysisSignalRef.current.cancelled = true;
@@ -904,6 +994,13 @@ export default function LessonDetailPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {gameAnalysisLoading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <Loader2 className="size-10 animate-spin text-primary mb-4" />
+          <span className="text-lg font-semibold text-foreground">L&apos;AI sta analizzando la partita...</span>
+          <span className="text-sm text-muted-foreground mt-1">Potrebbe richiedere qualche secondo</span>
+        </div>
+      )}
       <Button
         variant="ghost"
         size="sm"
@@ -1057,11 +1154,8 @@ export default function LessonDetailPage() {
                   canAnalyze={chess.moves.length > 0 || !!selectedBoard}
                   onCancelAnalysis={handleCancelAnalysis}
                   lessonMode={lesson.mode}
-                  aiEnabled={aiEnabled}
-                  onAiToggle={handleAiToggle}
-                  aiLoading={aiLoading}
-                  llmAvailable={llmAvailable}
-                  isTauri={typeof window !== "undefined" && "__TAURI__" in window}
+                  onGameAnalysis={handleGameAnalysis}
+                  gameAnalysisLoading={gameAnalysisLoading}
                   autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
                   onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
                   converting={converting}
@@ -1075,43 +1169,95 @@ export default function LessonDetailPage() {
                   <span className="text-xs">(profondità {currentEvalDepth})</span>
                 </div>
               )}
-              <div className="w-full max-w-[480px] flex flex-col gap-1.5">
+              <div className="w-full max-w-[480px] flex flex-col gap-3">
                 {lesson.mode === "analysis" ? (
-                  <div
-                    className="w-full min-h-[96px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap"
-                  >
-                    {chess.currentMove ? (
-                      moveCommentDraft.trim() ? (
-                        (() => {
-                          const text = moveCommentDraft;
-                          const parsed = parseBadgePrefix(text);
-                          if (!parsed) {
-                            return <span className="whitespace-pre-wrap">{text}</span>;
-                          }
-                          const isEmoji = parsed.label === "⭐" || parsed.label === "✅";
-                          return (
-                            <span className="whitespace-pre-wrap">
-                              <span
-                                className={isEmoji ? "" : "inline-block px-1.5 rounded text-white font-bold mr-1 align-middle"}
-                                style={isEmoji ? undefined : { backgroundColor: parsed.color }}
-                              >
-                                {parsed.label}
+                  <>
+                    {gameAnalysisText && (
+                      <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
+                        <ReactMarkdown
+                          components={{
+                            a: ({ href, children }) => {
+                              if (href?.startsWith("#move-")) {
+                                const idx = parseInt(href.slice(6), 10);
+                                if (Number.isNaN(idx)) return <span>{children}</span>;
+                                return (
+                                  <button
+                                    type="button"
+                                    className="text-primary underline decoration-primary/50 hover:decoration-primary font-medium cursor-pointer transition-colors"
+                                    onClick={() => {
+                                      chess.goToMove(idx + 1);
+                                    }}
+                                  >
+                                    {children}
+                                  </button>
+                                );
+                              }
+                              return (
+                                <a href={href} target="_blank" rel="noopener noreferrer">
+                                  {children}
+                                </a>
+                              );
+                            },
+                            p: ({ children }) => (
+                              <p className="mb-2 last:mb-0">{children}</p>
+                            ),
+                            strong: ({ children }) => (
+                              <strong className="font-semibold">{children}</strong>
+                            ),
+                            ul: ({ children }) => (
+                              <ul className="list-disc pl-4 my-1">{children}</ul>
+                            ),
+                            ol: ({ children }) => (
+                              <ol className="list-decimal pl-4 my-1">{children}</ol>
+                            ),
+                            li: ({ children }) => (
+                              <li className="mb-0.5">{children}</li>
+                            ),
+                            em: ({ children }) => (
+                              <em>{children}</em>
+                            ),
+                          }}
+                        >
+                          {linkifyMoves(gameAnalysisText)}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                    <div
+                      className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap"
+                    >
+                      {chess.currentMove ? (
+                        moveCommentDraft.trim() ? (
+                          (() => {
+                            const text = moveCommentDraft;
+                            const parsed = parseBadgePrefix(text);
+                            if (!parsed) {
+                              return <span className="whitespace-pre-wrap">{text}</span>;
+                            }
+                            const isEmoji = parsed.label === "⭐" || parsed.label === "✅";
+                            return (
+                              <span className="whitespace-pre-wrap">
+                                <span
+                                  className={isEmoji ? "" : "inline-block px-1.5 rounded text-white font-bold mr-1 align-middle"}
+                                  style={isEmoji ? undefined : { backgroundColor: parsed.color }}
+                                >
+                                  {parsed.label}
+                                </span>
+                                {parsed.rest}
                               </span>
-                              {parsed.rest}
-                            </span>
-                          );
-                        })()
+                            );
+                          })()
+                        ) : (
+                          <span className="text-muted-foreground italic">
+                            Nessun commento per la mossa {chess.historyIndex}. {chess.currentMove.moveNotation}.
+                          </span>
+                        )
                       ) : (
                         <span className="text-muted-foreground italic">
-                          Nessun commento generato per la mossa {chess.historyIndex}. {chess.currentMove.moveNotation}. Attiva l'AI per generare i commenti.
+                          Seleziona una mossa per leggere il commento.
                         </span>
-                      )
-                    ) : (
-                      <span className="text-muted-foreground italic">
-                        Seleziona una mossa per leggere il commento.
-                      </span>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  </>
                 ) : (
                   <>
                     <div className="flex gap-1 p-1 bg-muted rounded-lg" role="tablist">
@@ -1365,18 +1511,6 @@ export default function LessonDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Loader AI full-page */}
-      {aiLoading && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4 p-8 rounded-lg bg-card shadow-lg border">
-            <Loader2 className="size-10 animate-spin text-primary" />
-            <p className="text-lg font-medium">L&apos;AI sta analizzando la partita...</p>
-            <p className="text-sm text-muted-foreground">
-              Generazione commenti didattici in corso
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
   );
 }

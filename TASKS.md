@@ -7,6 +7,9 @@
 
 - [x] Badge notazione estesa: classificazione stile chess.com per ogni mossa
   - Spec: `docs/specs/move-badges-extended.md`
+- [x] OpenRouter LLM (sostituzione llama.cpp/Gemma)
+  - Spec: `docs/specs/openrouter-llm.md`
+  - ADR: `docs/adr/0003-openrouter-llm.md`
 
 - [x] Import PGN: ogni PGN diventa lezione analysis autonoma (non più contenitore cumulativo)
   - Spec: `docs/specs/pgn-import-per-lesson.md`
@@ -41,6 +44,8 @@
 
 ## Todo
 
+- [ ] Permetti a qualsiasi scacchiera, sia di analisi che di studio, di poter invertire la posizione dei bianchi e dei neri.
+- [ ] Ora ci sono solo badge per alcune classificazioni di stockfish. Vorrei che ci fossero sempre usando la notazione che si usa anche su chess.com Geniale (!!), Grande (!), Migliore (stella), Ottima (pollice in su), Buona (spunta di check), Mossa interessante/rischiosa (!?). Vanno aggiunte a quelle già esistenti.
 - [ ] Sommario AI in descrizione lezione (post-import PGN)
   - Dopo import PGN, genera sommario partita via LLM e salvalo in `Lesson.description`
   - Sommario: giocatori, risultato, fasi chiave (apertura/medio/final), momenti critici, esito

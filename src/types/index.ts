@@ -44,6 +44,8 @@ export interface Board {
   blackName?: string | null;
   /** Header PGN completi (per visualizzazione strutturata in analisi). */
   headers?: Record<string, string | null>;
+  /** Analisi testuale dell'intera partita generata dall'AI (game-level). */
+  gameAnalysis?: string;
 }
 
 export interface Move {

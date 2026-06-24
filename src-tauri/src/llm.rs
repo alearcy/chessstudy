@@ -1,119 +1,66 @@
 use anyhow::{Context, Result};
-use std::num::NonZero;
-use std::path::Path;
+use serde_json::json;
 
-/// LLM inference engine wrapping llama-cpp-2 v0.1.150.
-/// Chat template: Gemma 4 format (<bos><|turn>role\n...<turn|>).
-pub struct LlmEngine {
-    model: llama_cpp_2::model::LlamaModel,
-    _backend: llama_cpp_2::llama_backend::LlamaBackend,
+pub struct OpenRouterClient {
+    api_key: String,
+    model: String,
+    client: reqwest::Client,
 }
 
-const N_CTX: NonZero<u32> = match NonZero::new(4096) {
-    Some(v) => v,
-    None => panic!("N_CTX is zero"),
-};
-
-impl LlmEngine {
-    pub fn load(model_path: &Path) -> Result<Self> {
-        let backend = llama_cpp_2::llama_backend::LlamaBackend::init()
-            .context("failed to init llama backend")?;
-
-        let model_params = llama_cpp_2::model::params::LlamaModelParams::default();
-        let model = llama_cpp_2::model::LlamaModel::load_from_file(
-            &backend, model_path, &model_params,
-        )
-        .with_context(|| format!("failed to load model from {:?}", model_path))?;
-
-        log::info!("LLM model loaded: {} params", model.n_params());
-        Ok(LlmEngine { model, _backend: backend })
+impl OpenRouterClient {
+    pub fn new(api_key: String, model: String) -> Self {
+        OpenRouterClient {
+            api_key,
+            model,
+            client: reqwest::Client::new(),
+        }
     }
 
-    pub fn prompt(
+    pub async fn prompt(
         &self,
         system_prompt: &str,
         user_prompt: &str,
         max_tokens: u32,
+        temperature: f64,
     ) -> Result<String> {
-        use llama_cpp_2::context::params::LlamaContextParams;
-        use llama_cpp_2::llama_batch::LlamaBatch;
+        log::info!("[openrouter] prompting model {} (max_tokens={}, temp={})", self.model, max_tokens, temperature);
 
-        // Chat template Gemma 4:
-        // <bos><|turn>system\n...<turn|>\n<|turn>user\n...<turn|>\n<|turn>model\n
-        let full_prompt = format!(
-            "<bos><|turn>system\n{}<turn|>\n<|turn>user\n{}<turn|>\n<|turn>model\n",
-            system_prompt, user_prompt
-        );
+        let body = json!({
+            "model": self.model,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_prompt }
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        });
 
-        log::info!("[llm] prompt: {} chars", full_prompt.len());
+        let response = self
+            .client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .context("failed to send request to OpenRouter")?;
 
-        let ctx_params = LlamaContextParams::default().with_n_ctx(Some(N_CTX));
-        let mut ctx = self
-            .model
-            .new_context(&self._backend, ctx_params)
-            .context("failed to create llama context")?;
+        let status = response.status();
+        let text = response.text().await.context("failed to read response body")?;
 
-        // Tokenize — NON aggiungere <bos>, già incluso nel prompt.
-        let tokens = self
-            .model
-            .str_to_token(&full_prompt, llama_cpp_2::model::AddBos::Never)
-            .context("failed to tokenize prompt")?;
-
-        let n = tokens.len();
-        log::info!("[llm] tokenized: {} tokens", n);
-        anyhow::ensure!(n > 0, "tokenization produced 0 tokens");
-
-        // Batch iniziale: prompt completo.
-        // L'ultimo token deve avere logits=true per permettere il sampling.
-        let mut batch = LlamaBatch::new(n, 1);
-        for (i, token) in tokens.iter().enumerate() {
-            let is_last = i == n - 1;
-            batch.add(*token, i as i32, &[0], is_last)?;
-        }
-        ctx.decode(&mut batch)
-            .context("failed to decode prompt")?;
-
-        // Generazione autoregressiva.
-        let mut output = String::new();
-        let eos_token = self.model.token_eos();
-        let mut pos = n as i32;
-
-        // Sampler chain: temperatura 0.3 + top-p 0.9 + distribuzione.
-        // Bassa temperatura = output più deterministico e coerente.
-        let mut sampler = llama_cpp_2::sampling::LlamaSampler::chain([
-            llama_cpp_2::sampling::LlamaSampler::temp(0.3),
-            llama_cpp_2::sampling::LlamaSampler::top_p(0.9, 1),
-            llama_cpp_2::sampling::LlamaSampler::dist(42),
-        ], false);
-
-        for _ in 0..max_tokens {
-            let new_token = sampler.sample(&ctx, -1);
-
-            if new_token == eos_token {
-                break;
-            }
-
-            let piece = self.model.token_to_str(
-                new_token,
-                llama_cpp_2::model::Special::Tokenize,
-            )?;
-            output.push_str(&piece);
-            sampler.accept(new_token);
-
-            let mut next = LlamaBatch::new(1, 1);
-            next.add(new_token, pos, &[0], true)?;
-            ctx.decode(&mut next)
-                .context("failed to decode token")?;
-            pos += 1;
+        if !status.is_success() {
+            log::error!("[openrouter] HTTP {}: {}", status, text);
+            anyhow::bail!("OpenRouter error ({}): {}", status, text);
         }
 
-        let cleaned = output
-            .replace("<turn|>", "")
-            .trim()
-            .to_string();
-        Ok(cleaned)
+        let parsed: serde_json::Value =
+            serde_json::from_str(&text).context("failed to parse OpenRouter response")?;
+
+        let content = parsed["choices"][0]["message"]["content"]
+            .as_str()
+            .context("missing choices[0].message.content in OpenRouter response")?;
+
+        log::info!("[openrouter] response: {} chars", content.len());
+        Ok(content.to_string())
     }
 }
-
-unsafe impl Send for LlmEngine {}
-unsafe impl Sync for LlmEngine {}

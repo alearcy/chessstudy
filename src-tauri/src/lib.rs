@@ -1,10 +1,10 @@
 mod commands;
 mod commentary;
 mod llm;
+mod settings;
 mod stockfish;
 
 use commands::AppState;
-use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::Manager;
 
@@ -30,50 +30,6 @@ fn resolve_stockfish_path() -> String {
     "stockfish".to_string()
 }
 
-/// Risolve il percorso del modello LLM (Gemma 4 E2B Q4_K_S).
-/// Cerca in:
-/// 1. Variabile d'ambiente `LLM_MODEL_PATH`
-/// 2. `<project_root>/models/gemma-4-e2b-it-Q4_K_S.gguf`
-/// 3. `app_data_dir()/models/gemma-4-e2b-it-Q4_K_S.gguf`
-fn resolve_model_path(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("LLM_MODEL_PATH") {
-        let p = PathBuf::from(&path);
-        if p.exists() {
-            log::info!("using LLM_MODEL_PATH: {}", p.display());
-            return Some(p);
-        }
-    }
-
-    // Root di progetto (relativa a CARGO_MANIFEST_DIR = src-tauri/).
-    // Cerca qualunque .gguf nella cartella models/.
-    if let Some(project_root) = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent() {
-        let models_dir = project_root.join("models");
-        if let Ok(entries) = std::fs::read_dir(&models_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) == Some("gguf") {
-                    log::info!("using project model: {}", path.display());
-                    return Some(path);
-                }
-            }
-        }
-    }
-
-    // App data directory.
-    let app_data = app_handle
-        .path()
-        .app_data_dir()
-        .ok()?;
-    let model_path = app_data.join("models").join("gemma-4-e2b-it-Q4_K_S.gguf");
-    if model_path.exists() {
-        log::info!("using model from app_data: {}", model_path.display());
-        return Some(model_path);
-    }
-
-    log::warn!("LLM model not found. Place a .gguf file in <project_root>/models/ or set LLM_MODEL_PATH.");
-    None
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -91,24 +47,14 @@ pub fn run() {
             let engine = stockfish::Engine::new(&binary_path)
                 .expect("failed to start stockfish engine");
 
-            // Init LLM engine (opzionale: se il modello non esiste, parte senza).
-            let llm = resolve_model_path(app.handle())
-                .and_then(|path| {
-                    match llm::LlmEngine::load(&path) {
-                        Ok(eng) => {
-                            log::info!("LLM engine initialized");
-                            Some(eng)
-                        }
-                        Err(e) => {
-                            log::warn!("failed to load LLM model: {}. Using fallback.", e);
-                            None
-                        }
-                    }
-                });
+            // Load OpenRouter settings from disk.
+            let openrouter_settings = settings::load_settings(app.handle());
+            log::info!("OpenRouter settings loaded: api_key_configured={}",
+                openrouter_settings.api_key.is_some());
 
             app.manage(AppState {
                 engine: Mutex::new(engine),
-                llm: Mutex::new(llm),
+                settings: Mutex::new(openrouter_settings),
             });
 
             Ok(())
@@ -116,8 +62,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::analyze_position,
             commands::stockfish_path,
+            commands::set_settings,
+            commands::get_settings,
+            commands::clear_api_key,
             commands::generate_commentary,
             commands::generate_batch_commentary,
+            commands::generate_game_analysis,
             commands::llm_status,
         ])
         .run(tauri::generate_context!())

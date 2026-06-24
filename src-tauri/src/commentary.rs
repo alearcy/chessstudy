@@ -1,4 +1,4 @@
-use crate::llm::LlmEngine;
+use crate::llm::OpenRouterClient;
 use anyhow::Result;
 use serde::Serialize;
 
@@ -98,13 +98,13 @@ Con e3 Marco ha spinto il pedone ma rinuncia a controllare il centro. Con Af4 Ma
 [PESSATA]
 Con Axh7 Marco ha sacrificato l'Alfiere senza compenso e Luca para facilmente, mantenendo il vantaggio di materiale. Con Axh6 Marco avrebbe conservato il pezzo e tenuto la posizione equilibrata.";
 
-pub fn generate(engine: &LlmEngine, input: &CommentaryInput) -> Result<CommentaryResult> {
+pub async fn generate(client: &OpenRouterClient, input: &CommentaryInput) -> Result<CommentaryResult> {
     let italian_played = san_to_italian(&input.played_san);
     let italian_best = input.best_move_san.as_ref().map(|b| san_to_italian(b));
 
     let user_prompt = build_user_prompt(input, &italian_played, italian_best.as_deref());
     log::info!("[commentary] invoking LLM for {}", input.played_san);
-    let response = engine.prompt(SYSTEM_PROMPT, &user_prompt, 200)?;
+    let response = client.prompt(SYSTEM_PROMPT, &user_prompt, 200, 0.3).await?;
     log::info!("[commentary] raw response: {}", &response);
 
     let (severity, details) = parse_response(&response, &input.played_san);
@@ -114,11 +114,142 @@ pub fn generate(engine: &LlmEngine, input: &CommentaryInput) -> Result<Commentar
     Ok(CommentaryResult { summary, details, severity })
 }
 
-pub fn generate_batch(
-    engine: &LlmEngine,
+pub async fn generate_batch(
+    client: &OpenRouterClient,
     inputs: &[CommentaryInput],
 ) -> Result<Vec<CommentaryResult>> {
-    inputs.iter().map(|inp| generate(engine, inp)).collect()
+    let mut results = Vec::with_capacity(inputs.len());
+    for inp in inputs {
+        results.push(generate(client, inp).await?);
+    }
+    Ok(results)
+}
+
+// ============================================================================
+// Game analysis (one-shot)
+// ============================================================================
+
+const GAME_ANALYSIS_SYSTEM_PROMPT: &str = "Sei un Grande Maestro di scacchi italiano con decenni di esperienza. Analizzi partite complete e offri commenti strategici di alto livello, accessibili anche a giocatori intermedi.
+
+RUOLO:
+- Analizzi l'intera partita combinando la cronaca delle mosse (PGN) con l'analisi del motore scacchistico Stockfish.
+- Identifichi i momenti decisivi, gli errori strategici e tattici, le occasioni mancate.
+- Per ogni errore, spieghi COSA è successo, PERCHÉ Stockfish lo considera un errore (citando la valutazione numerica), e quale mossa alternativa Stockfish avrebbe suggerito.
+- Spieghi i piani dei giocatori e come si sono evoluti durante la partita.
+- Dai un giudizio complessivo sulla qualità del gioco e sulle lezioni da imparare.
+
+REGOLA FONDAMENTALE (non violarla mai):
+- Il risultato della partita e i nomi dei giocatori sono indicati esattamente all'inizio del prompt (Bianco=Nome, Nero=Nome, Risultato). Basati SOLO su quei dati.
+- Se il risultato è \"1-0\", ha vinto il Bianco. Se è \"0-1\", ha vinto il Nero. Se è \"1/2-1/2\", è patta.
+- NON inventare un risultato diverso da quello indicato.
+- Le valutazioni numeriche sono dal punto di vista del Bianco: + significa vantaggio Bianco, - significa vantaggio Nero.
+
+LINGUA:
+- Rispondi SOLO in italiano corretto.
+- Usa esattamente il vocabolario scacchistico italiano: pezzo, pedone, casa, donna, torre, alfiere, cavallo, re, catturare, scacco, matto, arrocco, promozione, sviluppo, centro, iniziativa.
+- MAI usare \"pedina\" per indicare un pezzo che non sia un pedone.
+
+NOTAZIONE ITALIANA (obbligatoria):
+R=Re, D=Donna, T=Torre, A=Alfiere, C=Cavallo. Esempi: Cc3, Axf7, 0-0, exd5.
+
+TERZA PERSONA (obbligatorio):
+- Usa SEMPRE la terza persona con i nomi dei giocatori.
+- MAI dare del \"tu\": niente \"hai\", \"avresti\", \"la tua mossa\".
+
+FORMATO OUTPUT (Markdown):
+Scrivi un testo in formato Markdown strutturato in paragrafi. Massimo 3000 caratteri, sii denso e sintetico:
+
+1. PANORAMICA — apertura, struttura pedonale, piani strategici.
+
+2. MOMENTI CHIAVE — mosse decisive. Per ogni errore o occasione mancata: COSA è successo, PERCHÉ, COSA si sarebbe dovuto giocare. Cita la notazione delle mosse giocate tra virgolette (es. \"Axf7\"). Per le mosse suggerite da Stockfish (NON giocate), scrivile in *corsivo* (es. *Ac4*, *De7*).
+
+3. GIUDIZIO — valutazione finale e lezioni da imparare.
+
+Usa **grassetto** per concetti chiave e giocatori, - per elenchi puntati. NON elencare TUTTE le mosse: scegli solo quelle decisive.
+
+DIVIETI ASSOLUTI:
+- NON aggiungere meta-commenti o spiegare come hai formulato la risposta.
+- NON ripetere lo stesso concetto più volte.
+- NON essere prolisso: sii denso e informativo.
+- NON usare il \"tu\" in nessuna forma.
+- NON usare notazione inglese (Nf3, Bxc6).
+- NON citare mosse suggerite da Stockfish senza avvolgerle in *corsivo*.";
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GameAnalysisMove {
+    pub move_number: u32,
+    pub san_italian: String,
+    pub player: String,
+    pub eval_before: String,
+    pub eval_after: String,
+    pub classification: String,
+    pub best_san_italian: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GameAnalysisInput {
+    pub white_name: String,
+    pub black_name: String,
+    pub result: Option<String>,
+    pub moves: Vec<GameAnalysisMove>,
+    pub key_swings: Vec<String>,
+}
+
+pub async fn analyze_game(
+    client: &OpenRouterClient,
+    input: &GameAnalysisInput,
+) -> Result<CommentaryResult> {
+    let user_prompt = build_game_analysis_prompt(input);
+    log::info!("[commentary] invoking game analysis LLM ({} moves)", input.moves.len());
+    let response = client.prompt(GAME_ANALYSIS_SYSTEM_PROMPT, &user_prompt, 4000, 0.5).await?;
+    log::info!("[commentary] game analysis response: {} chars", response.len());
+
+    Ok(CommentaryResult {
+        summary: "Analisi della partita".to_string(),
+        details: response,
+        severity: "good".to_string(),
+    })
+}
+
+fn build_game_analysis_prompt(input: &GameAnalysisInput) -> String {
+    let mut p = format!(
+        "Analizza questa partita:\n\nBianco: {}\nNero: {}\n",
+        input.white_name, input.black_name
+    );
+    if let Some(ref r) = input.result {
+        let winner = match r.as_str() {
+            "1-0" => format!("{} (Bianco) ha vinto", input.white_name),
+            "0-1" => format!("{} (Nero) ha vinto", input.black_name),
+            "1/2-1/2" => "Patta".to_string(),
+            _ => format!("Risultato: {}", r),
+        };
+        p.push_str(&format!("Risultato: {} — {}\n", r, winner));
+    }
+    p.push_str("\nMosse (con analisi Stockfish):\n");
+    p.push_str("(Valutazione: + vantaggio Bianco, - vantaggio Nero. Mossa Stockfish = cosa avrebbe giocato il motore)\n\n");
+    for m in &input.moves {
+        let best = m.best_san_italian.as_ref()
+            .map(|b| format!(" → Stockfish suggeriva {}", b))
+            .unwrap_or_default();
+        p.push_str(&format!(
+            "{}. {}: {} ({}→{}) {}{}\n",
+            m.move_number, m.player, m.san_italian,
+            m.eval_before, m.eval_after, m.classification, best
+        ));
+    }
+    if !input.key_swings.is_empty() {
+        p.push_str("\nPrincipali cambi di valutazione:\n");
+        for s in &input.key_swings {
+            p.push_str(&format!("- {}\n", s));
+        }
+    }
+    p.push_str("\nAnalizza la partita combinando la cronaca delle mosse (PGN) con l'analisi del motore Stockfish: dove Stockfish dice che una mossa è stata un errore, spiega perché, e indica la mossa alternativa suggerita dal motore. Evidenzia i momenti cruciali, gli errori e le occasioni mancate.");
+    p
+}
+
+/// Versione pubblica del traduttore SAN per l'uso da commands.rs.
+pub fn san_to_italian_public(san: &str) -> String {
+    san_to_italian(san)
 }
 
 fn build_user_prompt(input: &CommentaryInput, played_san: &str, best_move_san: Option<&str>) -> String {
