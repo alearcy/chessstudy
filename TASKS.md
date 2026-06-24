@@ -46,9 +46,5 @@
 
 - [ ] Permetti a qualsiasi scacchiera, sia di analisi che di studio, di poter invertire la posizione dei bianchi e dei neri.
 - [ ] Ora ci sono solo badge per alcune classificazioni di stockfish. Vorrei che ci fossero sempre usando la notazione che si usa anche su chess.com Geniale (!!), Grande (!), Migliore (stella), Ottima (pollice in su), Buona (spunta di check), Mossa interessante/rischiosa (!?). Vanno aggiunte a quelle già esistenti.
-- [ ] Sommario AI in descrizione lezione (post-import PGN)
-  - Dopo import PGN, genera sommario partita via LLM e salvalo in `Lesson.description`
-  - Sommario: giocatori, risultato, fasi chiave (apertura/medio/final), momenti critici, esito
-  - Trigger: azione post-analisi Stockfish (insieme o dopo toggle AI commenti mosse)
-  - UI: mostra description come attualmente (nessuna modifica rendering)
-  - File attesi: `src/services/explainService.ts` o nuovo `src/services/lessonSummary.ts`, `src/pages/LessonDetailPage.tsx`
+- [x] Sommario AI in descrizione lezione (post-import PGN)
+  - Spec: `docs/specs/lesson-ai-summary.md`
