@@ -2,9 +2,11 @@
 
 ## In Progress
 
-Badge notazione estesa: classificazione stile chess.com per ogni mossa
 
 ## Completed
+
+- [x] Badge notazione estesa: classificazione stile chess.com per ogni mossa
+  - Spec: `docs/specs/move-badges-extended.md`
 
 - [x] Import PGN: ogni PGN diventa lezione analysis autonoma (non più contenitore cumulativo)
   - Spec: `docs/specs/pgn-import-per-lesson.md`
@@ -38,3 +40,10 @@ Badge notazione estesa: classificazione stile chess.com per ogni mossa
   - Spec: `docs/specs/TAURI-003-local-llm.md`
 
 ## Todo
+
+- [ ] Sommario AI in descrizione lezione (post-import PGN)
+  - Dopo import PGN, genera sommario partita via LLM e salvalo in `Lesson.description`
+  - Sommario: giocatori, risultato, fasi chiave (apertura/medio/final), momenti critici, esito
+  - Trigger: azione post-analisi Stockfish (insieme o dopo toggle AI commenti mosse)
+  - UI: mostra description come attualmente (nessuna modifica rendering)
+  - File attesi: `src/services/explainService.ts` o nuovo `src/services/lessonSummary.ts`, `src/pages/LessonDetailPage.tsx`
