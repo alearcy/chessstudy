@@ -759,11 +759,23 @@ export interface GameAnalysisArgs {
   keySwings: string[];
 }
 
-export async function analyzeGame(input: GameAnalysisArgs): Promise<string> {
+export interface GameAnalysisMoveComment {
+  index: number;
+  comment: string;
+}
+
+export interface GameAnalysisResult {
+  overview: string;
+  judgment: string;
+  moveComments: GameAnalysisMoveComment[];
+}
+
+export async function analyzeGame(input: GameAnalysisArgs): Promise<GameAnalysisResult> {
   const { invoke } = await import("@tauri-apps/api/core");
-  const result = await invoke<{ summary: string; details: string; severity: string }>(
-    "generate_game_analysis",
-    { args: input }
-  );
-  return result.details;
+  const result = await invoke<{
+    overview: string;
+    judgment: string;
+    moveComments: GameAnalysisMoveComment[];
+  }>("generate_game_analysis", { args: input });
+  return result;
 }

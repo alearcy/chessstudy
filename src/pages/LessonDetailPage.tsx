@@ -63,6 +63,41 @@ function sanToSquare(san: string, byBlack: boolean): string | null {
 const BOARD_WIDTH = 600;
 const SAVE_DEBOUNCE_MS = 800;
 
+/** Post-process LLM markdown: i link alle mosse non sono più voluti.
+ *  Converte residui `[mossa](#move-N)` → `mossa` (per testi salvati in precedenza). */
+function cleanGameAnalysisText(text: string): string {
+  return text.replace(/\[([^\]]*?)\]\(#move-\d+\)/g, (_full, content) => {
+    const words = content.trim().split(/\s+/);
+    return words[0] ?? "";
+  });
+}
+
+/** Blocco di commento AI per una mossa (markdown). */
+function MoveAiCommentBlock({
+  text,
+}: {
+  text: string;
+}) {
+  const cleaned = cleanGameAnalysisText(text);
+  return (
+    <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm leading-relaxed game-analysis-content">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 mb-1">AI</div>
+      <ReactMarkdown
+        components={{
+          p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          ul: ({ children }) => <ul className="list-disc pl-4 my-1">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-4 my-1">{children}</ol>,
+          li: ({ children }) => <li className="mb-0.5">{children}</li>,
+          em: ({ children }) => <em>{children}</em>,
+        }}
+      >
+        {cleaned}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 export default function LessonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -641,7 +676,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
         selectedBoard.blackName ?? "Nero"
       );
 
-      const text = await analyzeGame({
+      const result = await analyzeGame({
         whiteName: selectedBoard?.whiteName ?? null,
         blackName: selectedBoard?.blackName ?? null,
         result: selectedBoard?.headers?.["Result"] ?? null,
@@ -649,10 +684,34 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
         keySwings,
       });
 
-      setGameAnalysisText(text);
-      const cleaned = cleanGameAnalysisText(text);
-      await updateBoard(boardId, { gameAnalysis: cleaned });
-      syncBoardInList(boardId, { gameAnalysis: cleaned });
+      // Sommario: panoramica + giudizio concatenati (markdown).
+      const summaryMd = [result.overview, result.judgment]
+        .filter((s) => s.trim().length > 0)
+        .join("\n\n");
+      const cleanedSummary = cleanGameAnalysisText(summaryMd);
+      setGameAnalysisText(cleanedSummary);
+      await updateBoard(boardId, { gameAnalysis: cleanedSummary });
+      syncBoardInList(boardId, { gameAnalysis: cleanedSummary });
+
+      // Pulisci aiComment stale su tutte le mosse (rigenerazione).
+      for (const m of moveList) {
+        if (m.id != null && m.aiComment) {
+          await updateMove(m.id, { aiComment: null });
+          const idx = moveList.indexOf(m);
+          if (idx >= 0) chess.setMoveAiComment(idx, null);
+        }
+      }
+
+      // Distribuisci i commenti dei momenti chiave sulle mosse correlate.
+      for (const mc of result.moveComments) {
+        if (mc.index < 0 || mc.index >= moveList.length) continue;
+        const target = moveList[mc.index];
+        if (!target?.id) continue;
+        const cleaned = cleanGameAnalysisText(mc.comment);
+        if (!cleaned.trim()) continue;
+        await updateMove(target.id, { aiComment: cleaned });
+        chess.setMoveAiComment(mc.index, cleaned);
+      }
     } catch (e) {
       console.error("[game-analysis] errore", e);
     } finally {
@@ -671,17 +730,6 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
   }
 
   /** Post-process LLM markdown: extract commentary from inside move links so only the move is underlined. */
-  function cleanGameAnalysisText(text: string): string {
-    return text.replace(/\[([^\]]*?)\]\(#move-(\d+)\)/g, (_full, content, idx) => {
-      const trimmed = content.trim();
-      const words = trimmed.split(/\s+/);
-      if (words.length <= 1) return _full;
-      const move = words[0];
-      const rest = words.slice(1).join(" ");
-      return `[${move}](#move-${idx}) ${rest}`;
-    });
-  }
-
   /** Converte UCI ("e2e4") in SAN ("e4") usando la posizione FEN. */
   function uciToSan(fen: string, uci: string): string | null {
     try {
@@ -1052,28 +1100,6 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
               <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
                 <ReactMarkdown
                   components={{
-                    a: ({ href, children }) => {
-                      if (href?.startsWith("#move-")) {
-                        const idx = parseInt(href.slice(6), 10);
-                        if (Number.isNaN(idx)) return <span>{children}</span>;
-                        return (
-                          <button
-                            type="button"
-                            className="text-primary underline decoration-primary/50 hover:decoration-primary font-medium cursor-pointer transition-colors"
-                            onClick={() => {
-                              chess.goToMove(idx + 1);
-                            }}
-                          >
-                            {children}
-                          </button>
-                        );
-                      }
-                      return (
-                        <a href={href} target="_blank" rel="noopener noreferrer">
-                          {children}
-                        </a>
-                      );
-                    },
                     p: ({ children }) => (
                       <p className="mb-2 last:mb-0">{children}</p>
                     ),
@@ -1147,6 +1173,11 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                 </span>
               )}
             </div>
+            {chess.currentMove?.aiComment && (
+              <MoveAiCommentBlock
+                text={chess.currentMove.aiComment}
+              />
+            )}
           </aside>
         </div>
       ) : (
@@ -1281,28 +1312,6 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                         <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
                           <ReactMarkdown
                             components={{
-                              a: ({ href, children }) => {
-                                if (href?.startsWith("#move-")) {
-                                  const idx = parseInt(href.slice(6), 10);
-                                  if (Number.isNaN(idx)) return <span>{children}</span>;
-                                  return (
-                                    <button
-                                      type="button"
-                                      className="text-primary underline decoration-primary/50 hover:decoration-primary font-medium cursor-pointer transition-colors"
-                                      onClick={() => {
-                                        chess.goToMove(idx + 1);
-                                      }}
-                                    >
-                                      {children}
-                                    </button>
-                                  );
-                                }
-                                return (
-                                  <a href={href} target="_blank" rel="noopener noreferrer">
-                                    {children}
-                                  </a>
-                                );
-                              },
                               p: ({ children }) => (
                                 <p className="mb-2 last:mb-0">{children}</p>
                               ),
@@ -1362,6 +1371,11 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                           </span>
                         )}
                       </div>
+                      {chess.currentMove?.aiComment && (
+                        <MoveAiCommentBlock
+                          text={chess.currentMove.aiComment}
+                        />
+                      )}
                     </>
                   ) : (
                     <>

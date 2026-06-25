@@ -56,6 +56,8 @@ export interface Move {
   parentId: number | null;
   order: number;
   comment: string;
+  /** Commento didattico AI (analisi partita, momenti chiave). */
+  aiComment?: string | null;
   /** Frecce disegnate su questa posizione. */
   arrows: BoardArrow[];
   /** Case evidenziate su questa posizione. */
