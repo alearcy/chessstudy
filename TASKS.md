@@ -50,4 +50,4 @@
 
 ## Todo
 - [x] color the previous home in the chessboard, then remove the color after the next move. It aim to visualize the move and the home from the rhe pawn/piece come from. For example, if I move from e4 to e5, color e4. Then if I move from e5 to e6 uncolor e4 and color e5 and so on. (→ `docs/specs/last-move-origin-highlight.md`)
-- [ ] convert AI analysis template to a dark theme (deferred from AI comment refactor, see `docs/specs/ai-comment-refactor.md`)
+- [x] Tema dark app-wide (→ `docs/specs/dark-theme.md`)
