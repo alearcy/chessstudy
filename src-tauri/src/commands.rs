@@ -1,4 +1,4 @@
-use crate::commentary::{CommentaryInput, CommentaryResult, GameAnalysisInput, GameAnalysisMove};
+use crate::commentary::{CommentaryInput, CommentaryResult, GameAnalysisInput, GameAnalysisMove, GameAnalysisResult};
 use crate::llm::OpenRouterClient;
 use crate::settings::OpenRouterSettings;
 use crate::stockfish::{AnalysisResult, Engine as SfEngine};
@@ -238,7 +238,7 @@ pub struct GameAnalysisMoveArg {
 pub async fn generate_game_analysis(
     state: State<'_, AppState>,
     args: GameAnalysisArgs,
-) -> Result<CommentaryResult, String> {
+) -> Result<GameAnalysisResult, String> {
     let client = make_client(&state)?;
     let input = GameAnalysisInput {
         white_name: args.white_name.unwrap_or_else(|| "il Bianco".to_string()),
@@ -256,7 +256,8 @@ pub async fn generate_game_analysis(
         }).collect(),
         key_swings: args.key_swings,
     };
-    crate::commentary::analyze_game(&client, &input).await
+    crate::commentary::analyze_game(&client, &input)
+        .await
         .map_err(|e| format!("game analysis error: {}", e))
 }
 

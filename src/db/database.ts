@@ -87,4 +87,12 @@ db.version(8).stores({
   moves: "++id, boardId, parentId, order, createdAt",
 });
 
+// v9: aggiunto campo aiComment su Move (commento AI momento chiave).
+// Campo NON indicizzato → store invariato; bump di versione a documentazione.
+db.version(9).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+});
+
 export default db;

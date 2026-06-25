@@ -2,9 +2,14 @@
 
 ## In Progress
 
-- Evidenziazione casa di partenza dell'ultima mossa
-
 ## Completed
+
+- AI analysis comment refactor (→ `docs/specs/ai-comment-refactor.md`):
+  - keep only panoramica and giudizio in AI summary
+  - move "momento chiave" comments to related move in moves sidebar (below stockfish comment); suggested moves stay on main move
+  - remove move links from AI summary and move comments (LLM no longer emits markdown links)
+- Evidenziazione casa di partenza dell'ultima mossa
+  Spec: `docs/specs/last-move-origin-highlight.md`
 
 - [x] Badge notazione estesa: classificazione stile chess.com per ogni mossa
   - Spec: `docs/specs/move-badges-extended.md`
@@ -44,8 +49,5 @@
   - Spec: `docs/specs/TAURI-003-local-llm.md`
 
 ## Todo
-- [ ] color the previous home in the chessboard, then remove the color after the next move. It aim to visualize the move and the home from the rhe pawn/piece come from. For example, if I move from e4 to e5, color e4. Then if I move from e5 to e6 uncolor e4 and color e5 and so on.
-- [ ] AI analysis comment refactor:
-	- keep only panoramica and giudizio
-	- for each "momento chiave" move the comment to related move in the moves sidebar. For example if a comment is about d5, write this comment in the d5 move comment below the stockfish one. The suggested move doesn't be related move because are only a comment and so rely to the main move.
-	- convert template to a dark theme
+- [x] color the previous home in the chessboard, then remove the color after the next move. It aim to visualize the move and the home from the rhe pawn/piece come from. For example, if I move from e4 to e5, color e4. Then if I move from e5 to e6 uncolor e4 and color e5 and so on. (→ `docs/specs/last-move-origin-highlight.md`)
+- [ ] convert AI analysis template to a dark theme (deferred from AI comment refactor, see `docs/specs/ai-comment-refactor.md`)

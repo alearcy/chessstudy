@@ -115,6 +115,13 @@ export function useChessBoard(initialFen: string = START_FEN) {
     );
   }, []);
 
+  /** Aggiorna il commento AI di una mossa in memoria (dopo persistenza). */
+  const setMoveAiComment = useCallback((index: number, aiComment: string | null) => {
+    setMoves((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, aiComment } : m))
+    );
+  }, []);
+
   // --- Annotazioni (frecce / evidenziazioni) per la posizione corrente ---
 
   const currentArrows: BoardArrow[] =
@@ -214,6 +221,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
     makeMove,
     replaceMove,
     setMoveComment,
+    setMoveAiComment,
     setArrows,
     setHighlights,
     undo,

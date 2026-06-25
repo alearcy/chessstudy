@@ -156,30 +156,27 @@ TERZA PERSONA (obbligatorio):
 - Usa SEMPRE la terza persona con i nomi dei giocatori.
 - MAI dare del \"tu\": niente \"hai\", \"avresti\", \"la tua mossa\".
 
-FORMAZIONE LINK (obbligatorio):
-Quando citi una mossa giocata, usa SEMPRE un link markdown con l'indice esatto mostrato tra [IDX] nell'elenco mosse qui sotto.
-Esempio: `[Axf7](#move-5)` o `[e4](#move-0)`.
+CITAZIONE MOSSE:
+- Le mosse giocate vanno citate in notazione italiana, testo normale (NO link markdown, NO parentesi quadre). Esempio: Axf7, e4, 0-0.
+- Le mosse suggerite da Stockfish (NON giocate) vanno in *corsivo*: *Ac4*.
+- NON usare MAI link markdown per le mosse. NON usare la sintassi `[testo](#move-...)`.
 
-REGOLE LINK:
-- Le mosse giocate vanno SEMPRE come link markdown: `[mossa](#move-IDX)`.
-- In ogni link `[testo](#move-IDX)`, il testo DEVE contenere ESCLUSIVAMENTE la mossa in notazione italiana. Esempi corretti: `[e4](#move-0)`, `[Cxe5](#move-5)`, `[0-0](#move-10)`. Esempi SBAGLIATI: `[e4 — OTTIMA](#move-0)`, `[Cxe5 (Stockfish +0.3)](#move-5)`.
-- NON includere MAI commenti, valutazioni Stockfish, classificazioni, o qualsiasi altro testo oltre alla mossa pura all'interno delle parentesi quadre del link.
-- La classificazione (OTTIMA/BUONA/IMPRECISIONE/ERRORE/PESSATA), la valutazione Stockfish e i commenti vanno FUORI dal link, nel testo normale.
-- Le mosse suggerite da Stockfish (NON giocate) vanno in *corsivo* SENZA link: `*Ac4*`.
-- I link sono cliccabili e portano alla mossa sulla scacchiera.
-- NON linkare mai le mosse suggerite da Stockfish.
-- NON inventare indici: usa solo quelli forniti nell'elenco mosse.
+OUTPUT: un SOLO oggetto JSON valido (nessun testo fuori dal JSON). Schema:
 
-FORMATO OUTPUT (Markdown):
-Scrivi un testo in formato Markdown strutturato in paragrafi. Massimo 3000 caratteri, sii denso e sintetico:
+{
+  'panoramica': '<markdown: apertura, struttura pedonale, piani strategici>',
+  'giudizio': '<markdown: valutazione finale e lezioni da imparare>',
+  'momentiChiave': [
+    { 'indice': <int 0-based = [IDX] della mossa GIOCATa a cui si riferisce il commento>, 'commento': '<markdown: cosa è successo, perché, cosa si sarebbe dovuto giocare>' }
+  ]
+}
 
-1. PANORAMICA — apertura, struttura pedonale, piani strategici.
-
-2. MOMENTI CHIAVE — mosse decisive. Per ogni errore o occasione mancata: COSA è successo, PERCHÉ, COSA si sarebbe dovuto giocare. Usa link markdown per le mosse giocate, *corsivo* per i suggerimenti Stockfish.
-
-3. GIUDIZIO — valutazione finale e lezioni da imparare.
-
-Usa **grassetto** per concetti chiave e giocatori, - per elenchi puntati. NON elencare TUTTE le mosse: scegli solo quelle decisive.
+REGOLE momentiChiave:
+- Includi SOLO le mosse decisive (errori, occasioni mancate, svolte tattiche). NON elencare tutte le mosse.
+- `indice` DEVE essere un indice [IDX] presente nell'elenco mosse e DEVE riferirsi alla mossa GIOCATa.
+- Se il commento riguarda una mossa suggerita da Stockfish (NON giocata), il commento va comunque sulla mossa GIOCATa di quel turno (il suggerimento è un'alternativa, si commenta nel contesto della posizione).
+- Usa **grassetto** per concetti chiave e giocatori, - per elenchi puntati.
+- Sii denso e sintetico.
 
 DIVIETI ASSOLUTI:
 - NON aggiungere meta-commenti o spiegare come hai formulato la risposta.
@@ -188,8 +185,8 @@ DIVIETI ASSOLUTI:
 - NON usare il \"tu\" in nessuna forma.
 - NON usare notazione inglese (Nf3, Bxc6).
 - NON citare mosse suggerite da Stockfish senza *corsivo*.
-- NON usare link per mosse suggerite o non giocate.";
-
+- NON usare link markdown per le mosse.
+- NON produrre testo fuori dal JSON.";
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct GameAnalysisMove {
     pub move_number: u32,
@@ -211,20 +208,72 @@ pub struct GameAnalysisInput {
     pub key_swings: Vec<String>,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameAnalysisMoveComment {
+    pub index: u32,
+    pub comment: String,
+}
+
+/// Risultato strutturato dell'analisi partita.
+/// `overview` + `judgment` finiscono in `Board.gameAnalysis` (concatenati);
+/// `move_comments` vengono distribuiti sui `Move.aiComment` correlati.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameAnalysisResult {
+    pub overview: String,
+    pub judgment: String,
+    pub move_comments: Vec<GameAnalysisMoveComment>,
+}
+
 pub async fn analyze_game(
     client: &OpenRouterClient,
     input: &GameAnalysisInput,
-) -> Result<CommentaryResult> {
+) -> Result<GameAnalysisResult> {
     let user_prompt = build_game_analysis_prompt(input);
     log::info!("[commentary] invoking game analysis LLM ({} moves)", input.moves.len());
-    let response = client.prompt(GAME_ANALYSIS_SYSTEM_PROMPT, &user_prompt, 4000, 0.5).await?;
-    log::info!("[commentary] game analysis response: {} chars", response.len());
+    let value = client.prompt_json(GAME_ANALYSIS_SYSTEM_PROMPT, &user_prompt, 4000, 0.5).await?;
+    log::info!("[commentary] game analysis json parsed");
+    parse_game_analysis_json(&value)
+}
 
-    Ok(CommentaryResult {
-        summary: "Analisi della partita".to_string(),
-        details: response,
-        severity: "good".to_string(),
-    })
+/// Parsa il JSON restituito dal LLM in `GameAnalysisResult`.
+/// Tollerante sui tipi (es. indice come stringa) ma rigoroso sulle chiavi.
+fn parse_game_analysis_json(value: &serde_json::Value) -> Result<GameAnalysisResult> {
+    let overview = value
+        .get("panoramica")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let judgment = value
+        .get("giudizio")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    let mut move_comments = Vec::new();
+    if let Some(arr) = value.get("momentiChiave").and_then(|v| v.as_array()) {
+        for entry in arr {
+            let index = entry
+                .get("indice")
+                .and_then(|v| v.as_u64())
+                .or_else(|| entry.get("indice").and_then(|v| v.as_str()).and_then(|s| s.parse::<u64>().ok()))
+                .unwrap_or(0) as u32;
+            let comment = entry
+                .get("commento")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !comment.is_empty() {
+                move_comments.push(GameAnalysisMoveComment { index, comment });
+            }
+        }
+    }
+
+    Ok(GameAnalysisResult { overview, judgment, move_comments })
 }
 
 fn build_game_analysis_prompt(input: &GameAnalysisInput) -> String {
@@ -242,7 +291,7 @@ fn build_game_analysis_prompt(input: &GameAnalysisInput) -> String {
         p.push_str(&format!("Risultato: {} — {}\n", r, winner));
     }
     p.push_str("\nMosse (con analisi Stockfish):\n");
-    p.push_str("(Valutazione: + vantaggio Bianco, - vantaggio Nero. [IDX] = indice 0-based per link markdown)\n\n");
+    p.push_str("(Valutazione: + vantaggio Bianco, - vantaggio Nero. [IDX] = indice 0-based della mossa, per riferire il commento in momentiChiave)\n\n");
     for m in &input.moves {
         let best = m.best_san_italian.as_ref()
             .map(|b| format!(" → Stockfish suggeriva {}", b))
@@ -259,7 +308,7 @@ fn build_game_analysis_prompt(input: &GameAnalysisInput) -> String {
             p.push_str(&format!("- {}\n", s));
         }
     }
-    p.push_str("\nAnalizza la partita combinando la cronaca delle mosse (PGN) con l'analisi del motore Stockfish: dove Stockfish dice che una mossa è stata un errore, spiega perché, e indica la mossa alternativa suggerita dal motore. Evidenzia i momenti cruciali, gli errori e le occasioni mancate.");
+    p.push_str("\nProduci un oggetto JSON con chiavi 'panoramica', 'giudizio', 'momentiChiave'. Per ogni momento chiave, 'indice' è l'indice [IDX] della mossa giocata. Spiega dove Stockfish indica un errore, perché, e la mossa alternativa (in *corsivo*). Evidenzia i momenti cruciali, gli errori e le occasioni mancate.");
     p
 }
 
