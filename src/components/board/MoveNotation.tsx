@@ -12,6 +12,9 @@ interface MoveNotationProps {
   startEvalMate?: number | null;
   startFen?: string;
   startEvalBestMoveUci?: string | null;
+  /** Se true, il componente si estende in altezza riempiendo il contenitore
+   *  (scroll interno fluido invece del cap fisso a 520px). */
+  fullHeight?: boolean;
 }
 
 const WHITE_PIECES: Record<string, string> = {
@@ -68,6 +71,7 @@ export default function MoveNotation({
   startEvalMate = null,
   startFen,
   startEvalBestMoveUci = null,
+  fullHeight = false,
 }: MoveNotationProps) {
   const [useIcons, setUseIcons] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -160,8 +164,12 @@ export default function MoveNotation({
   }
 
   return (
-    <div className="border rounded-lg bg-card">
-      <div className="px-3 py-2 border-b bg-muted/50 flex items-center justify-between">
+    <div
+      className={`border rounded-lg bg-card ${
+        fullHeight ? "flex flex-col min-h-0 self-stretch" : ""
+      }`}
+    >
+      <div className="px-3 py-2 border-b bg-muted/50 flex items-center justify-between shrink-0">
         <h3 className="text-sm font-semibold">Mosse</h3>
         <button
           type="button"
@@ -172,7 +180,12 @@ export default function MoveNotation({
           {useIcons ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
         </button>
       </div>
-      <div ref={scrollRef} className="max-h-[520px] overflow-y-auto p-2">
+      <div
+        ref={scrollRef}
+        className={`${
+          fullHeight ? "flex-1 min-h-0" : "max-h-[520px]"
+        } overflow-y-auto p-2`}
+      >
         <table className="w-full text-base">
           <tbody>
             {pairs.map(({ moveNumber, white, black }) => (
