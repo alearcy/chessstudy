@@ -1047,7 +1047,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       </div>
 
       {lesson.mode === "analysis" && selectedBoard ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
           <div className="lg:col-span-2"><PgnHeadersSidebar headers={selectedBoard.headers ?? {}} /></div>
 
           <section className="lg:col-span-4 flex flex-col gap-4 items-center">
@@ -1130,17 +1130,8 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
             )}
           </section>
 
-          <aside className="lg:col-span-3 flex flex-col gap-3">
-            <MoveNotation
-              moves={chess.moves}
-              currentMoveIndex={chess.historyIndex}
-              onGoToMove={chess.goToMove}
-              startEvalCp={selectedBoard?.evalCp ?? null}
-              startEvalMate={selectedBoard?.evalMate ?? null}
-              startFen={selectedBoard.fen}
-              startEvalBestMoveUci={selectedBoard?.evalBestMoveUci ?? null}
-            />
-            <div className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap">
+          <aside className="lg:col-span-3 flex flex-col gap-3 min-h-0">
+            <div className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap shrink-0">
               {chess.currentMove ? (
                 moveCommentDraft.trim() ? (
                   (() => {
@@ -1178,6 +1169,16 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                 text={chess.currentMove.aiComment}
               />
             )}
+            <MoveNotation
+              moves={chess.moves}
+              currentMoveIndex={chess.historyIndex}
+              onGoToMove={chess.goToMove}
+              startEvalCp={selectedBoard?.evalCp ?? null}
+              startEvalMate={selectedBoard?.evalMate ?? null}
+              startFen={selectedBoard.fen}
+              startEvalBestMoveUci={selectedBoard?.evalBestMoveUci ?? null}
+              fullHeight
+            />
           </aside>
         </div>
       ) : (
