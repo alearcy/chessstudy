@@ -40,6 +40,8 @@ interface ChessBoardViewProps {
   gameAnalysisLoading?: boolean;
   /** Casa di destinazione dell'ultima mossa, per badge di classificazione. */
   lastMoveSquare?: Square | null;
+  /** Casa di partenza dell'ultima mossa, da evidenziare (giallo). */
+  lastMoveFromSquare?: Square | null;
   /** Badge di classificazione (??, ?, ?!) da mostrare sul pezzo mosso. */
   moveBadge?: { label: string; color: string } | null;
   /** Converte la scacchiera di analisi in una nuova lezione di studio. */
@@ -52,6 +54,7 @@ interface ChessBoardViewProps {
 }
 
 const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
+const LAST_MOVE_COLOR = "rgba(255, 213, 79, 0.55)";
 const ARROW_COLOR = "rgb(255,170,0)";
 
 const DEFAULT_BOARD_WIDTH = 560;
@@ -63,6 +66,7 @@ export default function ChessBoardView({
   highlights,
   extraArrows = [],
   lastMoveSquare = null,
+  lastMoveFromSquare = null,
   moveBadge = null,
   onArrowsChange,
   onHighlightsChange,
@@ -90,14 +94,18 @@ export default function ChessBoardView({
   const [mode, setMode] = useState<BoardMode>("move");
 
   const customSquareStyles = useMemo(
-    () =>
-      Object.fromEntries(
+    () => ({
+      ...(lastMoveFromSquare
+        ? { [lastMoveFromSquare]: { backgroundColor: LAST_MOVE_COLOR } }
+        : {}),
+      ...Object.fromEntries(
         highlights.map((square) => [
           square,
           { backgroundColor: HIGHLIGHT_COLOR },
         ])
       ),
-    [highlights]
+    }),
+    [highlights, lastMoveFromSquare]
   );
 
   // react-chessboard v5 vuole Arrow[] ({ startSquare, endSquare, color }).

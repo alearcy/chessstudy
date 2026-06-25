@@ -786,6 +786,23 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
     return sq as Square | null;
   }, [chess.historyIndex, chess.currentMove]);
 
+  // Casa di partenza (origin) dell'ultima mossa, per evidenziarla.
+  // Replay SAN sulla posizione precedente alla mossa corrente per ottenere `.from`.
+  const lastMoveFromSquare = useMemo((): Square | null => {
+    if (chess.historyIndex === 0) return null;
+    const move = chess.currentMove;
+    if (!move) return null;
+    const prevFen = chess.history[chess.historyIndex - 1];
+    if (!prevFen) return null;
+    try {
+      const replay = new Chess(prevFen);
+      const played = replay.move(move.moveNotation);
+      return (played?.from as Square | undefined) ?? null;
+    } catch {
+      return null;
+    }
+  }, [chess.historyIndex, chess.currentMove, chess.history]);
+
   const moveBadge = useMemo(() => {
     const i = chess.historyIndex - 1;
     if (i < 0) { return null; }
@@ -994,6 +1011,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                 highlights={chess.currentHighlights}
                 extraArrows={analysisArrow}
                 lastMoveSquare={lastMoveSquare}
+                lastMoveFromSquare={lastMoveFromSquare}
                 moveBadge={moveBadge}
                 onArrowsChange={handleArrowsChange}
                 onHighlightsChange={handleHighlightsChange}
@@ -1222,6 +1240,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                     highlights={chess.currentHighlights}
                     extraArrows={analysisArrow}
                     lastMoveSquare={lastMoveSquare}
+                    lastMoveFromSquare={lastMoveFromSquare}
                     moveBadge={moveBadge}
                     onArrowsChange={handleArrowsChange}
                     onHighlightsChange={handleHighlightsChange}

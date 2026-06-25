@@ -2,6 +2,7 @@
 
 ## In Progress
 
+- Evidenziazione casa di partenza dell'ultima mossa
 
 ## Completed
 
@@ -43,5 +44,8 @@
   - Spec: `docs/specs/TAURI-003-local-llm.md`
 
 ## Todo
-
-- [ ] Sommario AI in descrizione lezione (post-import PGN): breve riassunto della partita che deve stare dentro una 50ina di parole da mostrare sia nella card in homepage che dentro la partita sotto il titolo.
+- [ ] color the previous home in the chessboard, then remove the color after the next move. It aim to visualize the move and the home from the rhe pawn/piece come from. For example, if I move from e4 to e5, color e4. Then if I move from e5 to e6 uncolor e4 and color e5 and so on.
+- [ ] AI analysis comment refactor:
+	- keep only panoramica and giudizio
+	- for each "momento chiave" move the comment to related move in the moves sidebar. For example if a comment is about d5, write this comment in the d5 move comment below the stockfish one. The suggested move doesn't be related move because are only a comment and so rely to the main move.
+	- convert template to a dark theme
