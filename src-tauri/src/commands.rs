@@ -225,6 +225,7 @@ pub struct GameAnalysisArgs {
 #[serde(rename_all = "camelCase")]
 pub struct GameAnalysisMoveArg {
     pub move_number: u32,
+    pub index: u32,
     pub san: String,
     pub player: String,
     pub eval_before: String,
@@ -245,6 +246,7 @@ pub async fn generate_game_analysis(
         result: args.result,
         moves: args.moves.iter().map(|m| GameAnalysisMove {
             move_number: m.move_number,
+            index: m.index,
             san_italian: crate::commentary::san_to_italian_public(&m.san),
             player: m.player.clone(),
             eval_before: m.eval_before.clone(),

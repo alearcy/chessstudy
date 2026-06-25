@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Routes, Route } from "react-router-dom";
 import { Settings } from "lucide-react";
 import LessonsPage from "@/pages/LessonsPage";
 import LessonDetailPage from "@/pages/LessonDetailPage";
@@ -24,7 +24,7 @@ function App() {
     <HashRouter>
       <div className="min-h-screen bg-background text-foreground">
         <header className="border-b">
-          <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
+          <div className="px-6 py-4 flex items-center gap-3">
             <a href="/" className="text-xl font-bold tracking-tight">
               Chess Study
             </a>
@@ -39,7 +39,7 @@ function App() {
             </Button>
           </div>
         </header>
-        <main className="px-6 py-8">
+        <main className="px-4 py-4">
           <Routes>
             <Route path="/" element={<LessonsPage />} />
             <Route path="/lesson/:id" element={<LessonDetailPage />} />

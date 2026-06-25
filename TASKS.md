@@ -44,7 +44,4 @@
 
 ## Todo
 
-- [ ] Permetti a qualsiasi scacchiera, sia di analisi che di studio, di poter invertire la posizione dei bianchi e dei neri.
-- [ ] Ora ci sono solo badge per alcune classificazioni di stockfish. Vorrei che ci fossero sempre usando la notazione che si usa anche su chess.com Geniale (!!), Grande (!), Migliore (stella), Ottima (pollice in su), Buona (spunta di check), Mossa interessante/rischiosa (!?). Vanno aggiunte a quelle già esistenti.
-- [x] Sommario AI in descrizione lezione (post-import PGN)
-  - Spec: `docs/specs/lesson-ai-summary.md`
+- [ ] Sommario AI in descrizione lezione (post-import PGN): breve riassunto della partita che deve stare dentro una 50ina di parole da mostrare sia nella card in homepage che dentro la partita sotto il titolo.

@@ -1,15 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/deepseek/deepseek-v4-pro",
-"provider": {
-    "lmstudio": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": {
-        "baseURL": "http://localhost:1234/v1"
-      },
-      "models": {
-        "lmstudio-community/gemma-4-12B-it-MLX-4bit": {}
-      }
-    }
-  }
+  "model": "openrouter/deepseek/deepseek-v4-pro"
 }
