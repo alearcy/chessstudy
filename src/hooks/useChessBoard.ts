@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { Chess } from "chess.js";
-import type { Square } from "react-chessboard/dist/chessboard/types";
+import type { Square } from "chess.js";
 import type { BoardArrow, Move } from "@/types";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";

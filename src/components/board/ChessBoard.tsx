@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, useRef } from "react";
 import { Chessboard } from "react-chessboard";
-import type { Square, CustomSquareProps } from "react-chessboard/dist/chessboard/types";
-import type { Arrow } from "react-chessboard/dist/chessboard/types";
+import type { Arrow, SquareHandlerArgs } from "react-chessboard";
+import type { ReactNode } from "react";
+import type { Square } from "chess.js";
 import { Button } from "@/components/ui/button";
 import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain, Sparkles, Loader2, GraduationCap, ArrowUpDown } from "lucide-react";
 import type { BoardArrow } from "@/types";
@@ -51,6 +52,7 @@ interface ChessBoardViewProps {
 }
 
 const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
+const ARROW_COLOR = "rgb(255,170,0)";
 
 const DEFAULT_BOARD_WIDTH = 560;
 
@@ -87,26 +89,6 @@ export default function ChessBoardView({
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
 
-  const onPieceDrop = useCallback(
-    (sourceSquare: Square, targetSquare: Square) => {
-      if (mode !== "move") return false;
-      return onMove(sourceSquare, targetSquare);
-    },
-    [mode, onMove]
-  );
-
-  const onSquareClick = useCallback(
-    (square: Square) => {
-      if (mode !== "highlight") return;
-      onHighlightsChange(
-        highlights.includes(square)
-          ? highlights.filter((s) => s !== square)
-          : [...highlights, square]
-      );
-    },
-    [mode, highlights, onHighlightsChange]
-  );
-
   const customSquareStyles = useMemo(
     () =>
       Object.fromEntries(
@@ -118,26 +100,43 @@ export default function ChessBoardView({
     [highlights]
   );
 
-  // react-chessboard vuole Arrow[] ([Square, Square, string?]); il data layer
-  // usa BoardArrow ([string, string, string?]). Cast al confine.
+  // react-chessboard v5 vuole Arrow[] ({ startSquare, endSquare, color }).
+  // Il data layer usa BoardArrow ([string, string, string?]). Cast al confine.
   // Le extraArrows (analisi) sono merged solo per il display (read-only).
-  const controlledArrows = [...arrows, ...extraArrows] as Arrow[];
+  const controlledArrows: Arrow[] = useMemo(
+    () =>
+      [...arrows, ...extraArrows].map(([from, to, color]) => ({
+        startSquare: from,
+        endSquare: to,
+        color: color ?? ARROW_COLOR,
+      })),
+    [arrows, extraArrows]
+  );
 
   // Custom square: aggiunge badge di classificazione sul pezzo mosso.
   // Usiamo un ref per mantenere l'identity del componente stabile (evita
   // unmount/remount di tutte le case a ogni cambio di posizione).
   const badgeDataRef = useRef({ square: lastMoveSquare, badge: moveBadge });
   badgeDataRef.current = { square: lastMoveSquare, badge: moveBadge };
+  const squareStylesRef = useRef(customSquareStyles);
+  squareStylesRef.current = customSquareStyles;
 
   const emojiLabels = new Set(["⭐", "✅"]);
 
   const CustomSquare = useCallback(
-    ({ children, ref, square, squareColor: _squareColor, style }: CustomSquareProps) => {
+    ({ square, children }: SquareHandlerArgs & { children?: ReactNode }) => {
       const { square: badgeSquare, badge } = badgeDataRef.current;
       const showBadge = square === badgeSquare && badge;
       const isEmoji = badge ? emojiLabels.has(badge.label) : false;
       return (
-        <div ref={ref} style={{ ...style, position: "relative" }}>
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            position: "relative",
+            ...squareStylesRef.current[square],
+          }}
+        >
           {children}
           {showBadge && (
             <span
@@ -165,10 +164,35 @@ export default function ChessBoardView({
   );
 
   const handleArrowsChange = useCallback(
-    (next: Arrow[]) => {
-      onArrowsChange(next as BoardArrow[]);
+    ({ arrows: next }: { arrows: Arrow[] }) => {
+      onArrowsChange(
+        next.map(
+          (a) =>
+            [a.startSquare, a.endSquare, a.color] as BoardArrow
+        )
+      );
     },
     [onArrowsChange]
+  );
+
+  const handlePieceDrop = useCallback(
+    ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
+      if (mode !== "move" || !targetSquare) return false;
+      return onMove(sourceSquare as Square, targetSquare as Square);
+    },
+    [mode, onMove]
+  );
+
+  const handleSquareClick = useCallback(
+    ({ square }: SquareHandlerArgs) => {
+      if (mode !== "highlight") return;
+      onHighlightsChange(
+        highlights.includes(square)
+          ? highlights.filter((s) => s !== square)
+          : [...highlights, square]
+      );
+    },
+    [mode, highlights, onHighlightsChange]
   );
 
   return (
@@ -332,26 +356,27 @@ export default function ChessBoardView({
         </div>
       )}
 
-      {/* react-chessboard v4 ha un wrapper interno `width:100%` con board a larghezza
-          fissa: senza questo contenitore il board verrebbe allineato a sinistra
-          rispetto al container (e quindi anche rispetto a toolbar e note). */}
-      <div style={{ width: boardWidth }} className="flex justify-center">
+      {/* react-chessboard v5 ha board `width:100% height:100%`: il contenitore
+          fissa larghezza e aspect-ratio 1:1, altrimenti il grid collassa. */}
+      <div
+        style={{ width: boardWidth, aspectRatio: "1 / 1" }}
+        className="flex justify-center"
+      >
         <Chessboard
-          id="lesson-chessboard"
-          position={fen}
-          boardWidth={boardWidth}
-          boardOrientation={boardOrientation}
-          arePiecesDraggable={mode === "move"}
-          areArrowsAllowed={mode === "arrow"}
-          customArrows={controlledArrows}
-          customArrowColor="rgb(255,170,0)"
-          customSquare={CustomSquare}
-          onArrowsChange={handleArrowsChange}
-          customSquareStyles={customSquareStyles}
-          onPieceDrop={onPieceDrop}
-          onSquareClick={onSquareClick}
-          animationDuration={200}
-          autoPromoteToQueen
+          options={{
+            id: "lesson-chessboard",
+            position: fen,
+            boardOrientation,
+            allowDragging: lessonMode === "analysis" ? false : mode === "move",
+            allowDrawingArrows: mode === "arrow",
+            arrows: controlledArrows,
+            squareStyles: customSquareStyles,
+            squareRenderer: CustomSquare,
+            onArrowsChange: handleArrowsChange,
+            onPieceDrop: handlePieceDrop,
+            onSquareClick: handleSquareClick,
+            animationDurationInMs: 200,
+          }}
         />
       </div>
 

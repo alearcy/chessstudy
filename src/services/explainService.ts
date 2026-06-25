@@ -81,8 +81,6 @@ function classifySeverity(cpLoss: number | null, isBestMove?: boolean): Severity
   if (cpLoss < 300) return "mistake";
   return "blunder";
 }
-  return "blunder";
-}
 
 // ============================================================================
 // Detection tattica
@@ -421,7 +419,6 @@ function playerLabel(playedBy: "w" | "b", whiteName: string | null | undefined, 
   if (playedBy === "w") return whiteName || "il Bianco";
   return blackName || "il Nero";
 }
-}
 
 // ============================================================================
 // Generatore principale
@@ -567,7 +564,6 @@ details.push(`Piccola imprecisione di ${player}: ${formatCpLoss(cpLoss)} di svan
       }
       for (const t of tactics.slice(0, 2)) details.push(`• ${t.description}`);
       break;
-    }
     case "best":
 details.push(`${player} ha giocato la mossa esattamente corrispondente alla prima scelta di Stockfish.`);
       for (const t of tactics.slice(0, 3)) details.push(`• ${t.description}`);
@@ -752,6 +748,7 @@ export interface GameAnalysisArgs {
   result: string | null;
   moves: Array<{
     moveNumber: number;
+    index: number;
     san: string;
     player: string;
     evalBefore: string;
@@ -769,5 +766,4 @@ export async function analyzeGame(input: GameAnalysisArgs): Promise<string> {
     { args: input }
   );
   return result.details;
-}
 }

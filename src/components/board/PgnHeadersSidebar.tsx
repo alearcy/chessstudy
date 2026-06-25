@@ -76,7 +76,7 @@ export default function PgnHeadersSidebar({ headers }: PgnHeadersSidebarProps) {
     });
 
   return (
-    <aside className="w-full lg:w-56 shrink-0">
+    <aside className="w-full">
       <h2 className="text-sm font-semibold mb-2">Dettagli partita</h2>
       {entries.length === 0 ? (
         <p className="text-xs text-muted-foreground">

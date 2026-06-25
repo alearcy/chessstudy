@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Plus, Pencil, Trash2, Upload } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, Microscope } from "lucide-react";
 import {
   getAllLessons,
   createLesson,
@@ -196,7 +196,7 @@ export default function LessonsPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Lezioni</h1>
       </div>
@@ -255,7 +255,14 @@ export default function LessonsPage() {
             >
               <CardHeader className="flex flex-row items-start justify-between pb-2">
                 <div>
-                  <CardTitle>{lesson.title}</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    {lesson.mode === "study" ? (
+                      <BookOpen className="size-4 text-blue-500 shrink-0" />
+                    ) : (
+                      <Microscope className="size-4 text-orange-500 shrink-0" />
+                    )}
+                    {lesson.title}
+                  </CardTitle>
                   {lesson.description && (
                     <CardDescription className="mt-1 line-clamp-2">
                       {lesson.description}

@@ -156,12 +156,26 @@ TERZA PERSONA (obbligatorio):
 - Usa SEMPRE la terza persona con i nomi dei giocatori.
 - MAI dare del \"tu\": niente \"hai\", \"avresti\", \"la tua mossa\".
 
+FORMAZIONE LINK (obbligatorio):
+Quando citi una mossa giocata, usa SEMPRE un link markdown con l'indice esatto mostrato tra [IDX] nell'elenco mosse qui sotto.
+Esempio: `[Axf7](#move-5)` o `[e4](#move-0)`.
+
+REGOLE LINK:
+- Le mosse giocate vanno SEMPRE come link markdown: `[mossa](#move-IDX)`.
+- In ogni link `[testo](#move-IDX)`, il testo DEVE contenere ESCLUSIVAMENTE la mossa in notazione italiana. Esempi corretti: `[e4](#move-0)`, `[Cxe5](#move-5)`, `[0-0](#move-10)`. Esempi SBAGLIATI: `[e4 — OTTIMA](#move-0)`, `[Cxe5 (Stockfish +0.3)](#move-5)`.
+- NON includere MAI commenti, valutazioni Stockfish, classificazioni, o qualsiasi altro testo oltre alla mossa pura all'interno delle parentesi quadre del link.
+- La classificazione (OTTIMA/BUONA/IMPRECISIONE/ERRORE/PESSATA), la valutazione Stockfish e i commenti vanno FUORI dal link, nel testo normale.
+- Le mosse suggerite da Stockfish (NON giocate) vanno in *corsivo* SENZA link: `*Ac4*`.
+- I link sono cliccabili e portano alla mossa sulla scacchiera.
+- NON linkare mai le mosse suggerite da Stockfish.
+- NON inventare indici: usa solo quelli forniti nell'elenco mosse.
+
 FORMATO OUTPUT (Markdown):
 Scrivi un testo in formato Markdown strutturato in paragrafi. Massimo 3000 caratteri, sii denso e sintetico:
 
 1. PANORAMICA — apertura, struttura pedonale, piani strategici.
 
-2. MOMENTI CHIAVE — mosse decisive. Per ogni errore o occasione mancata: COSA è successo, PERCHÉ, COSA si sarebbe dovuto giocare. Cita la notazione delle mosse giocate tra virgolette (es. \"Axf7\"). Per le mosse suggerite da Stockfish (NON giocate), scrivile in *corsivo* (es. *Ac4*, *De7*).
+2. MOMENTI CHIAVE — mosse decisive. Per ogni errore o occasione mancata: COSA è successo, PERCHÉ, COSA si sarebbe dovuto giocare. Usa link markdown per le mosse giocate, *corsivo* per i suggerimenti Stockfish.
 
 3. GIUDIZIO — valutazione finale e lezioni da imparare.
 
@@ -173,11 +187,13 @@ DIVIETI ASSOLUTI:
 - NON essere prolisso: sii denso e informativo.
 - NON usare il \"tu\" in nessuna forma.
 - NON usare notazione inglese (Nf3, Bxc6).
-- NON citare mosse suggerite da Stockfish senza avvolgerle in *corsivo*.";
+- NON citare mosse suggerite da Stockfish senza *corsivo*.
+- NON usare link per mosse suggerite o non giocate.";
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct GameAnalysisMove {
     pub move_number: u32,
+    pub index: u32,
     pub san_italian: String,
     pub player: String,
     pub eval_before: String,
@@ -226,14 +242,14 @@ fn build_game_analysis_prompt(input: &GameAnalysisInput) -> String {
         p.push_str(&format!("Risultato: {} — {}\n", r, winner));
     }
     p.push_str("\nMosse (con analisi Stockfish):\n");
-    p.push_str("(Valutazione: + vantaggio Bianco, - vantaggio Nero. Mossa Stockfish = cosa avrebbe giocato il motore)\n\n");
+    p.push_str("(Valutazione: + vantaggio Bianco, - vantaggio Nero. [IDX] = indice 0-based per link markdown)\n\n");
     for m in &input.moves {
         let best = m.best_san_italian.as_ref()
             .map(|b| format!(" → Stockfish suggeriva {}", b))
             .unwrap_or_default();
         p.push_str(&format!(
-            "{}. {}: {} ({}→{}) {}{}\n",
-            m.move_number, m.player, m.san_italian,
+            "[{}] {}. {}: {} ({}→{}) {}{}\n",
+            m.index, m.move_number, m.player, m.san_italian,
             m.eval_before, m.eval_after, m.classification, best
         ));
     }
