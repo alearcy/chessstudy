@@ -60,7 +60,6 @@ function sanToSquare(san: string, byBlack: boolean): string | null {
   return dest.slice(-2);
 }
 
-const BOARD_WIDTH = 600;
 const SAVE_DEBOUNCE_MS = 800;
 
 /** Post-process LLM markdown: i link alle mosse non sono più voluti.
@@ -1110,14 +1109,13 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       </div>
 
       {lesson.mode === "analysis" && selectedBoard ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-          <div className="lg:col-span-2"><PgnHeadersSidebar headers={selectedBoard.headers ?? {}} /></div>
+        <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-[12rem_minmax(30rem,42rem)_minmax(14rem,0.8fr)_20rem] 2xl:grid-cols-[13rem_minmax(34rem,46rem)_minmax(16rem,0.85fr)_22rem] xl:justify-center">
+          <div><PgnHeadersSidebar headers={selectedBoard.headers ?? {}} /></div>
 
-          <section className="lg:col-span-4 flex flex-col gap-4 items-center">
+          <section className="flex min-w-0 flex-col gap-4 items-center">
             <div className="w-full">
               <ChessBoardView
                 fen={chess.fen}
-                boardWidth={BOARD_WIDTH}
                 arrows={chess.currentArrows}
                 highlights={chess.currentHighlights}
                 extraArrows={analysisArrow}
@@ -1150,7 +1148,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
               />
             </div>
             {(currentEvalCp != null || currentEvalMate != null) && (
-              <div className="w-full max-w-[480px] flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="w-full flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="font-mono tabular-nums">
                   Valutazione: <span className="text-foreground font-semibold">{formatEval(currentEvalCp, currentEvalMate)}</span>
                 </span>
@@ -1159,7 +1157,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
             )}
           </section>
 
-          <section className="lg:col-span-3 flex flex-col gap-3">
+          <section className="flex min-w-0 flex-col gap-3">
             {gameAnalysisText ? (
               <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
                 <ReactMarkdown
@@ -1194,7 +1192,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
             )}
           </section>
 
-          <aside className="lg:col-span-3 flex flex-col gap-3 min-h-0">
+          <aside className="flex min-h-0 min-w-0 flex-col gap-3">
             <div className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap shrink-0">
               {chess.currentMove ? (
                 moveCommentDraft.trim() ? (
@@ -1246,9 +1244,15 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
           </aside>
         </div>
       ) : (
-        <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+        <div
+          className={
+            lesson.mode === "study"
+              ? "grid grid-cols-1 gap-4 items-start lg:grid-cols-[14rem_minmax(24rem,38rem)_22rem] xl:grid-cols-[14rem_minmax(26rem,40rem)_24rem] lg:justify-center"
+              : "grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(24rem,40rem)_24rem] lg:justify-center"
+          }
+        >
           {lesson.mode === "study" && (
-          <aside className="w-full lg:w-56 shrink-0">
+          <aside className="w-full">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold">Scacchiere</h2>
               <div className="flex items-center gap-0.5">
@@ -1325,13 +1329,12 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
           </aside>
           )}
 
-          <section className="flex-1 min-w-0 flex flex-col gap-4 items-center">
+          <section className="min-w-0 flex flex-col gap-4 items-center">
             {selectedBoard ? (
               <>
                 <div className="w-full">
                   <ChessBoardView
                     fen={chess.fen}
-                    boardWidth={BOARD_WIDTH}
                     arrows={chess.currentArrows}
                     highlights={chess.currentHighlights}
                     extraArrows={analysisArrow}
@@ -1364,14 +1367,14 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                   />
                 </div>
                 {(currentEvalCp != null || currentEvalMate != null) && (
-                  <div className="w-full max-w-[480px] flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="w-full flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="font-mono tabular-nums">
                       Valutazione: <span className="text-foreground font-semibold">{formatEval(currentEvalCp, currentEvalMate)}</span>
                     </span>
                     <span className="text-xs">(profondità {currentEvalDepth})</span>
                   </div>
                 )}
-                <div className="w-full max-w-[480px] flex flex-col gap-3">
+                <div className="w-full flex flex-col gap-3">
                   {lesson.mode === "analysis" ? (
                     <>
                       {gameAnalysisText && (
@@ -1517,7 +1520,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
             )}
           </section>
 
-          <aside className="w-full lg:w-96 shrink-0">
+          <aside className="w-full min-w-0">
             {selectedBoard ? (
               <MoveNotation
                 moves={chess.moves}

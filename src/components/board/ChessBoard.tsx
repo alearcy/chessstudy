@@ -4,14 +4,26 @@ import type { Arrow, SquareHandlerArgs } from "react-chessboard";
 import type { ReactNode } from "react";
 import type { Square } from "chess.js";
 import { Button } from "@/components/ui/button";
-import { Hand, MousePointer2, Highlighter, Undo2, Redo2, RotateCcw, X, Brain, Sparkles, Loader2, GraduationCap, ArrowUpDown } from "lucide-react";
+import {
+  Hand,
+  MousePointer2,
+  Highlighter,
+  Undo2,
+  Redo2,
+  RotateCcw,
+  X,
+  Brain,
+  Sparkles,
+  Loader2,
+  GraduationCap,
+  ArrowUpDown,
+} from "lucide-react";
 import type { BoardArrow } from "@/types";
 
 type BoardMode = "move" | "arrow" | "highlight";
 
 interface ChessBoardViewProps {
   fen: string;
-  boardWidth?: number;
   arrows: BoardArrow[];
   highlights: string[];
   /** Frecce read-only aggiuntive (es. miglior mossa Stockfish), non persistite. */
@@ -60,11 +72,8 @@ const LAST_MOVE_COLOR = "rgba(255, 213, 79, 0.55)";
 const CHECK_COLOR = "rgba(239, 68, 68, 0.65)";
 const ARROW_COLOR = "rgb(255,170,0)";
 
-const DEFAULT_BOARD_WIDTH = 560;
-
 export default function ChessBoardView({
   fen,
-  boardWidth = DEFAULT_BOARD_WIDTH,
   arrows,
   highlights,
   extraArrows = [],
@@ -106,13 +115,13 @@ export default function ChessBoardView({
         highlights.map((square) => [
           square,
           { backgroundColor: HIGHLIGHT_COLOR },
-        ])
+        ]),
       ),
       ...(kingStatus
         ? { [kingStatus.square]: { backgroundColor: CHECK_COLOR } }
         : {}),
     }),
-    [highlights, lastMoveFromSquare, kingStatus]
+    [highlights, lastMoveFromSquare, kingStatus],
   );
 
   // react-chessboard v5 vuole Arrow[] ({ startSquare, endSquare, color }).
@@ -125,7 +134,7 @@ export default function ChessBoardView({
         endSquare: to,
         color: color ?? ARROW_COLOR,
       })),
-    [arrows, extraArrows]
+    [arrows, extraArrows],
   );
 
   // Custom square: aggiunge badge di classificazione sul pezzo mosso.
@@ -192,27 +201,30 @@ export default function ChessBoardView({
         </div>
       );
     },
-    [emojiLabels]
+    [emojiLabels],
   );
 
   const handleArrowsChange = useCallback(
     ({ arrows: next }: { arrows: Arrow[] }) => {
       onArrowsChange(
-        next.map(
-          (a) =>
-            [a.startSquare, a.endSquare, a.color] as BoardArrow
-        )
+        next.map((a) => [a.startSquare, a.endSquare, a.color] as BoardArrow),
       );
     },
-    [onArrowsChange]
+    [onArrowsChange],
   );
 
   const handlePieceDrop = useCallback(
-    ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
+    ({
+      sourceSquare,
+      targetSquare,
+    }: {
+      sourceSquare: string;
+      targetSquare: string | null;
+    }) => {
       if (mode !== "move" || !targetSquare) return false;
       return onMove(sourceSquare as Square, targetSquare as Square);
     },
-    [mode, onMove]
+    [mode, onMove],
   );
 
   const handleSquareClick = useCallback(
@@ -221,10 +233,10 @@ export default function ChessBoardView({
       onHighlightsChange(
         highlights.includes(square)
           ? highlights.filter((s) => s !== square)
-          : [...highlights, square]
+          : [...highlights, square],
       );
     },
-    [mode, highlights, onHighlightsChange]
+    [mode, highlights, onHighlightsChange],
   );
 
   return (
@@ -388,28 +400,28 @@ export default function ChessBoardView({
         </div>
       )}
 
-      {/* react-chessboard v5 ha board `width:100% height:100%`: il contenitore
-          fissa larghezza e aspect-ratio 1:1, altrimenti il grid collassa. */}
-      <div
-        style={{ width: boardWidth, aspectRatio: "1 / 1" }}
-        className="flex justify-center"
-      >
-        <Chessboard
-          options={{
-            id: "lesson-chessboard",
-            position: fen,
-            boardOrientation,
-            allowDragging: lessonMode === "analysis" ? false : mode === "move",
-            allowDrawingArrows: mode === "arrow",
-            arrows: controlledArrows,
-            squareStyles: customSquareStyles,
-            squareRenderer: CustomSquare,
-            onArrowsChange: handleArrowsChange,
-            onPieceDrop: handlePieceDrop,
-            onSquareClick: handleSquareClick,
-            animationDurationInMs: 200,
-          }}
-        />
+      {/* react-chessboard v5 riempie il parent (`width:100% height:100%`):
+          il layout chiamante decide la larghezza disponibile. */}
+      <div className="flex w-full justify-center">
+        <div className="aspect-square w-full">
+          <Chessboard
+            options={{
+              id: "lesson-chessboard",
+              position: fen,
+              boardOrientation,
+              allowDragging:
+                lessonMode === "analysis" ? false : mode === "move",
+              allowDrawingArrows: mode === "arrow",
+              arrows: controlledArrows,
+              squareStyles: customSquareStyles,
+              squareRenderer: CustomSquare,
+              onArrowsChange: handleArrowsChange,
+              onPieceDrop: handlePieceDrop,
+              onSquareClick: handleSquareClick,
+              animationDurationInMs: 200,
+            }}
+          />
+        </div>
       </div>
 
       {lessonMode !== "analysis" && mode === "arrow" && (
