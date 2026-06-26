@@ -44,6 +44,8 @@ interface ChessBoardViewProps {
   lastMoveFromSquare?: Square | null;
   /** Badge di classificazione (??, ?, ?!) da mostrare sul pezzo mosso. */
   moveBadge?: { label: string; color: string } | null;
+  /** Re sotto scacco nella posizione corrente. */
+  kingStatus?: { square: Square; checkmate: boolean } | null;
   /** Converte la scacchiera di analisi in una nuova lezione di studio. */
   onConvertToStudy?: () => void;
   converting?: boolean;
@@ -55,6 +57,7 @@ interface ChessBoardViewProps {
 
 const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
 const LAST_MOVE_COLOR = "rgba(255, 213, 79, 0.55)";
+const CHECK_COLOR = "rgba(239, 68, 68, 0.65)";
 const ARROW_COLOR = "rgb(255,170,0)";
 
 const DEFAULT_BOARD_WIDTH = 560;
@@ -68,6 +71,7 @@ export default function ChessBoardView({
   lastMoveSquare = null,
   lastMoveFromSquare = null,
   moveBadge = null,
+  kingStatus = null,
   onArrowsChange,
   onHighlightsChange,
   onClearArrows,
@@ -104,8 +108,11 @@ export default function ChessBoardView({
           { backgroundColor: HIGHLIGHT_COLOR },
         ])
       ),
+      ...(kingStatus
+        ? { [kingStatus.square]: { backgroundColor: CHECK_COLOR } }
+        : {}),
     }),
-    [highlights, lastMoveFromSquare]
+    [highlights, lastMoveFromSquare, kingStatus]
   );
 
   // react-chessboard v5 vuole Arrow[] ({ startSquare, endSquare, color }).
@@ -126,15 +133,21 @@ export default function ChessBoardView({
   // unmount/remount di tutte le case a ogni cambio di posizione).
   const badgeDataRef = useRef({ square: lastMoveSquare, badge: moveBadge });
   badgeDataRef.current = { square: lastMoveSquare, badge: moveBadge };
+  const kingStatusRef = useRef(kingStatus);
+  kingStatusRef.current = kingStatus;
   const squareStylesRef = useRef(customSquareStyles);
   squareStylesRef.current = customSquareStyles;
 
-  const emojiLabels = new Set(["⭐", "✅"]);
+  const emojiLabels = useMemo(() => new Set(["⭐", "✅", "☠️"]), []);
 
   const CustomSquare = useCallback(
     ({ square, children }: SquareHandlerArgs & { children?: ReactNode }) => {
       const { square: badgeSquare, badge } = badgeDataRef.current;
+      const checkmateSquare = kingStatusRef.current?.checkmate
+        ? kingStatusRef.current.square
+        : null;
       const showBadge = square === badgeSquare && badge;
+      const showCheckmateBadge = square === checkmateSquare;
       const isEmoji = badge ? emojiLabels.has(badge.label) : false;
       return (
         <div
@@ -165,10 +178,21 @@ export default function ChessBoardView({
               {badge!.label}
             </span>
           )}
+          {showCheckmateBadge && (
+            <span
+              className="absolute top-0 right-0 text-[16px] leading-none mt-0.5 mr-0.5"
+              style={{
+                zIndex: 11,
+                textShadow: "0 0 3px rgba(0,0,0,0.7)",
+              }}
+            >
+              ☠️
+            </span>
+          )}
         </div>
       );
     },
-    []
+    [emojiLabels]
   );
 
   const handleArrowsChange = useCallback(

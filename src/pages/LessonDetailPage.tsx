@@ -83,6 +83,30 @@ function isTextEditingTarget(target: EventTarget | null): boolean {
   );
 }
 
+function getKingStatus(fen: string): { square: Square; checkmate: boolean } | null {
+  try {
+    const position = new Chess(fen);
+    if (!position.isCheck()) return null;
+    const checkedColor = position.turn();
+    const board = position.board();
+
+    for (const row of board) {
+      for (const piece of row) {
+        if (piece?.type === "k" && piece.color === checkedColor) {
+          return {
+            square: piece.square as Square,
+            checkmate: position.isCheckmate(),
+          };
+        }
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 /** Blocco di commento AI per una mossa (markdown). */
 function MoveAiCommentBlock({
   text,
@@ -885,6 +909,11 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
     }
   }, [chess.historyIndex, chess.currentMove, chess.history]);
 
+  const kingStatus = useMemo(
+    () => getKingStatus(chess.fen),
+    [chess.fen]
+  );
+
   const moveBadge = useMemo(() => {
     const i = chess.historyIndex - 1;
     if (i < 0) { return null; }
@@ -1095,6 +1124,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                 lastMoveSquare={lastMoveSquare}
                 lastMoveFromSquare={lastMoveFromSquare}
                 moveBadge={moveBadge}
+                kingStatus={kingStatus}
                 onArrowsChange={handleArrowsChange}
                 onHighlightsChange={handleHighlightsChange}
                 onClearArrows={handleClearArrows}
@@ -1308,6 +1338,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                     lastMoveSquare={lastMoveSquare}
                     lastMoveFromSquare={lastMoveFromSquare}
                     moveBadge={moveBadge}
+                    kingStatus={kingStatus}
                     onArrowsChange={handleArrowsChange}
                     onHighlightsChange={handleHighlightsChange}
                     onClearArrows={handleClearArrows}

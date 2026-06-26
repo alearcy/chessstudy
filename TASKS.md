@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Evidenziazione re sotto scacco e matto
+
 - [x] Navigazione mosse con frecce tastiera
   - Spec: `docs/specs/keyboard-move-navigation.md`
 
@@ -54,4 +56,3 @@
 - [x] Tema dark app-wide (→ `docs/specs/dark-theme.md`)
 
 ## Todo
-- [ ] Quando c'è uno scacco la casella del re deve essere evidenziata in rosso. Quando avviene uno scacco matto la casella del re deve essere evidenziata in rosso e una emoticon con il teschio deve apparire come badge.
