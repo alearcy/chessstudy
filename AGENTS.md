@@ -28,3 +28,6 @@ React **19** (not 18), React Router **v7** (not v6), Tailwind CSS **v4** via `@t
 - Auto-imports/linting of unused symbols will fail the build — keep imports clean.
 - Database: Dexie (IndexedDB wrapper). No backend — all data lives in the browser.
 - App locale is Italian (`lang="it"` in index.html).
+
+## Instructions
+- Read only the adr directory when you have to make decisions about architecture or design. Open only the doc that has the title that matches the current topic.

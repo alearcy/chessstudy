@@ -72,6 +72,17 @@ function cleanGameAnalysisText(text: string): string {
   });
 }
 
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select"
+  );
+}
+
 /** Blocco di commento AI per una mossa (markdown). */
 function MoveAiCommentBlock({
   text,
@@ -211,6 +222,29 @@ const selectedBoard = useMemo(
       setNoteTab("board");
     }
   }, [chess.historyIndex, noteTab]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isTextEditingTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        chess.undo();
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        chess.redo();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [chess.undo, chess.redo]);
 
   const loadData = useCallback(async () => {
     const [loadedLesson, loadedBoards] = await Promise.all([
