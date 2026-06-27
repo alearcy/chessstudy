@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Persistenza mosse affidabile
+
 - Evidenziazione re sotto scacco e matto
 
 - [x] Navigazione mosse con frecce tastiera
@@ -56,3 +58,18 @@
 - [x] Tema dark app-wide (→ `docs/specs/dark-theme.md`)
 
 ## Todo
+
+- [ ] Migrazioni DB conservative
+  - Evitare migrazioni distruttive su dati utente; prevedere backup/export o migrazione lossless.
+- [ ] Coda Stockfish e concorrenza analisi
+  - Rendere sicura la gestione di analisi concorrenti evitando listener condivisi sovrascritti.
+- [ ] Error handling visibile per operazioni critiche
+  - Mostrare errori e retry per DB, Stockfish e AI invece di usare solo console.
+- [ ] Configurare ESLint flat config
+  - Rendere `npm run lint` eseguibile con React, TypeScript e hooks.
+- [ ] Scomporre LessonDetailPage
+  - Estrarre hook e componenti da `LessonDetailPage.tsx` per ridurre complessita e coupling.
+- [ ] Aggiungere test minimi
+  - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
+- [ ] Ridurre bundle iniziale
+  - Introdurre lazy loading/code splitting per moduli pesanti: chessboard, markdown, PGN, AI/Stockfish.

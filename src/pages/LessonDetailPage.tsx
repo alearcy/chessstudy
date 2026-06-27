@@ -160,6 +160,8 @@ export default function LessonDetailPage() {
     done: number;
     total: number;
   } | null>(null);
+  const [movePersistencePending, setMovePersistencePending] = useState(false);
+  const [movePersistenceError, setMovePersistenceError] = useState<string | null>(null);
   const analysisSignalRef = useRef<{ cancelled: boolean } | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
@@ -171,6 +173,11 @@ export default function LessonDetailPage() {
   const moveCommentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedCommentRef = useRef<string>("");
   const commentMoveIdRef = useRef<number | null>(null);
+  const persistedMoveIdsByOrderRef = useRef<Map<number, number>>(new Map());
+  const movePersistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const movePersistencePendingRef = useRef(false);
+  const selectedBoardIdRef = useRef<number | null>(selectedBoardId);
+  selectedBoardIdRef.current = selectedBoardId;
 
 const selectedBoard = useMemo(
     () => boards.find((b) => b.id === selectedBoardId) ?? null,
@@ -185,6 +192,9 @@ const selectedBoard = useMemo(
     if (initializedRef.current === null || initializedRef.current !== selectedBoard.id) {
       initializedRef.current = selectedBoard.id ?? null;
       getMovesByBoard(selectedBoard.id!).then((loadedMoves) => {
+        persistedMoveIdsByOrderRef.current = new Map(
+          loadedMoves.flatMap((m) => (m.id == null ? [] : [[m.order, m.id]]))
+        );
         chess.loadSequence(
           selectedBoard.fen,
           loadedMoves,
@@ -207,6 +217,7 @@ const selectedBoard = useMemo(
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
+    setMovePersistenceError(null);
     if (moveCommentTimerRef.current) {
       clearTimeout(moveCommentTimerRef.current);
       moveCommentTimerRef.current = null;
@@ -473,17 +484,48 @@ const selectedBoard = useMemo(
     []
   );
 
+  const reloadBoardFromDb = useCallback(
+    async (boardId: number) => {
+      const [freshBoard, freshMoves] = await Promise.all([
+        getBoard(boardId),
+        getMovesByBoard(boardId),
+      ]);
+      if (!freshBoard) return;
+      persistedMoveIdsByOrderRef.current = new Map(
+        freshMoves.flatMap((m) => (m.id == null ? [] : [[m.order, m.id]]))
+      );
+      syncBoardInList(boardId, freshBoard);
+      chess.loadSequence(
+        freshBoard.fen,
+        freshMoves,
+        freshBoard.arrows ?? [],
+        freshBoard.highlights ?? []
+      );
+    },
+    [chess.loadSequence, syncBoardInList]
+  );
+
   const handleMove = useCallback(
     (from: Square, to: Square): boolean => {
+      if (movePersistencePendingRef.current) return false;
       const result = chess.makeMove(from, to);
       if (!result || !selectedBoardId) return !!result;
       const boardId = selectedBoardId;
+      const moveIdsByOrder = new Map(persistedMoveIdsByOrderRef.current);
+      for (const order of moveIdsByOrder.keys()) {
+        if (order >= result.newMoveIndex) {
+          moveIdsByOrder.delete(order);
+        }
+      }
       const parentId =
         result.newMoveIndex > 0
-          ? (chess.moves[result.newMoveIndex - 1]?.id ?? null)
+          ? (moveIdsByOrder.get(result.newMoveIndex - 1) ?? null)
           : null;
-      // Persistenza async (fire-and-forget): lo stato in memoria è già aggiornato.
-      void (async () => {
+      movePersistencePendingRef.current = true;
+      setMovePersistencePending(true);
+      setMovePersistenceError(null);
+
+      movePersistenceQueueRef.current = movePersistenceQueueRef.current.then(async () => {
         // Tronca eventuali mosse future (UI lineare).
         await deleteMovesFromOrder(boardId, result.newMoveIndex);
         const id = await createMove({
@@ -496,7 +538,8 @@ const selectedBoard = useMemo(
           arrows: [],
           highlights: [],
         });
-        chess.replaceMove(result.newMoveIndex, {
+        moveIdsByOrder.set(result.newMoveIndex, id);
+        const persistedMove: Move = {
           id,
           boardId,
           parentId,
@@ -507,11 +550,26 @@ const selectedBoard = useMemo(
           arrows: [],
           highlights: [],
           createdAt: new Date(),
-        });
-      })();
+        };
+        if (selectedBoardIdRef.current === boardId) {
+          persistedMoveIdsByOrderRef.current = moveIdsByOrder;
+          chess.replaceMove(result.newMoveIndex, persistedMove);
+        }
+      }).catch((e) => {
+        console.error("[move-persistence] errore", e);
+        setMovePersistenceError(
+          "Salvataggio mossa fallito. La scacchiera e stata ricaricata dai dati salvati."
+        );
+        if (selectedBoardIdRef.current === boardId) {
+          void reloadBoardFromDb(boardId);
+        }
+      }).finally(() => {
+        movePersistencePendingRef.current = false;
+        setMovePersistencePending(false);
+      });
       return true;
     },
-    [chess, selectedBoardId]
+    [chess, reloadBoardFromDb, selectedBoardId]
   );
 
   const handleEdit = () => {
@@ -1044,6 +1102,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
   const confirmReset = async () => {
     if (!selectedBoard || !selectedBoardId) return;
     await deleteMovesByBoard(selectedBoardId);
+    persistedMoveIdsByOrderRef.current = new Map();
     chess.reset(selectedBoard.fen);
     setResetOpen(false);
   };
@@ -1107,6 +1166,18 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
           )}
         </div>
       </div>
+
+      {(movePersistencePending || movePersistenceError) && (
+        <div
+          className={`mb-4 rounded-md border px-3 py-2 text-sm ${
+            movePersistenceError
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-input bg-muted/50 text-muted-foreground"
+          }`}
+        >
+          {movePersistenceError ?? "Salvataggio mossa..."}
+        </div>
+      )}
 
       {lesson.mode === "analysis" && selectedBoard ? (
         <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-[12rem_minmax(30rem,42rem)_minmax(14rem,0.8fr)_20rem] 2xl:grid-cols-[13rem_minmax(34rem,46rem)_minmax(16rem,0.85fr)_22rem] xl:justify-center">

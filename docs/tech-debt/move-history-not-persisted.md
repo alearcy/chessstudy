@@ -50,17 +50,11 @@ nella sidebar). La storia mosse di ciascuna scacchiera resta **lineare**.
   dopodiché si ridisegnano quelle volute. Le evidenziazioni (gestite nello
   stato nostro) supportano invece il toggle singolo (click per
   aggiungere/rimuovere) e non hanno bisogno di un pulsante di azzeramento.
-- **parentId con mosse veloci**: in `handleMove`, il `parentId` della nuova
-  mossa viene letto da `chess.moves[newMoveIndex - 1]?.id`. Se la mossa
-  precedente è ancora un placeholder non persistito (id `undefined`, perché
-  `createMove` è async e l'utente fa mosse molto veloci), `parentId` risulta
-  `null`. Impatto: niente per la UI lineare (usa `order`), niente per le
-  varianti (sono scacchiere separate). Mitigare solo se in futuro si volesse
-  usare l'albero per altri scopi; altrimenti si può rimuovere il campo.
-  - **Risolto parzialmente via FEAT-004 (import PGN)**: `importPgnToLesson`
-    usa `db.moves.bulkAdd` e calcola `parentId` dagli id restituiti dal bulk,
-    garantendo parentId sempre corretto per il path di import. La UI manuale
-    (mosse veloci) resta soggetta alla race; non blocca FEAT-004.
+- **parentId con mosse veloci**: risolto in
+  `docs/specs/persistenza-mosse-affidabile.md`. La UI manuale ora blocca nuove
+  mosse durante la scrittura pendente, serializza la persistenza e calcola
+  `parentId` da una mappa `order -> moveId` aggiornata solo dopo `createMove`.
+  In caso di errore, mostra un messaggio e ricarica la board dal DB.
 - **Reset alla partenza**: `reset` riporta alla posizione di partenza
   (`Board.fen`). Non c'è ancora modo di impostare una partenza custom
   diversa dal FEN standard (se non modificando il DB).
