@@ -27,6 +27,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
+import ErrorNotice from "@/components/ErrorNotice";
 
 const emptyForm: LessonFormData = { title: "", description: "" };
 
@@ -43,19 +44,28 @@ function LessonFormDialog({
 }) {
   const [form, setForm] = useState<LessonFormData>(initial);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const isEditing = (initial as Lesson & { id?: number }).id !== undefined;
 
   useEffect(() => {
     setForm(initial);
+    setError(null);
   }, [initial, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim()) return;
     setSaving(true);
-    await onSave(form);
-    setSaving(false);
-    onOpenChange(false);
+    setError(null);
+    try {
+      await onSave(form);
+      onOpenChange(false);
+    } catch (e) {
+      console.error("[lesson-form] errore", e);
+      setError("Salvataggio lezione fallito. Riprova.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -72,6 +82,12 @@ function LessonFormDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <ErrorNotice
+              message={error}
+              onDismiss={() => setError(null)}
+            />
+          )}
           <div className="flex flex-col gap-2">
             <label htmlFor="title" className="text-sm font-medium">
               Titolo
@@ -121,6 +137,7 @@ function DeleteConfirmDialog({
   onConfirm: () => Promise<void>;
 }) {
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -132,6 +149,12 @@ function DeleteConfirmDialog({
             associate verranno rimosse. L&apos;operazione non è reversibile.
           </DialogDescription>
         </DialogHeader>
+        {error && (
+          <ErrorNotice
+            message={error}
+            onDismiss={() => setError(null)}
+          />
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Annulla
@@ -141,9 +164,16 @@ function DeleteConfirmDialog({
             disabled={deleting}
             onClick={async () => {
               setDeleting(true);
-              await onConfirm();
-              setDeleting(false);
-              onOpenChange(false);
+              setError(null);
+              try {
+                await onConfirm();
+                onOpenChange(false);
+              } catch (e) {
+                console.error("[lesson-delete] errore", e);
+                setError("Eliminazione lezione fallita. Riprova.");
+              } finally {
+                setDeleting(false);
+              }
             }}
           >
             {deleting ? "Eliminazione..." : "Elimina"}
@@ -161,9 +191,16 @@ export default function LessonsPage() {
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [deletingLesson, setDeletingLesson] = useState<Lesson | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   const loadLessons = useCallback(async () => {
-    setLessons(await getAllLessons());
+    try {
+      setPageError(null);
+      setLessons(await getAllLessons());
+    } catch (e) {
+      console.error("[lessons-load] errore", e);
+      setPageError("Impossibile caricare le lezioni.");
+    }
   }, []);
 
   useEffect(() => {
@@ -200,6 +237,16 @@ export default function LessonsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Lezioni</h1>
       </div>
+
+      {pageError && (
+        <div className="mb-4">
+          <ErrorNotice
+            message={pageError}
+            onRetry={loadLessons}
+            onDismiss={() => setPageError(null)}
+          />
+        </div>
+      )}
 
       {/* Azioni principali */}
       <div className="grid grid-cols-2 gap-4 mb-8">

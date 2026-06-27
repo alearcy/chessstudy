@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Error handling visibile per operazioni critiche
+
 - Coda Stockfish e concorrenza analisi
 
 - Migrazioni DB conservative
@@ -63,8 +65,6 @@
 
 ## Todo
 
-- [ ] Error handling visibile per operazioni critiche
-  - Mostrare errori e retry per DB, Stockfish e AI invece di usare solo console.
 - [ ] Configurare ESLint flat config
   - Rendere `npm run lint` eseguibile con React, TypeScript e hooks.
 - [ ] Scomporre LessonDetailPage

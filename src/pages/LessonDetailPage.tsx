@@ -36,6 +36,7 @@ import ChessBoardView from "@/components/board/ChessBoard";
 import MoveNotation from "@/components/board/MoveNotation";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
+import ErrorNotice from "@/components/ErrorNotice";
 import {
   analyzePositions,
   uciToArrow,
@@ -162,6 +163,10 @@ export default function LessonDetailPage() {
   } | null>(null);
   const [movePersistencePending, setMovePersistencePending] = useState(false);
   const [movePersistenceError, setMovePersistenceError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [gameAnalysisError, setGameAnalysisError] = useState<string | null>(null);
   const analysisSignalRef = useRef<{ cancelled: boolean } | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
@@ -191,17 +196,22 @@ const selectedBoard = useMemo(
     // Forza il reload se initializedRef.current è null (ad esempio dopo PGN import)
     if (initializedRef.current === null || initializedRef.current !== selectedBoard.id) {
       initializedRef.current = selectedBoard.id ?? null;
-      getMovesByBoard(selectedBoard.id!).then((loadedMoves) => {
-        persistedMoveIdsByOrderRef.current = new Map(
-          loadedMoves.flatMap((m) => (m.id == null ? [] : [[m.order, m.id]]))
-        );
-        chess.loadSequence(
-          selectedBoard.fen,
-          loadedMoves,
-          selectedBoard.arrows,
-          selectedBoard.highlights
-        );
-      });
+      getMovesByBoard(selectedBoard.id!)
+        .then((loadedMoves) => {
+          persistedMoveIdsByOrderRef.current = new Map(
+            loadedMoves.flatMap((m) => (m.id == null ? [] : [[m.order, m.id]]))
+          );
+          chess.loadSequence(
+            selectedBoard.fen,
+            loadedMoves,
+            selectedBoard.arrows,
+            selectedBoard.highlights
+          );
+        })
+        .catch((e) => {
+          console.error("[moves-load] errore", e);
+          setActionError("Impossibile caricare le mosse della scacchiera.");
+        });
     }
   }, [selectedBoard, chess.loadSequence]);
 
@@ -281,22 +291,29 @@ const selectedBoard = useMemo(
   }, [chess.undo, chess.redo]);
 
   const loadData = useCallback(async () => {
-    const [loadedLesson, loadedBoards] = await Promise.all([
-      getLesson(lessonId),
-      getBoardsByLesson(lessonId),
-    ]);
-    if (!loadedLesson) {
-      navigate("/", { replace: true });
-      return;
+    setPageError(null);
+    try {
+      const [loadedLesson, loadedBoards] = await Promise.all([
+        getLesson(lessonId),
+        getBoardsByLesson(lessonId),
+      ]);
+      if (!loadedLesson) {
+        navigate("/", { replace: true });
+        return;
+      }
+      setLesson(loadedLesson);
+      setBoards(loadedBoards);
+      // Mantiene la selezione se valida, altrimenti seleziona la prima.
+      setSelectedBoardId((prev) => {
+        if (prev != null && loadedBoards.some((b) => b.id === prev)) return prev;
+        return loadedBoards[0]?.id ?? null;
+      });
+    } catch (e) {
+      console.error("[lesson-load] errore", e);
+      setPageError("Impossibile caricare la lezione.");
+    } finally {
+      setLoading(false);
     }
-    setLesson(loadedLesson);
-    setBoards(loadedBoards);
-    setLoading(false);
-    // Mantiene la selezione se valida, altrimenti seleziona la prima.
-    setSelectedBoardId((prev) => {
-      if (prev != null && loadedBoards.some((b) => b.id === prev)) return prev;
-      return loadedBoards[0]?.id ?? null;
-    });
   }, [lessonId, navigate]);
 
   useEffect(() => {
@@ -332,8 +349,14 @@ const selectedBoard = useMemo(
   const saveNotes = useCallback(
     async (next: string) => {
       if (!selectedBoardId || next === lastSavedRef.current) return;
-      lastSavedRef.current = next;
-      await updateBoard(selectedBoardId, { notes: next });
+      try {
+        await updateBoard(selectedBoardId, { notes: next });
+        lastSavedRef.current = next;
+        setActionError(null);
+      } catch (e) {
+        console.error("[board-notes-save] errore", e);
+        setActionError("Salvataggio note scacchiera fallito.");
+      }
     },
     [selectedBoardId]
   );
@@ -363,8 +386,14 @@ const selectedBoard = useMemo(
   const saveMoveComment = useCallback(
     async (moveId: number | null, next: string) => {
       if (moveId == null || next === lastSavedCommentRef.current) return;
-      lastSavedCommentRef.current = next;
-      await updateMove(moveId, { comment: next });
+      try {
+        await updateMove(moveId, { comment: next });
+        lastSavedCommentRef.current = next;
+        setActionError(null);
+      } catch (e) {
+        console.error("[move-comment-save] errore", e);
+        setActionError("Salvataggio commento mossa fallito.");
+      }
     },
     []
   );
@@ -417,7 +446,10 @@ const selectedBoard = useMemo(
   ) => {
     if (!selectedBoardId) return;
     if (chess.historyIndex === 0) {
-      void updateBoard(selectedBoardId, { arrows, highlights });
+      void updateBoard(selectedBoardId, { arrows, highlights }).catch((e) => {
+        console.error("[board-annotations-save] errore", e);
+        setActionError("Salvataggio annotazioni fallito.");
+      });
       // Mantiene lo stato boards allineato (per il caricamento successivo).
       syncBoardInList(selectedBoardId, { arrows, highlights });
     } else {
@@ -428,7 +460,10 @@ const selectedBoard = useMemo(
         pendingAnnotationsRef.current = { arrows, highlights };
         return;
       }
-      void updateMove(moveId, { arrows, highlights });
+      void updateMove(moveId, { arrows, highlights }).catch((e) => {
+        console.error("[move-annotations-save] errore", e);
+        setActionError("Salvataggio annotazioni fallito.");
+      });
     }
   };
 
@@ -438,7 +473,10 @@ const selectedBoard = useMemo(
     if (moveId != null && pendingAnnotationsRef.current) {
       const { arrows, highlights } = pendingAnnotationsRef.current;
       pendingAnnotationsRef.current = null;
-      void updateMove(moveId, { arrows, highlights });
+      void updateMove(moveId, { arrows, highlights }).catch((e) => {
+        console.error("[pending-annotations-save] errore", e);
+        setActionError("Salvataggio annotazioni fallito.");
+      });
     }
   }, [chess.currentMove?.id]);
 
@@ -582,31 +620,53 @@ const selectedBoard = useMemo(
     e.preventDefault();
     if (!form.title.trim()) return;
     setSaving(true);
-    await updateLesson(lessonId, form);
-    await loadData();
-    setSaving(false);
-    setEditOpen(false);
+    setActionError(null);
+    try {
+      await updateLesson(lessonId, form);
+      await loadData();
+      setEditOpen(false);
+    } catch (e) {
+      console.error("[lesson-save] errore", e);
+      setActionError("Salvataggio lezione fallito.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
-    await deleteLesson(lessonId);
-    navigate("/", { replace: true });
+    try {
+      await deleteLesson(lessonId);
+      navigate("/", { replace: true });
+    } catch (e) {
+      console.error("[lesson-delete] errore", e);
+      setActionError("Eliminazione lezione fallita.");
+    }
   };
 
   const handleCreateBoard = async () => {
-    const boardId = await createBoard(lessonId);
-    await loadData();
-    setSelectedBoardId(boardId);
+    try {
+      const boardId = await createBoard(lessonId);
+      await loadData();
+      setSelectedBoardId(boardId);
+    } catch (e) {
+      console.error("[board-create] errore", e);
+      setActionError("Creazione scacchiera fallita.");
+    }
   };
 
   const handleImportPgn = async (boardId: number) => {
-    await loadData();
-    // Forza il ricaricamento della sequenza anche se la board era già selezionata.
-    initializedRef.current = null;
-    setSelectedBoardId(boardId);
-    
-    // Reset auto-analysis flag to ensure it runs after import
-    autoAnalysisDoneRef.current = false;
+    try {
+      await loadData();
+      // Forza il ricaricamento della sequenza anche se la board era già selezionata.
+      initializedRef.current = null;
+      setSelectedBoardId(boardId);
+
+      // Reset auto-analysis flag to ensure it runs after import
+      autoAnalysisDoneRef.current = false;
+    } catch (e) {
+      console.error("[pgn-import-refresh] errore", e);
+      setActionError("Import completato, ma aggiornamento lezione fallito.");
+    }
   };
 
   // --- Helper: genera commenti rule-based per tutte le mosse ---
@@ -672,6 +732,7 @@ const selectedBoard = useMemo(
     const signal = { cancelled: false };
     analysisSignalRef.current = signal;
     setAnalyzing(true);
+    setAnalysisError(null);
     setAnalysisProgress({ done: 0, total: fens.length });
     try {
       const evals: PositionEval[] = await analyzePositions(fens, {
@@ -723,6 +784,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       }
     } catch (e) {
       console.error("[analyze] errore", e);
+      setAnalysisError("Analisi Stockfish fallita. Controlla il motore e riprova.");
     } finally {
       setAnalyzing(false);
       setAnalysisProgress(null);
@@ -737,6 +799,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
 
     const startFen = selectedBoard.fen;
     setGameAnalysisLoading(true);
+    setGameAnalysisError(null);
 
     // Yield to event loop so React renders the loading overlay before
     // the synchronous prep work and the async LLM call.
@@ -829,6 +892,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       }
     } catch (e) {
       console.error("[game-analysis] errore", e);
+      setGameAnalysisError("Analisi AI fallita. Verifica API key e connessione.");
     } finally {
       setGameAnalysisLoading(false);
     }
@@ -1040,9 +1104,15 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
   const handleSaveBoardTitle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editBoardId || !editBoardTitle.trim()) return;
-    await updateBoard(editBoardId, { title: editBoardTitle.trim() });
-    syncBoardInList(editBoardId, { title: editBoardTitle.trim() });
-    setEditBoardOpen(false);
+    try {
+      await updateBoard(editBoardId, { title: editBoardTitle.trim() });
+      syncBoardInList(editBoardId, { title: editBoardTitle.trim() });
+      setEditBoardOpen(false);
+      setActionError(null);
+    } catch (e) {
+      console.error("[board-title-save] errore", e);
+      setActionError("Rinomina scacchiera fallita.");
+    }
   };
 
   const [converting, setConverting] = useState(false);
@@ -1057,6 +1127,10 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       const moves = await getMovesByBoard(selectedBoard.id);
       const newLessonId = await convertAnalysisToStudy(lesson, selectedBoard, moves);
       navigate(`/lesson/${newLessonId}`);
+      setActionError(null);
+    } catch (e) {
+      console.error("[analysis-convert] errore", e);
+      setActionError("Conversione in lezione studio fallita.");
     } finally {
       setConverting(false);
     }
@@ -1073,13 +1147,19 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
     const boardId = deleteBoardId;
     setDeleteBoardOpen(false);
     setDeleteBoardId(null);
-    await deleteBoard(boardId);
-    // Ricarica e ricalcola la selezione.
-    const updatedBoards = await getBoardsByLesson(lessonId);
-    setBoards(updatedBoards);
-    if (selectedBoardId === boardId) {
-      setSelectedBoardId(updatedBoards[0]?.id ?? null);
-      initializedRef.current = null;
+    try {
+      await deleteBoard(boardId);
+      // Ricarica e ricalcola la selezione.
+      const updatedBoards = await getBoardsByLesson(lessonId);
+      setBoards(updatedBoards);
+      if (selectedBoardId === boardId) {
+        setSelectedBoardId(updatedBoards[0]?.id ?? null);
+        initializedRef.current = null;
+      }
+      setActionError(null);
+    } catch (e) {
+      console.error("[board-delete] errore", e);
+      setActionError("Eliminazione scacchiera fallita.");
     }
   };
 
@@ -1101,10 +1181,16 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
 
   const confirmReset = async () => {
     if (!selectedBoard || !selectedBoardId) return;
-    await deleteMovesByBoard(selectedBoardId);
-    persistedMoveIdsByOrderRef.current = new Map();
-    chess.reset(selectedBoard.fen);
-    setResetOpen(false);
+    try {
+      await deleteMovesByBoard(selectedBoardId);
+      persistedMoveIdsByOrderRef.current = new Map();
+      chess.reset(selectedBoard.fen);
+      setResetOpen(false);
+      setActionError(null);
+    } catch (e) {
+      console.error("[board-reset] errore", e);
+      setActionError("Ripristino scacchiera fallito.");
+    }
   };
 
   if (loading) {
@@ -1115,7 +1201,26 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
     );
   }
 
-  if (!lesson) return null;
+  if (!lesson) {
+    return pageError ? (
+      <div className="w-full">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-3"
+          onClick={() => navigate("/")}
+        >
+          <ArrowLeft className="size-4" />
+          <span className="ml-1">Lezioni</span>
+        </Button>
+        <ErrorNotice
+          message={pageError}
+          onRetry={loadData}
+          onDismiss={() => setPageError(null)}
+        />
+      </div>
+    ) : null;
+  }
 
   return (
     <div className="w-full">
@@ -1165,6 +1270,38 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
             </p>
           )}
         </div>
+      </div>
+
+      <div className="mb-4 flex flex-col gap-2">
+        {pageError && (
+          <ErrorNotice
+            message={pageError}
+            onRetry={loadData}
+            onDismiss={() => setPageError(null)}
+          />
+        )}
+        {actionError && (
+          <ErrorNotice
+            message={actionError}
+            onDismiss={() => setActionError(null)}
+          />
+        )}
+        {analysisError && (
+          <ErrorNotice
+            title="Stockfish"
+            message={analysisError}
+            onRetry={handleAnalyze}
+            onDismiss={() => setAnalysisError(null)}
+          />
+        )}
+        {gameAnalysisError && (
+          <ErrorNotice
+            title="AI"
+            message={gameAnalysisError}
+            onRetry={handleGameAnalysis}
+            onDismiss={() => setGameAnalysisError(null)}
+          />
+        )}
       </div>
 
       {(movePersistencePending || movePersistenceError) && (
