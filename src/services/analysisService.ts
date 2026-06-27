@@ -37,6 +37,7 @@ class StockfishEngine {
   private worker: Worker;
   private listener: LineListener | null = null;
   private readyPromise: Promise<void>;
+  private analysisTail: Promise<void> = Promise.resolve();
 
   constructor() {
     this.worker = new Worker(ENGINE_URL);
@@ -76,6 +77,17 @@ class StockfishEngine {
 
   /** Analizza una singola posizione a profondità fissa. */
   analyze(fen: string, depth: number): Promise<PositionEval> {
+    const run = this.analysisTail
+      .then(() => this.readyPromise)
+      .then(() => this.analyzeNow(fen, depth));
+    this.analysisTail = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
+
+  private analyzeNow(fen: string, depth: number): Promise<PositionEval> {
     return new Promise<PositionEval>((resolve) => {
       let bestCp: number | null = null;
       let bestMate: number | null = null;
@@ -142,6 +154,16 @@ export interface AnalyzeOptions {
   signal?: { cancelled: boolean };
 }
 
+interface AnalysisQueueJob {
+  fens: string[];
+  options: AnalyzeOptions;
+  resolve: (value: PositionEval[]) => void;
+  reject: (reason?: unknown) => void;
+}
+
+const analysisQueue: AnalysisQueueJob[] = [];
+let analysisQueueRunning = false;
+
 /**
  * Analizza una sequenza di posizioni (FEN) in ordine. Risolve con gli eval
  * (POV Bianco). Interruzione cooperativa via `signal.cancelled`.
@@ -153,6 +175,49 @@ export interface AnalyzeOptions {
 export async function analyzePositions(
   fens: string[],
   options: AnalyzeOptions = {}
+): Promise<PositionEval[]> {
+  return enqueueAnalysis(fens, options);
+}
+
+function enqueueAnalysis(
+  fens: string[],
+  options: AnalyzeOptions
+): Promise<PositionEval[]> {
+  return new Promise<PositionEval[]>((resolve, reject) => {
+    analysisQueue.push({ fens, options, resolve, reject });
+    void runAnalysisQueue();
+  });
+}
+
+async function runAnalysisQueue(): Promise<void> {
+  if (analysisQueueRunning) return;
+  analysisQueueRunning = true;
+
+  try {
+    while (analysisQueue.length > 0) {
+      const job = analysisQueue.shift();
+      if (!job) continue;
+
+      try {
+        if (job.options.signal?.cancelled) {
+          job.resolve([]);
+          continue;
+        }
+        const result = await analyzePositionsNow(job.fens, job.options);
+        job.resolve(result);
+      } catch (error) {
+        job.reject(error);
+      }
+    }
+  } finally {
+    analysisQueueRunning = false;
+    if (analysisQueue.length > 0) void runAnalysisQueue();
+  }
+}
+
+async function analyzePositionsNow(
+  fens: string[],
+  options: AnalyzeOptions
 ): Promise<PositionEval[]> {
   if (isTauri()) {
     return analyzePositionsNative(fens, options);

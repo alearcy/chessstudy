@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Coda Stockfish e concorrenza analisi
+
 - Migrazioni DB conservative
 
 - Persistenza mosse affidabile
@@ -61,8 +63,6 @@
 
 ## Todo
 
-- [ ] Coda Stockfish e concorrenza analisi
-  - Rendere sicura la gestione di analisi concorrenti evitando listener condivisi sovrascritti.
 - [ ] Error handling visibile per operazioni critiche
   - Mostrare errori e retry per DB, Stockfish e AI invece di usare solo console.
 - [ ] Configurare ESLint flat config
