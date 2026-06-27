@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Configurare ESLint flat config
+
 - Error handling visibile per operazioni critiche
 
 - Coda Stockfish e concorrenza analisi
@@ -65,8 +67,6 @@
 
 ## Todo
 
-- [ ] Configurare ESLint flat config
-  - Rendere `npm run lint` eseguibile con React, TypeScript e hooks.
 - [ ] Scomporre LessonDetailPage
   - Estrarre hook e componenti da `LessonDetailPage.tsx` per ridurre complessita e coupling.
 - [ ] Aggiungere test minimi
