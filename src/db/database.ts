@@ -1,5 +1,54 @@
-import Dexie, { type EntityTable } from "dexie";
+import Dexie, { type EntityTable, type Transaction } from "dexie";
 import type { Lesson, Board, Move } from "@/types";
+
+type MigrationLesson = Partial<Lesson> & { id?: number };
+type MigrationBoard = Partial<Board> & { id?: number; lessonId?: number };
+
+function splitLessonTitle(lesson: MigrationLesson, board: MigrationBoard): string {
+  const lessonTitle = lesson.title?.trim() || "Analisi";
+  const boardTitle = board.title?.trim();
+  return boardTitle && boardTitle !== lessonTitle
+    ? `${lessonTitle} - ${boardTitle}`
+    : lessonTitle;
+}
+
+async function splitCumulativeAnalysisLessons(tx: Transaction): Promise<void> {
+  const lessons = tx.table("lessons");
+  const boards = tx.table("boards");
+  const analysisLessons = (await lessons
+    .where("mode")
+    .equals("analysis")
+    .toArray()) as MigrationLesson[];
+
+  for (const lesson of analysisLessons) {
+    if (lesson.id == null) continue;
+
+    const lessonBoards = (await boards
+      .where("lessonId")
+      .equals(lesson.id)
+      .sortBy("order")) as MigrationBoard[];
+
+    if (lessonBoards.length === 0) continue;
+
+    const firstBoard = lessonBoards[0];
+    if (firstBoard.id != null && firstBoard.order !== 0) {
+      await boards.update(firstBoard.id, { order: 0 });
+    }
+
+    for (const board of lessonBoards.slice(1)) {
+      if (board.id == null) continue;
+
+      const nextLesson = { ...lesson };
+      delete nextLesson.id;
+      nextLesson.title = splitLessonTitle(lesson, board);
+      nextLesson.mode = "analysis";
+      nextLesson.createdAt = board.createdAt ?? lesson.createdAt ?? new Date();
+
+      const newLessonId = (await lessons.add(nextLesson)) as number;
+      await boards.update(board.id, { lessonId: newLessonId, order: 0 });
+    }
+  }
+}
 
 const db = new Dexie("ChessStudyDB") as Dexie & {
   lessons: EntityTable<Lesson, "id">;
@@ -49,27 +98,14 @@ db.version(5).stores({
 });
 
 // v6: cambio semantica — ogni PGN importato è una lezione analysis autonoma
-// (nessun contenitore cumulativo). Le vecchie lezioni analysis (che
-// accumulavano più board) vengono eliminate con le relative board.
-// Demo-only: dati analysis precedenti non portati avanti.
+// (nessun contenitore cumulativo). Migrazione conservativa: eventuali vecchie
+// lezioni analysis con più board vengono divise in lezioni analysis separate,
+// preservando board e mosse.
 db.version(6).stores({
   lessons: "++id, title, mode, createdAt",
   boards: "++id, lessonId, createdAt",
   moves: "++id, boardId, parentId, order, createdAt",
-}).upgrade(async (tx) => {
-  const analysisLessonIds = await tx.table("lessons")
-    .where("mode").equals("analysis")
-    .primaryKeys();
-  if (analysisLessonIds.length === 0) return;
-  const boardIds = await tx.table("boards")
-    .where("lessonId").anyOf(analysisLessonIds)
-    .primaryKeys();
-  if (boardIds.length > 0) {
-    await tx.table("moves").where("boardId").anyOf(boardIds).delete();
-    await tx.table("boards").bulkDelete(boardIds);
-  }
-  await tx.table("lessons").bulkDelete(analysisLessonIds);
-});
+}).upgrade(splitCumulativeAnalysisLessons);
 
 // v7: aggiunto campo `headers` su Board (header PGN strutturati come JSON).
 // Campo NON indicizzato → store invariato; bump di versione a documentazione.
@@ -94,5 +130,13 @@ db.version(9).stores({
   boards: "++id, lessonId, createdAt",
   moves: "++id, boardId, parentId, order, createdAt",
 });
+
+// v10: safety migration non distruttiva per database già arrivati oltre v6.
+// Re-applica l'invariante analysis=single-board senza cancellare dati.
+db.version(10).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+}).upgrade(splitCumulativeAnalysisLessons);
 
 export default db;

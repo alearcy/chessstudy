@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Migrazioni DB conservative
+
 - Persistenza mosse affidabile
 
 - Evidenziazione re sotto scacco e matto
@@ -59,8 +61,6 @@
 
 ## Todo
 
-- [ ] Migrazioni DB conservative
-  - Evitare migrazioni distruttive su dati utente; prevedere backup/export o migrazione lossless.
 - [ ] Coda Stockfish e concorrenza analisi
   - Rendere sicura la gestione di analisi concorrenti evitando listener condivisi sovrascritti.
 - [ ] Error handling visibile per operazioni critiche
