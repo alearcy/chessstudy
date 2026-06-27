@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Scomporre LessonDetailPage
+
 - Configurare ESLint flat config
 
 - Error handling visibile per operazioni critiche
@@ -67,8 +69,6 @@
 
 ## Todo
 
-- [ ] Scomporre LessonDetailPage
-  - Estrarre hook e componenti da `LessonDetailPage.tsx` per ridurre complessita e coupling.
 - [ ] Aggiungere test minimi
   - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
 - [ ] Ridurre bundle iniziale

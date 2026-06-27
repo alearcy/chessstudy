@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, NotebookPen, Upload, Loader2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { ArrowLeft, Pencil, Trash2, NotebookPen, Loader2 } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson, convertAnalysisToStudy } from "@/services/lessonService";
 import {
   getBoard,
@@ -44,94 +43,26 @@ import {
   formatEval,
   evalScore,
   moveClassification,
-  parseBadgePrefix,
   type PositionEval,
 } from "@/services/analysisService";
 import { explainMoveRuleBased } from "@/services/explainService";
 import { analyzeGame } from "@/services/explainService";
-import { Chess, PieceSymbol, Square as ChessSquare } from "chess.js";
-
-/** Estrae la casa di destinazione dal SAN (e.g. "Nf3" → "f3", "O-O" → "g1" o "g8"). */
-function sanToSquare(san: string, byBlack: boolean): string | null {
-  if (san === "O-O") return byBlack ? "g8" : "g1";
-  if (san === "O-O-O") return byBlack ? "c8" : "c1";
-  // Rimuove scacco/scacco matto e promozione, prende ultimi 2 caratteri.
-  const clean = san.replace(/[+#]$/, "");
-  const dest = clean.split("=")[0]; // exd8=Q → exd8
-  return dest.slice(-2);
-}
+import { Chess } from "chess.js";
+import AnalysisMarkdown from "@/components/lesson/AnalysisMarkdown";
+import MoveAiCommentBlock from "@/components/lesson/MoveAiCommentBlock";
+import MoveCommentPreview from "@/components/lesson/MoveCommentPreview";
+import StudyBoardSidebar from "@/components/lesson/StudyBoardSidebar";
+import {
+  computeKeySwings,
+  cleanGameAnalysisText,
+  formatEvalForPrompt,
+  getKingStatus,
+  sanToSquare,
+  uciToSan,
+} from "@/lib/lessonDetailUtils";
+import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
 
 const SAVE_DEBOUNCE_MS = 800;
-
-/** Post-process LLM markdown: i link alle mosse non sono più voluti.
- *  Converte residui `[mossa](#move-N)` → `mossa` (per testi salvati in precedenza). */
-function cleanGameAnalysisText(text: string): string {
-  return text.replace(/\[([^\]]*?)\]\(#move-\d+\)/g, (_full, content) => {
-    const words = content.trim().split(/\s+/);
-    return words[0] ?? "";
-  });
-}
-
-function isTextEditingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tagName = target.tagName.toLowerCase();
-  return (
-    target.isContentEditable ||
-    tagName === "input" ||
-    tagName === "textarea" ||
-    tagName === "select"
-  );
-}
-
-function getKingStatus(fen: string): { square: Square; checkmate: boolean } | null {
-  try {
-    const position = new Chess(fen);
-    if (!position.isCheck()) return null;
-    const checkedColor = position.turn();
-    const board = position.board();
-
-    for (const row of board) {
-      for (const piece of row) {
-        if (piece?.type === "k" && piece.color === checkedColor) {
-          return {
-            square: piece.square as Square,
-            checkmate: position.isCheckmate(),
-          };
-        }
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-/** Blocco di commento AI per una mossa (markdown). */
-function MoveAiCommentBlock({
-  text,
-}: {
-  text: string;
-}) {
-  const cleaned = cleanGameAnalysisText(text);
-  return (
-    <div className="mt-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm leading-relaxed game-analysis-content">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-primary/70 mb-1">AI</div>
-      <ReactMarkdown
-        components={{
-          p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-          ul: ({ children }) => <ul className="list-disc pl-4 my-1">{children}</ul>,
-          ol: ({ children }) => <ol className="list-decimal pl-4 my-1">{children}</ol>,
-          li: ({ children }) => <li className="mb-0.5">{children}</li>,
-          em: ({ children }) => <em>{children}</em>,
-        }}
-      >
-        {cleaned}
-      </ReactMarkdown>
-    </div>
-  );
-}
 
 export default function LessonDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -172,6 +103,7 @@ export default function LessonDetailPage() {
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
 
   const chess = useChessBoard();
+  useMoveKeyboardNavigation({ undo: chess.undo, redo: chess.redo });
   const initializedRef = useRef<number | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>("");
@@ -266,29 +198,6 @@ const selectedBoard = useMemo(
       setNoteTab("board");
     }
   }, [chess.historyIndex, noteTab]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (isTextEditingTarget(event.target)) return;
-      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
-        return;
-      }
-
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        chess.undo();
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        chess.redo();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [chess.undo, chess.redo]);
 
   const loadData = useCallback(async () => {
     setPageError(null);
@@ -898,67 +807,6 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
     }
   };
 
-  /** Formatta eval per il prompt LLM: "+0.3", "-2.1", "M5", "M-3". */
-  function formatEvalForPrompt(cp: number | null, mate: number | null): string {
-    if (mate != null) return mate > 0 ? `M${mate}` : `M${mate}`;
-    if (cp != null) {
-      const pawns = cp / 100;
-      return pawns >= 0 ? `+${pawns.toFixed(1)}` : `${pawns.toFixed(1)}`;
-    }
-    return "?";
-  }
-
-  /** Post-process LLM markdown: extract commentary from inside move links so only the move is underlined. */
-  /** Converte UCI ("e2e4") in SAN ("e4") usando la posizione FEN. */
-  function uciToSan(fen: string, uci: string): string | null {
-    try {
-      const game = new Chess(fen);
-      const from = uci.slice(0, 2) as ChessSquare;
-      const to = uci.slice(2, 4) as ChessSquare;
-      const promotion = uci.length > 4 ? (uci[4] as PieceSymbol) : undefined;
-      const move = game.move({ from, to, promotion });
-      return move?.san ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Calcola i 5 swing di valutazione più grandi e li restituisce come stringhe descrittive. */
-  function computeKeySwings(
-    moveList: Move[],
-    startCp: number | null,
-    startMate: number | null,
-    whiteName: string,
-    blackName: string,
-  ): string[] {
-    const swings: Array<{ desc: string; absLoss: number }> = [];
-    for (let i = 0; i < moveList.length; i++) {
-      const m = moveList[i];
-      const beforeCp = i === 0 ? startCp : (moveList[i - 1]?.evalCp ?? null);
-      const beforeMate = i === 0 ? startMate : (moveList[i - 1]?.evalMate ?? null);
-      const afterCp = m.evalCp ?? null;
-      const afterMate = m.evalMate ?? null;
-      const beforeScore = evalScore(beforeCp, beforeMate);
-      const afterScore = evalScore(afterCp, afterMate);
-      const cpLoss = beforeScore - afterScore;
-
-      const cls = moveClassification(cpLoss);
-      if (cls?.label === "✓" || !cls) continue;
-      const playerName = i % 2 === 0 ? whiteName : blackName;
-      const lossPawn = cpLoss / 100;
-      const clsLabel =
-        cls.label === "??" ? "ERRORE GRAVE" :
-        cls.label === "?" ? "ERRORE" :
-        cls.label === "?!" ? "IMPRECISIONE" : "BUONA";
-      swings.push({
-        desc: `Mossa ${Math.floor(i / 2) + 1}. ${m.moveNotation} di ${playerName} (${clsLabel}, ${lossPawn >= 0 ? "-" : "+"}${Math.abs(lossPawn).toFixed(1)} pedoni)`,
-        absLoss: Math.abs(cpLoss),
-      });
-    }
-    swings.sort((a, b) => b.absLoss - a.absLoss);
-    return swings.slice(0, 5).map((s) => s.desc);
-  }
-
   const handleCancelAnalysis = () => {
     if (analysisSignalRef.current) analysisSignalRef.current.cancelled = true;
   };
@@ -1368,30 +1216,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
           <section className="flex min-w-0 flex-col gap-3">
             {gameAnalysisText ? (
               <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
-                <ReactMarkdown
-                  components={{
-                    p: ({ children }) => (
-                      <p className="mb-2 last:mb-0">{children}</p>
-                    ),
-                    strong: ({ children }) => (
-                      <strong className="font-semibold">{children}</strong>
-                    ),
-                    ul: ({ children }) => (
-                      <ul className="list-disc pl-4 my-1">{children}</ul>
-                    ),
-                    ol: ({ children }) => (
-                      <ol className="list-decimal pl-4 my-1">{children}</ol>
-                    ),
-                    li: ({ children }) => (
-                      <li className="mb-0.5">{children}</li>
-                    ),
-                    em: ({ children }) => (
-                      <em>{children}</em>
-                    ),
-                  }}
-                >
-                  {cleanGameAnalysisText(gameAnalysisText)}
-                </ReactMarkdown>
+                <AnalysisMarkdown text={gameAnalysisText} />
               </div>
             ) : (
               <p className="text-sm text-muted-foreground italic">
@@ -1401,39 +1226,12 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
           </section>
 
           <aside className="flex min-h-0 min-w-0 flex-col gap-3">
-            <div className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap shrink-0">
-              {chess.currentMove ? (
-                moveCommentDraft.trim() ? (
-                  (() => {
-                    const text = moveCommentDraft;
-                    const parsed = parseBadgePrefix(text);
-                    if (!parsed) {
-                      return <span className="whitespace-pre-wrap">{text}</span>;
-                    }
-                    const isEmoji = parsed.label === "⭐" || parsed.label === "✅";
-                    return (
-                      <span className="whitespace-pre-wrap">
-                        <span
-                          className={isEmoji ? "" : "inline-block px-1.5 rounded text-white font-bold mr-1 align-middle"}
-                          style={isEmoji ? undefined : { backgroundColor: parsed.color }}
-                        >
-                          {parsed.label}
-                        </span>
-                        {parsed.rest}
-                      </span>
-                    );
-                  })()
-                ) : (
-                  <span className="text-muted-foreground italic">
-                    Nessun commento per la mossa {chess.historyIndex}. {chess.currentMove.moveNotation}.
-                  </span>
-                )
-              ) : (
-                <span className="text-muted-foreground italic">
-                  Seleziona una mossa per leggere il commento Stockfish.
-                </span>
-              )}
-            </div>
+            <MoveCommentPreview
+              currentMove={chess.currentMove}
+              historyIndex={chess.historyIndex}
+              text={moveCommentDraft}
+              stockfishLabel
+            />
             {chess.currentMove?.aiComment && (
               <MoveAiCommentBlock
                 text={chess.currentMove.aiComment}
@@ -1460,81 +1258,15 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
           }
         >
           {lesson.mode === "study" && (
-          <aside className="w-full">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold">Scacchiere</h2>
-              <div className="flex items-center gap-0.5">
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      onClick={() => setImportOpen(true)}
-                      title="Importa PGN"
-                    >
-                      <Upload className="size-4" />
-                    </Button>
-                    <Button
-                      size="icon-xs"
-                      onClick={handleCreateBoard}
-                      title="Nuova scacchiera"
-                    >
-                      <Plus className="size-4" />
-                    </Button>
-              </div>
-            </div>
-            {boards.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Nessuna scacchiera. Creane una con il pulsante +.
-              </p>
-            ) : (
-              <ul className="flex flex-col gap-1">
-                {boards.map((board) => {
-                  const active = board.id === selectedBoardId;
-                  return (
-                    <li key={board.id}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedBoardId(board.id!)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setSelectedBoardId(board.id!);
-                          }
-                        }}
-                        className={`flex items-center justify-between gap-1 rounded-md px-2 py-1.5 cursor-pointer text-sm transition-colors ${
-                          active
-                            ? "bg-accent text-accent-foreground"
-                            : "hover:bg-accent/50"
-                        }`}
-                      >
-                        <span className="truncate">{board.title}</span>
-                        <div className="flex items-center gap-0.5 shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            className="hover:bg-accent"
-                            onClick={(e) => handleEditBoardClick(board, e)}
-                            title="Rinomina scacchiera"
-                          >
-                            <Pencil className="size-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            className="text-destructive hover:text-destructive"
-                            onClick={(e) => handleDeleteBoardClick(board.id!, e)}
-                            title="Elimina scacchiera"
-                          >
-                            <Trash2 className="size-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </aside>
+            <StudyBoardSidebar
+              boards={boards}
+              selectedBoardId={selectedBoardId}
+              onSelectBoard={setSelectedBoardId}
+              onImportPgn={() => setImportOpen(true)}
+              onCreateBoard={handleCreateBoard}
+              onEditBoard={handleEditBoardClick}
+              onDeleteBoard={handleDeleteBoardClick}
+            />
           )}
 
           <section className="min-w-0 flex flex-col gap-4 items-center">
@@ -1587,67 +1319,14 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                     <>
                       {gameAnalysisText && (
                         <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => (
-                                <p className="mb-2 last:mb-0">{children}</p>
-                              ),
-                              strong: ({ children }) => (
-                                <strong className="font-semibold">{children}</strong>
-                              ),
-                              ul: ({ children }) => (
-                                <ul className="list-disc pl-4 my-1">{children}</ul>
-                              ),
-                              ol: ({ children }) => (
-                                <ol className="list-decimal pl-4 my-1">{children}</ol>
-                              ),
-                              li: ({ children }) => (
-                                <li className="mb-0.5">{children}</li>
-                              ),
-                              em: ({ children }) => (
-                                <em>{children}</em>
-                              ),
-                            }}
-                          >
-                            {cleanGameAnalysisText(gameAnalysisText)}
-                          </ReactMarkdown>
+                          <AnalysisMarkdown text={gameAnalysisText} />
                         </div>
                       )}
-                      <div
-                        className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap"
-                      >
-                        {chess.currentMove ? (
-                          moveCommentDraft.trim() ? (
-                            (() => {
-                              const text = moveCommentDraft;
-                              const parsed = parseBadgePrefix(text);
-                              if (!parsed) {
-                                return <span className="whitespace-pre-wrap">{text}</span>;
-                              }
-                              const isEmoji = parsed.label === "⭐" || parsed.label === "✅";
-                              return (
-                                <span className="whitespace-pre-wrap">
-                                  <span
-                                    className={isEmoji ? "" : "inline-block px-1.5 rounded text-white font-bold mr-1 align-middle"}
-                                    style={isEmoji ? undefined : { backgroundColor: parsed.color }}
-                                  >
-                                    {parsed.label}
-                                  </span>
-                                  {parsed.rest}
-                                </span>
-                              );
-                            })()
-                          ) : (
-                            <span className="text-muted-foreground italic">
-                              Nessun commento per la mossa {chess.historyIndex}. {chess.currentMove.moveNotation}.
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-muted-foreground italic">
-                            Seleziona una mossa per leggere il commento.
-                          </span>
-                        )}
-                      </div>
+                      <MoveCommentPreview
+                        currentMove={chess.currentMove}
+                        historyIndex={chess.historyIndex}
+                        text={moveCommentDraft}
+                      />
                       {chess.currentMove?.aiComment && (
                         <MoveAiCommentBlock
                           text={chess.currentMove.aiComment}
