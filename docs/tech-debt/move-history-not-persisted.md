@@ -41,15 +41,10 @@ nella sidebar). La storia mosse di ciascuna scacchiera resta **lineare**.
   coerente con il modello lineare. `MoveNotation` mostra solo il path lineare.
 
 ### Cosa rimane aperto
-- **Rimozione singola freccia non supportata**: react-chessboard v4 tratta
-  le frecce passate via `customArrows` come display read-only. Disegnare una
-  freccia già esistente è un no-op (nessun `onArrowsChange`), quindi non è
-  possibile fare toggle-off di una singola freccia persistita. Workaround:
-  il pulsante "Azzera frecce" (icona X) in toolbar, visibile solo in
-  modalità "Frecce", svuota tutte le frecce della posizione corrente,
-  dopodiché si ridisegnano quelle volute. Le evidenziazioni (gestite nello
-  stato nostro) supportano invece il toggle singolo (click per
-  aggiungere/rimuovere) e non hanno bisogno di un pulsante di azzeramento.
+- **Rimozione singola freccia**: risolto in
+  `docs/specs/chessground-board.md`. `@lichess-org/chessground` gestisce il
+  layer draw con toggle sulla stessa freccia e `LessonDetailPage.handleArrowsChange`
+  persiste la lista completa delle frecce, inclusa lista vuota.
 - **parentId con mosse veloci**: risolto in
   `docs/specs/persistenza-mosse-affidabile.md`. La UI manuale ora blocca nuove
   mosse durante la scrittura pendente, serializza la persistenza e calcola

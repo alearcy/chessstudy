@@ -390,23 +390,15 @@ const selectedBoard = useMemo(
   }, [chess.currentMove?.id]);
 
   const handleArrowsChange = (next: BoardArrow[]) => {
-    // react-chessboard v4: onArrowsChange reporta solo le frecce disegnate
-    // dall'utente in questo gesto; le azzerà internamente a ogni cambio di
-    // customArrows/posizione. Ignora gli svuotamenti interni (next vuoto) per
-    // non loopare e non cancellare le frecce persistite.
-    if (next.length === 0) return;
-    // Merge + dedupe per from/to (la libreria previene i duplicati, ma ci
-    // proteggiamo dai doppi tracciamenti veloci).
-    const seen = new Set(chess.currentArrows.map((a) => `${a[0]}-${a[1]}`));
-    const merged = [
-      ...chess.currentArrows,
-      ...next.filter((a) => {
-        const key = `${a[0]}-${a[1]}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }),
-    ];
+    // Chessground reporta la lista completa delle frecce disegnate: accettare
+    // anche lista vuota abilita la cancellazione singola/totale dal layer draw.
+    const seen = new Set<string>();
+    const merged = next.filter((a) => {
+      const key = `${a[0]}-${a[1]}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     chess.setArrows(merged);
     persistAnnotations(merged, currentHighlightsRef.current);
   };

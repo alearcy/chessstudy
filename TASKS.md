@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Sostituire react-chessboard con [chessground](https://github.com/lichess-org/chessground)
+
 - Scomporre LessonDetailPage
 
 - Configurare ESLint flat config
@@ -68,7 +70,6 @@
 - [x] Tema dark app-wide (→ `docs/specs/dark-theme.md`)
 
 ## Todo
-
 - [ ] Aggiungere test minimi
   - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
 - [ ] Ridurre bundle iniziale

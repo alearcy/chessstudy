@@ -1,7 +1,9 @@
-import { useState, useCallback, useMemo, useRef } from "react";
-import { Chessboard } from "react-chessboard";
-import type { Arrow, SquareHandlerArgs } from "react-chessboard";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Chessground } from "@lichess-org/chessground";
+import type { Api } from "@lichess-org/chessground/api";
+import type { Config } from "@lichess-org/chessground/config";
+import type { DrawBrushes, DrawShape } from "@lichess-org/chessground/draw";
+import type { Color, Key } from "@lichess-org/chessground/types";
 import type { Square } from "chess.js";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +73,171 @@ const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
 const LAST_MOVE_COLOR = "rgba(255, 213, 79, 0.55)";
 const CHECK_COLOR = "rgba(239, 68, 68, 0.65)";
 const ARROW_COLOR = "rgb(255,170,0)";
+const ANALYSIS_ARROW_COLOR = "rgb(59,130,246)";
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
+const RANKS = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
+
+function boardFen(fen: string): string {
+  return fen === "start" ? fen : fen.split(" ")[0];
+}
+
+function turnColorFromFen(fen: string): Color {
+  return fen.split(" ")[1] === "b" ? "black" : "white";
+}
+
+function isKey(value: string): value is Key {
+  return /^[a-h][1-8]$/.test(value);
+}
+
+function squareClasses({
+  highlights,
+  lastMoveFromSquare,
+  kingStatus,
+}: {
+  highlights: string[];
+  lastMoveFromSquare: Square | null;
+  kingStatus: { square: Square; checkmate: boolean } | null;
+}): Map<Key, string> {
+  const classes = new Map<Key, string>();
+  if (lastMoveFromSquare) classes.set(lastMoveFromSquare, "cs-last-move-from");
+  for (const square of highlights) {
+    if (!isKey(square)) continue;
+    classes.set(square, `${classes.get(square) ?? ""} cs-user-highlight`.trim());
+  }
+  if (kingStatus) {
+    classes.set(
+      kingStatus.square,
+      `${classes.get(kingStatus.square) ?? ""} cs-check`.trim(),
+    );
+  }
+  return classes;
+}
+
+function colorToBrushKey(color: string, prefix: string, index: number): string {
+  return `${prefix}-${index}-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
+}
+
+function arrowsToShapes(arrows: BoardArrow[], prefix: string): DrawShape[] {
+  return arrows.flatMap(([from, to, color], index) =>
+    isKey(from) && isKey(to)
+      ? [
+          {
+            orig: from,
+            dest: to,
+            brush: color ? colorToBrushKey(color, prefix, index) : "green",
+          },
+        ]
+      : [],
+  );
+}
+
+function arrowBrushes(arrows: BoardArrow[], extraArrows: BoardArrow[]): DrawBrushes {
+  const brushes: DrawBrushes = {
+    green: { key: "green", color: ARROW_COLOR, opacity: 1, lineWidth: 10 },
+    red: { key: "red", color: "rgb(239,68,68)", opacity: 1, lineWidth: 10 },
+    blue: { key: "blue", color: ANALYSIS_ARROW_COLOR, opacity: 1, lineWidth: 10 },
+    yellow: { key: "yellow", color: ARROW_COLOR, opacity: 1, lineWidth: 10 },
+  };
+  arrows.forEach(([from, to, color], index) => {
+    if (!isKey(from) || !isKey(to) || !color) return;
+    const key = colorToBrushKey(color, "user", index);
+    brushes[key] = { key, color, opacity: 1, lineWidth: 10 };
+  });
+  extraArrows.forEach(([from, to, color], index) => {
+    if (!isKey(from) || !isKey(to) || !color) return;
+    const key = colorToBrushKey(color, "auto", index);
+    brushes[key] = { key, color, opacity: 1, lineWidth: 10 };
+  });
+  return brushes;
+}
+
+function shapesToArrows(shapes: DrawShape[], brushes: DrawBrushes): BoardArrow[] {
+  return shapes.flatMap((shape) => {
+    if (!shape.dest) return [];
+    const brush = shape.brush ? brushes[shape.brush] : null;
+    return [[shape.orig, shape.dest, brush?.color ?? ARROW_COLOR] as BoardArrow];
+  });
+}
+
+function visibleSquares(orientation: "white" | "black"): Square[] {
+  const ranks = orientation === "white" ? [...RANKS].reverse() : [...RANKS];
+  const files = orientation === "white" ? FILES : [...FILES].reverse();
+  return ranks.flatMap((rank) => files.map((file) => `${file}${rank}` as Square));
+}
+
+function chessgroundConfig({
+  fen,
+  mode,
+  lessonMode,
+  boardOrientation,
+  squareClassMap,
+  userShapes,
+  autoShapes,
+  brushes,
+  onMove,
+  onInvalidMove,
+  onHighlight,
+  onShapesChange,
+}: {
+  fen: string;
+  mode: BoardMode;
+  lessonMode?: "study" | "analysis";
+  boardOrientation: "white" | "black";
+  squareClassMap: Map<Key, string>;
+  userShapes: DrawShape[];
+  autoShapes: DrawShape[];
+  brushes: DrawBrushes;
+  onMove: (from: Square, to: Square) => boolean;
+  onInvalidMove: () => void;
+  onHighlight: (square: Square) => void;
+  onShapesChange: (shapes: DrawShape[]) => void;
+}): Config {
+  const canMove = lessonMode !== "analysis" && mode === "move";
+  const canHighlight = lessonMode !== "analysis" && mode === "highlight";
+  return {
+    fen: boardFen(fen),
+    orientation: boardOrientation,
+    turnColor: turnColorFromFen(fen),
+    coordinates: true,
+    coordinatesOnSquares: true,
+    disableContextMenu: true,
+    animation: { enabled: true, duration: 200 },
+    highlight: {
+      lastMove: false,
+      check: false,
+      custom: squareClassMap,
+    },
+    movable: {
+      free: true,
+      color: canMove ? "both" : undefined,
+      showDests: false,
+      events: {
+        after: (orig, dest) => {
+          if (!onMove(orig as Square, dest as Square)) {
+            queueMicrotask(onInvalidMove);
+          }
+        },
+      },
+    },
+    selectable: { enabled: canMove || canHighlight },
+    draggable: { enabled: canMove, showGhost: true },
+    events: {
+      select: (key) => {
+        if (canHighlight) onHighlight(key as Square);
+      },
+    },
+    drawable: {
+      enabled: lessonMode !== "analysis" && mode === "arrow",
+      visible: true,
+      eraseOnMovablePieceClick: true,
+      defaultSnapToValidMove: false,
+      shapes: userShapes,
+      autoShapes,
+      brushes,
+      onChange: onShapesChange,
+    },
+  };
+}
 
 export default function ChessBoardView({
   fen,
@@ -105,139 +272,103 @@ export default function ChessBoardView({
   onFlip,
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const apiRef = useRef<Api | null>(null);
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
 
-  const customSquareStyles = useMemo(
-    () => ({
-      ...(lastMoveFromSquare
-        ? { [lastMoveFromSquare]: { backgroundColor: LAST_MOVE_COLOR } }
-        : {}),
-      ...Object.fromEntries(
-        highlights.map((square) => [
-          square,
-          { backgroundColor: HIGHLIGHT_COLOR },
-        ]),
-      ),
-      ...(kingStatus
-        ? { [kingStatus.square]: { backgroundColor: CHECK_COLOR } }
-        : {}),
-    }),
-    [highlights, lastMoveFromSquare, kingStatus],
-  );
-
-  // react-chessboard v5 vuole Arrow[] ({ startSquare, endSquare, color }).
-  // Il data layer usa BoardArrow ([string, string, string?]). Cast al confine.
-  // Le extraArrows (analisi) sono merged solo per il display (read-only).
-  const controlledArrows: Arrow[] = useMemo(
-    () =>
-      [...arrows, ...extraArrows].map(([from, to, color]) => ({
-        startSquare: from,
-        endSquare: to,
-        color: color ?? ARROW_COLOR,
-      })),
+  const brushes = useMemo(
+    () => arrowBrushes(arrows, extraArrows),
     [arrows, extraArrows],
   );
-
-  // Custom square: aggiunge badge di classificazione sul pezzo mosso.
-  // Usiamo un ref per mantenere l'identity del componente stabile (evita
-  // unmount/remount di tutte le case a ogni cambio di posizione).
-  const badgeDataRef = useRef({ square: lastMoveSquare, badge: moveBadge });
-  badgeDataRef.current = { square: lastMoveSquare, badge: moveBadge };
-  const kingStatusRef = useRef(kingStatus);
-  kingStatusRef.current = kingStatus;
-  const squareStylesRef = useRef(customSquareStyles);
-  squareStylesRef.current = customSquareStyles;
-
-  const emojiLabels = useMemo(() => new Set(["⭐", "✅", "☠️"]), []);
-
-  const CustomSquare = useCallback(
-    ({ square, children }: SquareHandlerArgs & { children?: ReactNode }) => {
-      const { square: badgeSquare, badge } = badgeDataRef.current;
-      const checkmateSquare = kingStatusRef.current?.checkmate
-        ? kingStatusRef.current.square
-        : null;
-      const showBadge = square === badgeSquare && badge;
-      const showCheckmateBadge = square === checkmateSquare;
-      const isEmoji = badge ? emojiLabels.has(badge.label) : false;
-      return (
-        <div
-          style={{
-            width: "100%",
-            height: "100%",
-            position: "relative",
-            ...squareStylesRef.current[square],
-          }}
-        >
-          {children}
-          {showBadge && (
-            <span
-              className="absolute bottom-0 right-0 text-[14px] font-bold leading-none mb-0.5 mr-0.5"
-              style={
-                isEmoji
-                  ? { zIndex: 10 }
-                  : {
-                      backgroundColor: badge!.color,
-                      color: "white",
-                      textShadow: "0 0 3px rgba(0,0,0,0.6)",
-                      zIndex: 10,
-                      padding: "0 0.375rem",
-                      borderRadius: "0.25rem",
-                    }
-              }
-            >
-              {badge!.label}
-            </span>
-          )}
-          {showCheckmateBadge && (
-            <span
-              className="absolute top-0 right-0 text-[16px] leading-none mt-0.5 mr-0.5"
-              style={{
-                zIndex: 11,
-                textShadow: "0 0 3px rgba(0,0,0,0.7)",
-              }}
-            >
-              ☠️
-            </span>
-          )}
-        </div>
-      );
-    },
-    [emojiLabels],
+  const userShapes = useMemo(() => arrowsToShapes(arrows, "user"), [arrows]);
+  const autoShapes = useMemo(
+    () => arrowsToShapes(extraArrows, "auto"),
+    [extraArrows],
+  );
+  const squareClassMap = useMemo(
+    () =>
+      squareClasses({
+        highlights,
+        lastMoveFromSquare,
+        kingStatus,
+      }),
+    [highlights, lastMoveFromSquare, kingStatus],
+  );
+  const overlaySquares = useMemo(
+    () => visibleSquares(boardOrientation),
+    [boardOrientation],
   );
 
-  const handleArrowsChange = useCallback(
-    ({ arrows: next }: { arrows: Arrow[] }) => {
-      onArrowsChange(
-        next.map((a) => [a.startSquare, a.endSquare, a.color] as BoardArrow),
-      );
-    },
-    [onArrowsChange],
-  );
-
-  const handlePieceDrop = useCallback(
-    ({
-      sourceSquare,
-      targetSquare,
-    }: {
-      sourceSquare: string;
-      targetSquare: string | null;
-    }) => {
-      if (mode !== "move" || !targetSquare) return false;
-      return onMove(sourceSquare as Square, targetSquare as Square);
-    },
-    [mode, onMove],
-  );
-
-  const handleSquareClick = useCallback(
-    ({ square }: SquareHandlerArgs) => {
-      if (mode !== "highlight") return;
+  const handleHighlight = useCallback(
+    (square: Square) => {
       onHighlightsChange(
         highlights.includes(square)
           ? highlights.filter((s) => s !== square)
           : [...highlights, square],
       );
+      apiRef.current?.selectSquare(null);
     },
-    [mode, highlights, onHighlightsChange],
+    [highlights, onHighlightsChange],
   );
+
+  const handleShapesChange = useCallback(
+    (shapes: DrawShape[]) => {
+      onArrowsChange(shapesToArrows(shapes, brushes));
+    },
+    [brushes, onArrowsChange],
+  );
+
+  const config = useMemo(
+    () =>
+      chessgroundConfig({
+        fen,
+        mode,
+        lessonMode,
+        boardOrientation,
+        squareClassMap,
+        userShapes,
+        autoShapes,
+        brushes,
+        onMove: (from, to) => onMoveRef.current(from, to),
+        onInvalidMove: () => apiRef.current?.set({ fen: boardFen(fen) }),
+        onHighlight: handleHighlight,
+        onShapesChange: handleShapesChange,
+      }),
+    [
+      fen,
+      mode,
+      lessonMode,
+      boardOrientation,
+      squareClassMap,
+      userShapes,
+      autoShapes,
+      brushes,
+      handleHighlight,
+      handleShapesChange,
+    ],
+  );
+
+  useEffect(() => {
+    if (!boardRef.current) return;
+    const api = Chessground(boardRef.current, config);
+    apiRef.current = api;
+    return () => {
+      api.destroy();
+      apiRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api) return;
+    api.set(config);
+    api.setShapes(userShapes);
+    api.setAutoShapes(autoShapes);
+  }, [config, userShapes, autoShapes]);
+
+  const emojiLabels = useMemo(() => new Set(["⭐", "✅", "☠️"]), []);
+  const isEmoji = moveBadge ? emojiLabels.has(moveBadge.label) : false;
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -400,27 +531,50 @@ export default function ChessBoardView({
         </div>
       )}
 
-      {/* react-chessboard v5 riempie il parent (`width:100% height:100%`):
-          il layout chiamante decide la larghezza disponibile. */}
       <div className="flex w-full justify-center">
-        <div className="aspect-square w-full">
-          <Chessboard
-            options={{
-              id: "lesson-chessboard",
-              position: fen,
-              boardOrientation,
-              allowDragging:
-                lessonMode === "analysis" ? false : mode === "move",
-              allowDrawingArrows: mode === "arrow",
-              arrows: controlledArrows,
-              squareStyles: customSquareStyles,
-              squareRenderer: CustomSquare,
-              onArrowsChange: handleArrowsChange,
-              onPieceDrop: handlePieceDrop,
-              onSquareClick: handleSquareClick,
-              animationDurationInMs: 200,
-            }}
-          />
+        <div className="cs-board-shell aspect-square w-full">
+          <div ref={boardRef} className="cs-chessground h-full w-full" />
+          <div className="pointer-events-none absolute inset-0 grid grid-cols-8 grid-rows-8">
+            {overlaySquares.map((square) => {
+              const showBadge = square === lastMoveSquare && moveBadge;
+              const showCheckmateBadge =
+                kingStatus?.checkmate && square === kingStatus.square;
+              return (
+                <div key={square} className="relative">
+                  {showBadge && (
+                    <span
+                      className="absolute bottom-0 right-0 text-[14px] font-bold leading-none mb-0.5 mr-0.5"
+                      style={
+                        isEmoji
+                          ? { zIndex: 10 }
+                          : {
+                              backgroundColor: moveBadge!.color,
+                              color: "white",
+                              textShadow: "0 0 3px rgba(0,0,0,0.6)",
+                              zIndex: 10,
+                              padding: "0 0.375rem",
+                              borderRadius: "0.25rem",
+                            }
+                      }
+                    >
+                      {moveBadge!.label}
+                    </span>
+                  )}
+                  {showCheckmateBadge && (
+                    <span
+                      className="absolute top-0 right-0 text-[16px] leading-none mt-0.5 mr-0.5"
+                      style={{
+                        zIndex: 11,
+                        textShadow: "0 0 3px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      ☠️
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -434,6 +588,29 @@ export default function ChessBoardView({
           Clicca su una casa per evidenziarla o rimuovere l&apos;evidenziazione
         </p>
       )}
+
+      <style>{`
+        .cs-board-shell {
+          position: relative;
+        }
+        .cs-chessground {
+          position: absolute;
+          inset: 0;
+        }
+        .cs-chessground .cg-wrap {
+          width: 100%;
+          height: 100%;
+        }
+        cg-board square.cs-last-move-from {
+          background-color: ${LAST_MOVE_COLOR};
+        }
+        cg-board square.cs-user-highlight {
+          background-color: ${HIGHLIGHT_COLOR};
+        }
+        cg-board square.cs-check {
+          background-color: ${CHECK_COLOR};
+        }
+      `}</style>
     </div>
   );
 }
