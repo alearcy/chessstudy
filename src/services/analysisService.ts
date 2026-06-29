@@ -321,11 +321,16 @@ export interface MoveBadge {
 
 /** Mappa simbolo → colore per i badge (usata da parsing commenti). */
 export const BADGE_COLORS: Record<string, string> = {
-  "⭐": "rgb(59,130,246)",
-  "✅": "rgb(34,197,94)",
+  "!!": "rgb(59,130,246)",
+  "!": "rgb(34,197,94)",
   "?!": "rgb(202,138,4)",
   "?": "rgb(234,88,12)",
   "??": "rgb(220,38,38)",
+};
+
+const BADGE_ALIASES: Record<string, string> = {
+  "⭐": "!!",
+  "✅": "!",
 };
 
 /**
@@ -337,10 +342,11 @@ export function parseBadgePrefix(
   text: string
 ): { label: string; color: string; rest: string } | null {
   // Ordine: prima simboli più lunghi ("??" prima di "?")
-  const symbols = ["??", "?!", "⭐", "✅", "?"];
+  const symbols = ["??", "?!", "!!", "⭐", "✅", "!", "?"];
   for (const s of symbols) {
     if (text.startsWith(s + " ")) {
-      return { label: s, color: BADGE_COLORS[s], rest: text.slice(s.length + 1) };
+      const label = BADGE_ALIASES[s] ?? s;
+      return { label, color: BADGE_COLORS[label], rest: text.slice(s.length + 1) };
     }
   }
   return null;
@@ -354,10 +360,10 @@ export function moveClassification(
   if (cpLoss == null) return null;
 
   if (isBestMove) {
-    return { label: "⭐", color: "rgb(59,130,246)" };
+    return { label: "!!", color: "rgb(59,130,246)" };
   }
 
-  if (cpLoss < 50) return { label: "✅", color: "rgb(34,197,94)" };
+  if (cpLoss < 50) return { label: "!", color: "rgb(34,197,94)" };
   if (cpLoss < 100) return { label: "?!", color: "rgb(202,138,4)" };
   if (cpLoss < 300) return { label: "?", color: "rgb(234,88,12)" };
   return { label: "??", color: "rgb(220,38,38)" };

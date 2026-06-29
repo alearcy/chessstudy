@@ -1,5 +1,6 @@
 import { parseBadgePrefix } from "@/services/analysisService";
 import type { Move } from "@/types";
+import { CircleCheck, Star } from "lucide-react";
 
 interface MoveCommentPreviewProps {
   currentMove: Move | null;
@@ -39,15 +40,23 @@ function FormattedMoveComment({ text }: { text: string }) {
     return <span className="whitespace-pre-wrap">{text}</span>;
   }
 
-  const isEmoji = parsed.label === "⭐" || parsed.label === "✅";
+  const icon =
+    parsed.label === "!!" ? (
+      <Star className="mr-1 inline size-3.5 align-[-2px] text-blue-500 fill-blue-500" />
+    ) : parsed.label === "!" ? (
+      <CircleCheck className="mr-1 inline size-3.5 align-[-2px] text-green-500" />
+    ) : null;
+
   return (
     <span className="whitespace-pre-wrap">
-      <span
-        className={isEmoji ? "" : "inline-block px-1.5 rounded text-white font-bold mr-1 align-middle"}
-        style={isEmoji ? undefined : { backgroundColor: parsed.color }}
-      >
-        {parsed.label}
-      </span>
+      {icon ?? (
+        <span
+          className="inline-block px-1.5 rounded text-white font-bold mr-1 align-middle"
+          style={{ backgroundColor: parsed.color }}
+        >
+          {parsed.label}
+        </span>
+      )}
       {parsed.rest}
     </span>
   );

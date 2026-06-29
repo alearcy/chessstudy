@@ -4,6 +4,8 @@
 
 ## Completed
 
+- sostituire le emoticons con delle icone, possibilmente prese direttamente dalla libreria shadcn
+
 - Sostituire react-chessboard con [chessground](https://github.com/lichess-org/chessground)
 
 - Scomporre LessonDetailPage

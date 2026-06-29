@@ -398,11 +398,11 @@ blunder: "Errore grave!",
   return map[s];
 }
 
-function severityEmoji(s: Severity): string {
+function severityBadge(s: Severity): string {
   const map: Record<Severity, string> = {
-    best: "⭐",
-    good: "✅",
-inaccuracy: "?!",
+    best: "!!",
+    good: "!",
+    inaccuracy: "?!",
     mistake: "?",
     blunder: "??",
   };
@@ -478,10 +478,10 @@ export async function explainMove(input: MoveExplanationInput): Promise<MoveExpl
   if (await isLlmReady()) {
     try {
       const exp = await explainMoveNative(input);
-      console.log("[LLM] ✅ commento generato:", exp.summary);
+      console.log("[LLM] commento generato:", exp.summary);
       return exp;
     } catch (e) {
-      console.error("[LLM] ❌ fallback a rule-based:", e);
+      console.error("[LLM] fallback a rule-based:", e);
     }
   } else {
     console.log("[LLM] non disponibile, uso rule-based");
@@ -511,10 +511,10 @@ export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanati
 }
 
 function buildSummary(severity: Severity, san: string, cpLoss: number | null, tactics: TacticalPattern[]): string {
-  const emoji = severityEmoji(severity);
+  const badge = severityBadge(severity);
   const label = severityLabel(severity);
   const lossStr = cpLoss != null ? ` (-${formatCpLoss(cpLoss)})` : "";
-  let sentence = `${emoji} ${san} — ${label}${lossStr}.`;
+  let sentence = `${badge} ${san} — ${label}${lossStr}.`;
   const fork = tactics.find((t) => t.type === "fork");
   if (fork && severity !== "best") sentence += ` Subisci una forchetta.`;
   const hanging = tactics.find((t) => t.type === "hanging_piece");
@@ -572,7 +572,7 @@ details.push(`${player} ha giocato la mossa esattamente corrispondente alla prim
 
   if (afterEval.mate != null) {
     const who = afterEval.mate > 0 ? "Bianco" : "Nero";
-    details.push(`⚡ Matto in ${Math.abs(afterEval.mate)} per il ${who} (profondità ${afterEval.depth}).`);
+    details.push(`Matto in ${Math.abs(afterEval.mate)} per il ${who} (profondità ${afterEval.depth}).`);
   }
   return details;
 }
@@ -607,7 +607,7 @@ materialNote = ` Con ${bestSan} ${player} avrebbe mantenuto ${matBest} punti mat
   }
 
   const reasons: string[] = [];
-  reasons.push(`🧠 Stockfish suggeriva ${bestSan}.`);
+  reasons.push(`Stockfish suggeriva ${bestSan}.`);
   if (materialNote) reasons.push(materialNote.trim());
 
   const missed = tactics.filter((t) => t.type === "hanging_piece" || t.type === "fork").slice(0, 1);

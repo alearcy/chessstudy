@@ -94,7 +94,7 @@ export function computeKeySwings(
     const cpLoss = beforeScore - afterScore;
 
     const cls = moveClassification(cpLoss);
-    if (cls?.label === "✓" || !cls) continue;
+    if (cls?.label === "!!" || cls?.label === "!" || !cls) continue;
     const playerName = i % 2 === 0 ? whiteName : blackName;
     const lossPawn = cpLoss / 100;
     const clsLabel =

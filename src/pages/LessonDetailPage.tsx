@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Trash2, NotebookPen, Loader2 } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, NotebookPen, Loader2, Sparkles } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson, convertAnalysisToStudy } from "@/services/lessonService";
 import {
   getBoard,
@@ -323,7 +323,7 @@ const selectedBoard = useMemo(
   ) => {
     const next = e.target.value;
     setMoveCommentDraft(next);
-    // Aggiorna lo stato in memoria (indicatore 💬 immediato).
+    // Aggiorna lo stato in memoria per mostrare subito l'indicatore commento.
     const idx = chess.historyIndex - 1;
     if (idx >= 0) chess.setMoveComment(idx, next);
     scheduleDebouncedMoveComment(commentMoveIdRef.current, next);
@@ -1211,8 +1211,8 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                 <AnalysisMarkdown text={gameAnalysisText} />
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground italic">
-                Nessuna analisi AI. Usa il pulsante ✨ per generarla.
+              <p className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
+                Nessuna analisi AI. Usa il pulsante <Sparkles className="size-4" /> per generarla.
               </p>
             )}
           </section>

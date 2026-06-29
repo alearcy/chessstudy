@@ -19,6 +19,10 @@ import {
   Loader2,
   GraduationCap,
   ArrowUpDown,
+  CircleCheck,
+  Skull,
+  Star,
+  WholeWord,
 } from "lucide-react";
 import type { BoardArrow } from "@/types";
 
@@ -178,6 +182,7 @@ function chessgroundConfig({
   onInvalidMove,
   onHighlight,
   onShapesChange,
+  coordinatesOnSquares,
 }: {
   fen: string;
   mode: BoardMode;
@@ -191,6 +196,7 @@ function chessgroundConfig({
   onInvalidMove: () => void;
   onHighlight: (square: Square) => void;
   onShapesChange: (shapes: DrawShape[]) => void;
+  coordinatesOnSquares: boolean;
 }): Config {
   const canMove = lessonMode !== "analysis" && mode === "move";
   const canHighlight = lessonMode !== "analysis" && mode === "highlight";
@@ -199,7 +205,7 @@ function chessgroundConfig({
     orientation: boardOrientation,
     turnColor: turnColorFromFen(fen),
     coordinates: true,
-    coordinatesOnSquares: true,
+    coordinatesOnSquares,
     disableContextMenu: true,
     animation: { enabled: true, duration: 200 },
     highlight: {
@@ -272,6 +278,7 @@ export default function ChessBoardView({
   onFlip,
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
+  const [coordinatesOnSquares, setCoordinatesOnSquares] = useState(true);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef<Api | null>(null);
   const onMoveRef = useRef(onMove);
@@ -334,6 +341,7 @@ export default function ChessBoardView({
         onInvalidMove: () => apiRef.current?.set({ fen: boardFen(fen) }),
         onHighlight: handleHighlight,
         onShapesChange: handleShapesChange,
+        coordinatesOnSquares,
       }),
     [
       fen,
@@ -346,18 +354,21 @@ export default function ChessBoardView({
       brushes,
       handleHighlight,
       handleShapesChange,
+      coordinatesOnSquares,
     ],
   );
 
   useEffect(() => {
     if (!boardRef.current) return;
+    boardRef.current.replaceChildren();
     const api = Chessground(boardRef.current, config);
     apiRef.current = api;
     return () => {
       api.destroy();
+      boardRef.current?.replaceChildren();
       apiRef.current = null;
     };
-  }, []);
+  }, [coordinatesOnSquares]);
 
   useEffect(() => {
     const api = apiRef.current;
@@ -366,9 +377,6 @@ export default function ChessBoardView({
     api.setShapes(userShapes);
     api.setAutoShapes(autoShapes);
   }, [config, userShapes, autoShapes]);
-
-  const emojiLabels = useMemo(() => new Set(["⭐", "✅", "☠️"]), []);
-  const isEmoji = moveBadge ? emojiLabels.has(moveBadge.label) : false;
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -478,6 +486,18 @@ export default function ChessBoardView({
         <Button
           variant="ghost"
           size="icon-xs"
+          onClick={() => setCoordinatesOnSquares((current) => !current)}
+          title={
+            coordinatesOnSquares
+              ? "Mostra coordinate fuori dalla scacchiera"
+              : "Mostra coordinate dentro le case"
+          }
+        >
+          <WholeWord className="size-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onClick={onFlip}
           title="Inverti orientamento scacchiera"
         >
@@ -543,32 +563,32 @@ export default function ChessBoardView({
                 <div key={square} className="relative">
                   {showBadge && (
                     <span
-                      className="absolute bottom-0 right-0 text-[14px] font-bold leading-none mb-0.5 mr-0.5"
-                      style={
-                        isEmoji
-                          ? { zIndex: 10 }
-                          : {
-                              backgroundColor: moveBadge!.color,
-                              color: "white",
-                              textShadow: "0 0 3px rgba(0,0,0,0.6)",
-                              zIndex: 10,
-                              padding: "0 0.375rem",
-                              borderRadius: "0.25rem",
-                            }
-                      }
+                      className="absolute -bottom-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full text-[13px] font-bold leading-none shadow-sm"
+                      style={{
+                        backgroundColor: moveBadge!.color,
+                        color: "white",
+                        textShadow: "0 0 3px rgba(0,0,0,0.6)",
+                        zIndex: 10,
+                      }}
                     >
-                      {moveBadge!.label}
+                      {moveBadge!.label === "!!" ? (
+                        <Star className="size-3.5 fill-current" />
+                      ) : moveBadge!.label === "!" ? (
+                        <CircleCheck className="size-3.5" />
+                      ) : (
+                        moveBadge!.label
+                      )}
                     </span>
                   )}
                   {showCheckmateBadge && (
                     <span
-                      className="absolute top-0 right-0 text-[16px] leading-none mt-0.5 mr-0.5"
+                      className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
                       style={{
                         zIndex: 11,
-                        textShadow: "0 0 3px rgba(0,0,0,0.7)",
                       }}
+                      title="Scacco matto"
                     >
-                      ☠️
+                      <Skull className="size-4" />
                     </span>
                   )}
                 </div>

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Upload } from "lucide-react";
+import { CircleCheck, TriangleAlert, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -128,19 +128,22 @@ export default function ImportPgnDialog({
 
           {/* Anteprima / errore parse */}
           {preview === null ? null : preview.ok ? (
-            <p className="text-sm text-muted-foreground">
-              ✅ <strong>{preview.title}</strong> — {preview.count}{" "}
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <CircleCheck className="size-4 shrink-0 text-green-600" />
+              <strong>{preview.title}</strong> — {preview.count}{" "}
               {preview.count === 1 ? "mossa" : "mosse"} rilevate.
             </p>
           ) : (
-            <p className="text-sm text-destructive">
-              ⚠️ PGN non valido: {preview.error}
+            <p className="flex items-center gap-1.5 text-sm text-destructive">
+              <TriangleAlert className="size-4 shrink-0" />
+              PGN non valido: {preview.error}
             </p>
           )}
 
           {importError && (
-            <p className="text-sm text-destructive">
-              ⚠️ {importError}
+            <p className="flex items-center gap-1.5 text-sm text-destructive">
+              <TriangleAlert className="size-4 shrink-0" />
+              {importError}
             </p>
           )}
         </div>

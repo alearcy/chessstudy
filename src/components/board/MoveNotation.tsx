@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, ReactNode } from "react";
-import { Eye, EyeOff, MessageSquare } from "lucide-react";
+import { CircleCheck, Eye, EyeOff, MessageSquare, Star } from "lucide-react";
 import { Chess } from "chess.js";
 import type { Move } from "@/types";
 import { formatEval, evalScore, moveClassification } from "@/services/analysisService";
@@ -273,14 +273,12 @@ function EvalBadge({
   const cls = moveClassification(cpLoss, isBestMove);
 
   const badgeTitles: Record<string, string> = {
-    "⭐": "Migliore",
-    "✅": "Buona",
+    "!!": "Migliore",
+    "!": "Buona",
     "?!": "Imprecisa",
     "?": "Errore",
     "??": "Errore grave",
   };
-
-  const emojiLabels = new Set(["⭐", "✅"]);
 
   return (
     <span className="flex items-center gap-0.5 shrink-0 text-[12px] tabular-nums font-bold">
@@ -293,21 +291,47 @@ function EvalBadge({
         {formatEval(cp, mate)}
       </span>
       {cls && (
-        <span
-          className={emojiLabels.has(cls.label) ? "" : `px-1 rounded text-white`}
-          style={
-            emojiLabels.has(cls.label)
-              ? undefined
-              : {
-                  backgroundColor: cls.color,
-                  color: "white",
-                }
-          }
+        <MoveClassBadge
+          label={cls.label}
+          color={cls.color}
           title={badgeTitles[cls.label] ?? `Valutazione: ${cls.label}`}
-        >
-          {cls.label}
-        </span>
+        />
       )}
+    </span>
+  );
+}
+
+function MoveClassBadge({
+  label,
+  color,
+  title,
+}: {
+  label: string;
+  color: string;
+  title: string;
+}) {
+  if (label === "!!") {
+    return (
+      <span title={title}>
+        <Star className="size-3.5 text-blue-500 fill-blue-500" />
+      </span>
+    );
+  }
+  if (label === "!") {
+    return (
+      <span title={title}>
+        <CircleCheck className="size-3.5 text-green-500" />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="px-1 rounded text-white"
+      style={{ backgroundColor: color, color: "white" }}
+      title={title}
+    >
+      {label}
     </span>
   );
 }
