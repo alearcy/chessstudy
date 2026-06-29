@@ -5,9 +5,15 @@ use tauri::AppHandle;
 use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OpenRouterSettings {
+pub struct AppSettings {
+    #[serde(default)]
     pub api_key: Option<String>,
+    #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub llm_base_url: Option<String>,
+    #[serde(default)]
+    pub llm_model: Option<String>,
     #[serde(default)]
     pub stockfish_depth: Option<u32>,
     #[serde(default)]
@@ -16,6 +22,8 @@ pub struct OpenRouterSettings {
 
 pub const DEFAULT_STOCKFISH_DEPTH: u32 = 15;
 pub const DEFAULT_STOCKFISH_THREADS: u32 = 1;
+pub const DEFAULT_LLM_BASE_URL: &str = "http://localhost:11434";
+pub const DEFAULT_LLM_MODEL: &str = "gemma3:4b";
 
 pub fn normalize_stockfish_depth(depth: Option<u32>) -> u32 {
     depth.unwrap_or(DEFAULT_STOCKFISH_DEPTH).clamp(1, 30)
@@ -25,10 +33,26 @@ pub fn normalize_stockfish_threads(threads: Option<u32>) -> u32 {
     threads.unwrap_or(DEFAULT_STOCKFISH_THREADS).clamp(1, 32)
 }
 
-fn empty_settings() -> OpenRouterSettings {
-    OpenRouterSettings {
+pub fn normalize_llm_base_url(base_url: Option<String>) -> String {
+    base_url
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_LLM_BASE_URL.to_string())
+        .trim_end_matches('/')
+        .to_string()
+}
+
+pub fn normalize_llm_model(model: Option<String>) -> String {
+    model
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_LLM_MODEL.to_string())
+}
+
+fn empty_settings() -> AppSettings {
+    AppSettings {
         api_key: None,
         model: None,
+        llm_base_url: Some(DEFAULT_LLM_BASE_URL.to_string()),
+        llm_model: Some(DEFAULT_LLM_MODEL.to_string()),
         stockfish_depth: Some(DEFAULT_STOCKFISH_DEPTH),
         stockfish_threads: Some(DEFAULT_STOCKFISH_THREADS),
     }
@@ -43,14 +67,14 @@ fn settings_path(app_handle: &AppHandle) -> Result<PathBuf> {
     Ok(dir.join("settings.json"))
 }
 
-pub fn load_settings(app_handle: &AppHandle) -> OpenRouterSettings {
+pub fn load_settings(app_handle: &AppHandle) -> AppSettings {
     let path = match settings_path(app_handle) {
         Ok(p) => p,
         Err(_) => return empty_settings(),
     };
 
     match std::fs::read_to_string(&path) {
-        Ok(content) => match serde_json::from_str::<OpenRouterSettings>(&content) {
+        Ok(content) => match serde_json::from_str::<AppSettings>(&content) {
             Ok(s) => {
                 log::info!("[settings] loaded from {:?}", path);
                 s
@@ -67,7 +91,7 @@ pub fn load_settings(app_handle: &AppHandle) -> OpenRouterSettings {
     }
 }
 
-pub fn save_settings(app_handle: &AppHandle, settings: &OpenRouterSettings) -> Result<()> {
+pub fn save_settings(app_handle: &AppHandle, settings: &AppSettings) -> Result<()> {
     let path = settings_path(app_handle)?;
     let json = serde_json::to_string_pretty(settings)?;
     std::fs::write(&path, json)

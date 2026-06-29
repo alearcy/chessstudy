@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Cpu, Eye, EyeOff, Gauge, Key, Loader2, Save, Trash2, CheckCircle, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Brain, CheckCircle, Cpu, Gauge, Loader2, Save, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,7 +18,8 @@ interface SettingsDialogProps {
   onSettingsChanged?: () => void;
 }
 
-const DEFAULT_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_LLM_BASE_URL = "http://localhost:11434";
+const DEFAULT_LLM_MODEL = "gemma3:4b";
 const DEFAULT_STOCKFISH_DEPTH = 15;
 const DEFAULT_STOCKFISH_THREADS = 1;
 
@@ -30,19 +31,25 @@ const DEPTH_OPTIONS = [
 ] as const;
 
 interface SettingsInfo {
-  api_key_configured: boolean;
-  model: string;
+  llm_base_url: string;
+  llm_model: string;
   stockfish_depth: number;
   stockfish_threads: number;
 }
 
+interface LlmStatus {
+  ready: boolean;
+  model_available: boolean;
+  base_url: string;
+  model: string;
+}
+
 export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }: SettingsDialogProps) {
-  const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(DEFAULT_MODEL);
-  const [showKey, setShowKey] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [configured, setConfigured] = useState(false);
+  const [llmBaseUrl, setLlmBaseUrl] = useState(DEFAULT_LLM_BASE_URL);
+  const [llmModel, setLlmModel] = useState(DEFAULT_LLM_MODEL);
+  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
+  const [checkingLlm, setCheckingLlm] = useState(false);
+  const [savingLlm, setSavingLlm] = useState(false);
   const [stockfishDepth, setStockfishDepth] = useState(DEFAULT_STOCKFISH_DEPTH);
   const [stockfishThreads, setStockfishThreads] = useState(DEFAULT_STOCKFISH_THREADS);
   const [savingStockfish, setSavingStockfish] = useState(false);
@@ -67,48 +74,60 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
     check();
   }, []);
 
-  useEffect(() => {
-    if (open && isTauri !== false) {
-      loadSettings();
-      setApiKey("");
-      setError(null);
+  const checkLlmStatus = useCallback(async () => {
+    if (!isTauri) return;
+    setCheckingLlm(true);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const status = await invoke<LlmStatus>("llm_status");
+      setLlmStatus(status);
+    } catch {
+      setLlmStatus(null);
+    } finally {
+      setCheckingLlm(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isTauri]);
+  }, [isTauri]);
 
   const loadSettings = useCallback(async () => {
     if (!isTauri) return;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const info = await invoke<SettingsInfo>("get_settings");
-      setConfigured(info.api_key_configured);
-      if (info.model) setModel(info.model);
+      setLlmBaseUrl(info.llm_base_url || DEFAULT_LLM_BASE_URL);
+      setLlmModel(info.llm_model || DEFAULT_LLM_MODEL);
       setStockfishDepth(normalizeDepthOption(info.stockfish_depth));
       setStockfishThreads(normalizeCpuOption(info.stockfish_threads, buildCpuOptions(detectedThreads)));
     } catch {
-      setConfigured(false);
+      setLlmStatus(null);
     }
-  }, [isTauri]);
+  }, [isTauri, detectedThreads]);
 
-  const handleSave = async () => {
+  useEffect(() => {
+    if (open && isTauri !== false) {
+      loadSettings();
+      checkLlmStatus();
+      setError(null);
+    }
+  }, [open, isTauri, loadSettings, checkLlmStatus]);
+
+  const handleSaveLlm = async () => {
     if (!isTauri) return;
-    setSaving(true);
+    setSavingLlm(true);
     setError(null);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("set_settings", {
         args: {
-          api_key: apiKey ? apiKey : null,
-          model: model || null,
+          llm_base_url: llmBaseUrl,
+          llm_model: llmModel,
         },
       });
-      setConfigured(!!apiKey);
-      setApiKey("");
+      await checkLlmStatus();
       onSettingsChanged?.();
     } catch (e) {
       setError(String(e));
     } finally {
-      setSaving(false);
+      setSavingLlm(false);
     }
   };
 
@@ -138,34 +157,17 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
     }
   };
 
-  const handleClear = async () => {
-    if (!isTauri) return;
-    setClearing(true);
-    setError(null);
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("clear_api_key");
-      setConfigured(false);
-      setApiKey("");
-      onSettingsChanged?.();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setClearing(false);
-    }
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Key className="size-5" />
+            <Gauge className="size-5" />
             Impostazioni
           </DialogTitle>
           <DialogDescription>
             {isTauri
-              ? "Configura AI e analisi Stockfish."
+              ? "Configura AI locale e analisi Stockfish."
               : "Avvia l'app con Tauri desktop per modificare le impostazioni."}
           </DialogDescription>
         </DialogHeader>
@@ -179,14 +181,77 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
               </div>
             ) : (
               <p>
-                Le impostazioni AI sono disponibili solo nell&apos;app desktop.
-                Avvia con <code className="bg-muted px-1 rounded">npm run tauri dev</code>.
+                Le impostazioni sono disponibili solo nell&apos;app desktop.
+                Avvia con <code className="rounded bg-muted px-1">npm run tauri dev</code>.
               </p>
             )}
           </div>
         ) : (
           <>
             <div className="flex flex-col gap-4">
+              <section className="flex flex-col gap-3 border-b pb-4">
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <Brain className="size-4" />
+                  AI locale
+                </h3>
+                <div className="flex items-center gap-2 text-sm">
+                  <span>Stato:</span>
+                  {checkingLlm ? (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      Verifica...
+                    </span>
+                  ) : llmStatus?.ready ? (
+                    <span className="flex items-center gap-1 font-medium text-green-600">
+                      <CheckCircle className="size-4" />
+                      Server locale attivo
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-muted-foreground">
+                      <XCircle className="size-4" />
+                      Server locale non raggiungibile
+                    </span>
+                  )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="llm-base-url" className="text-sm font-medium">
+                      URL server
+                    </label>
+                    <Input
+                      id="llm-base-url"
+                      value={llmBaseUrl}
+                      onChange={(e) => setLlmBaseUrl(e.target.value)}
+                      placeholder={DEFAULT_LLM_BASE_URL}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="llm-model" className="text-sm font-medium">
+                      Modello
+                    </label>
+                    <Input
+                      id="llm-model"
+                      value={llmModel}
+                      onChange={(e) => setLlmModel(e.target.value)}
+                      placeholder={DEFAULT_LLM_MODEL}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Default: Ollama locale con {DEFAULT_LLM_MODEL}. Gemma 4B e leggero abbastanza per commenti didattici brevi.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={handleSaveLlm} disabled={savingLlm}>
+                    {savingLlm ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    <span className="ml-1">Salva AI</span>
+                  </Button>
+                  <Button variant="outline" onClick={checkLlmStatus} disabled={checkingLlm}>
+                    {checkingLlm && <Loader2 className="mr-1 size-4 animate-spin" />}
+                    Verifica
+                  </Button>
+                </div>
+              </section>
+
               <section className="flex flex-col gap-3 border-b pb-4">
                 <h3 className="flex items-center gap-2 text-sm font-semibold">
                   <Gauge className="size-4" />
@@ -240,118 +305,22 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
                   </div>
                 </div>
                 <div>
-                  <Button
-                    variant="outline"
-                    onClick={handleSaveStockfish}
-                    disabled={savingStockfish}
-                  >
-                    {savingStockfish ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Save className="size-4" />
-                    )}
+                  <Button variant="outline" onClick={handleSaveStockfish} disabled={savingStockfish}>
+                    {savingStockfish ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                     <span className="ml-1">Salva Stockfish</span>
                   </Button>
                 </div>
               </section>
 
-              <div className="flex items-center gap-2 text-sm">
-                <span>Stato:</span>
-                {configured ? (
-                  <span className="flex items-center gap-1 text-green-600 font-medium">
-                    <CheckCircle className="size-4" />
-                    API key configurata
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <XCircle className="size-4" />
-                    Nessuna API key
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label htmlFor="api-key" className="text-sm font-medium">
-                  API Key OpenRouter
-                </label>
-                <div className="relative">
-                  <Input
-                    id="api-key"
-                    type={showKey ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-or-v1-..."
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    tabIndex={-1}
-                  >
-                    {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Ottieni una key su{" "}
-                  <a
-                    href="https://openrouter.ai/keys"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    openrouter.ai/keys
-                  </a>
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label htmlFor="model" className="text-sm font-medium">
-                  Modello
-                </label>
-                <Input
-                  id="model"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder={DEFAULT_MODEL}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Formato: <code>provider/nome-modello</code>. Default: {DEFAULT_MODEL}
-                </p>
-              </div>
-
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
 
-            <DialogFooter className="gap-2">
-              <Button
-                variant="destructive"
-                onClick={handleClear}
-                disabled={clearing || !configured}
-              >
-                {clearing ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Trash2 className="size-4" />
-                )}
-                <span className="ml-1">Rimuovi key</span>
-              </Button>
-              <Button onClick={handleSave} disabled={saving || !apiKey.trim()}>
-                {saving && <Loader2 className="size-4 animate-spin mr-1" />}
-                Salva
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Chiudi
               </Button>
             </DialogFooter>
           </>
-        )}
-
-        {!isTauri && (
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Chiudi
-            </Button>
-          </DialogFooter>
         )}
       </DialogContent>
     </Dialog>

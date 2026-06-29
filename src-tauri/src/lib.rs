@@ -83,16 +83,17 @@ pub fn run() {
             let engine =
                 stockfish::Engine::new(&binary_path).expect("failed to start stockfish engine");
 
-            // Load OpenRouter settings from disk.
-            let openrouter_settings = settings::load_settings(app.handle());
+            // Load app settings from disk.
+            let app_settings = settings::load_settings(app.handle());
             log::info!(
-                "OpenRouter settings loaded: api_key_configured={}",
-                openrouter_settings.api_key.is_some()
+                "local LLM settings loaded: base_url={}, model={}",
+                settings::normalize_llm_base_url(app_settings.llm_base_url.clone()),
+                settings::normalize_llm_model(app_settings.llm_model.clone())
             );
 
             app.manage(AppState {
                 engine: Mutex::new(engine),
-                settings: Mutex::new(openrouter_settings),
+                settings: Mutex::new(app_settings),
             });
 
             Ok(())

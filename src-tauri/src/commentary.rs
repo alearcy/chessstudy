@@ -1,4 +1,4 @@
-use crate::llm::OpenRouterClient;
+use crate::llm::LocalLlmClient;
 use anyhow::Result;
 use serde::Serialize;
 
@@ -98,7 +98,7 @@ Con e3 Marco ha spinto il pedone ma rinuncia a controllare il centro. Con Af4 Ma
 [PESSATA]
 Con Axh7 Marco ha sacrificato l'Alfiere senza compenso e Luca para facilmente, mantenendo il vantaggio di materiale. Con Axh6 Marco avrebbe conservato il pezzo e tenuto la posizione equilibrata.";
 
-pub async fn generate(client: &OpenRouterClient, input: &CommentaryInput) -> Result<CommentaryResult> {
+pub async fn generate(client: &LocalLlmClient, input: &CommentaryInput) -> Result<CommentaryResult> {
     let italian_played = san_to_italian(&input.played_san);
     let italian_best = input.best_move_san.as_ref().map(|b| san_to_italian(b));
 
@@ -115,7 +115,7 @@ pub async fn generate(client: &OpenRouterClient, input: &CommentaryInput) -> Res
 }
 
 pub async fn generate_batch(
-    client: &OpenRouterClient,
+    client: &LocalLlmClient,
     inputs: &[CommentaryInput],
 ) -> Result<Vec<CommentaryResult>> {
     let mut results = Vec::with_capacity(inputs.len());
@@ -227,7 +227,7 @@ pub struct GameAnalysisResult {
 }
 
 pub async fn analyze_game(
-    client: &OpenRouterClient,
+    client: &LocalLlmClient,
     input: &GameAnalysisInput,
 ) -> Result<GameAnalysisResult> {
     let user_prompt = build_game_analysis_prompt(input);

@@ -1,16 +1,16 @@
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
-pub struct OpenRouterClient {
-    api_key: String,
+pub struct LocalLlmClient {
+    base_url: String,
     model: String,
     client: reqwest::Client,
 }
 
-impl OpenRouterClient {
-    pub fn new(api_key: String, model: String) -> Self {
-        OpenRouterClient {
-            api_key,
+impl LocalLlmClient {
+    pub fn new(base_url: String, model: String) -> Self {
+        LocalLlmClient {
+            base_url: base_url.trim_end_matches('/').to_string(),
             model,
             client: reqwest::Client::new(),
         }
@@ -23,50 +23,19 @@ impl OpenRouterClient {
         max_tokens: u32,
         temperature: f64,
     ) -> Result<String> {
-        log::info!("[openrouter] prompting model {} (max_tokens={}, temp={})", self.model, max_tokens, temperature);
+        log::info!(
+            "[local-llm] prompting {} via {} (max_tokens={}, temp={})",
+            self.model,
+            self.base_url,
+            max_tokens,
+            temperature
+        );
 
-        let body = json!({
-            "model": self.model,
-            "messages": [
-                { "role": "system", "content": system_prompt },
-                { "role": "user", "content": user_prompt }
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        });
-
-        let response = self
-            .client
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .context("failed to send request to OpenRouter")?;
-
-        let status = response.status();
-        let text = response.text().await.context("failed to read response body")?;
-
-        if !status.is_success() {
-            log::error!("[openrouter] HTTP {}: {}", status, text);
-            anyhow::bail!("OpenRouter error ({}): {}", status, text);
-        }
-
-        let parsed: serde_json::Value =
-            serde_json::from_str(&text).context("failed to parse OpenRouter response")?;
-
-        let content = parsed["choices"][0]["message"]["content"]
-            .as_str()
-            .context("missing choices[0].message.content in OpenRouter response")?;
-
-        log::info!("[openrouter] response: {} chars", content.len());
-        Ok(content.to_string())
+        let body = self.chat_body(system_prompt, user_prompt, max_tokens, temperature, None);
+        let parsed = self.post_chat(body).await?;
+        extract_content(&parsed)
     }
 
-    /// Come `prompt` ma richiede output JSON (`response_format: json_object`).
-    /// Parsa e ritorna il `Value`. Il system/user prompt devono istruire il
-    /// modello a produrre JSON valido.
     pub async fn prompt_json(
         &self,
         system_prompt: &str,
@@ -75,47 +44,84 @@ impl OpenRouterClient {
         temperature: f64,
     ) -> Result<Value> {
         log::info!(
-            "[openrouter] prompting model {} (json, max_tokens={}, temp={})",
-            self.model, max_tokens, temperature
+            "[local-llm] prompting {} via {} (json, max_tokens={}, temp={})",
+            self.model,
+            self.base_url,
+            max_tokens,
+            temperature
         );
 
-        let body = json!({
+        let body = self.chat_body(system_prompt, user_prompt, max_tokens, temperature, Some("json"));
+        let parsed = self.post_chat(body).await?;
+        let content = extract_content(&parsed)?;
+        serde_json::from_str(&content).context("failed to parse JSON content from local LLM")
+    }
+
+    pub async fn is_available(&self) -> bool {
+        self.client
+            .get(format!("{}/api/tags", self.base_url))
+            .send()
+            .await
+            .map(|response| response.status().is_success())
+            .unwrap_or(false)
+    }
+
+    fn chat_body(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+        max_tokens: u32,
+        temperature: f64,
+        format: Option<&str>,
+    ) -> Value {
+        let mut body = json!({
             "model": self.model,
             "messages": [
                 { "role": "system", "content": system_prompt },
                 { "role": "user", "content": user_prompt }
             ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "response_format": { "type": "json_object" },
+            "stream": false,
+            "options": {
+                "num_predict": max_tokens,
+                "temperature": temperature
+            }
         });
 
+        if let Some(format) = format {
+            body["format"] = json!(format);
+        }
+
+        body
+    }
+
+    async fn post_chat(&self, body: Value) -> Result<Value> {
         let response = self
             .client
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .post(format!("{}/api/chat", self.base_url))
             .header("Content-Type", "application/json")
             .json(&body)
             .send()
             .await
-            .context("failed to send request to OpenRouter")?;
+            .context("failed to send request to local LLM")?;
 
         let status = response.status();
         let text = response.text().await.context("failed to read response body")?;
 
         if !status.is_success() {
-            log::error!("[openrouter] HTTP {}: {}", status, text);
-            anyhow::bail!("OpenRouter error ({}): {}", status, text);
+            log::error!("[local-llm] HTTP {}: {}", status, text);
+            anyhow::bail!("local LLM error ({}): {}", status, text);
         }
 
-        let parsed: Value =
-            serde_json::from_str(&text).context("failed to parse OpenRouter response")?;
-
-        let content = parsed["choices"][0]["message"]["content"]
-            .as_str()
-            .context("missing choices[0].message.content in OpenRouter response")?;
-
-        log::info!("[openrouter] json response: {} chars", content.len());
-        serde_json::from_str(content).context("failed to parse JSON content from LLM")
+        serde_json::from_str(&text).context("failed to parse local LLM response")
     }
+}
+
+fn extract_content(parsed: &Value) -> Result<String> {
+    let content = parsed["message"]["content"]
+        .as_str()
+        .or_else(|| parsed["choices"][0]["message"]["content"].as_str())
+        .context("missing message.content in local LLM response")?;
+
+    log::info!("[local-llm] response: {} chars", content.len());
+    Ok(content.to_string())
 }

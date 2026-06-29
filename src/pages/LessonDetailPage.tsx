@@ -806,7 +806,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       }
     } catch (e) {
       console.error("[game-analysis] errore", e);
-      setGameAnalysisError("Analisi AI fallita. Verifica API key e connessione.");
+      setGameAnalysisError("Analisi AI fallita. Verifica che il server LLM locale sia attivo.");
     } finally {
       setGameAnalysisLoading(false);
     }
