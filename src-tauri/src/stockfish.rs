@@ -39,18 +39,8 @@ impl Engine {
             .spawn()
             .with_context(|| format!("failed to spawn stockfish at {}", binary_path))?;
 
-        let stdin = Box::new(
-            child
-                .stdin
-                .take()
-                .context("failed to capture stdin")?,
-        );
-        let reader = BufReader::new(
-            child
-                .stdout
-                .take()
-                .context("failed to capture stdout")?,
-        );
+        let stdin = Box::new(child.stdin.take().context("failed to capture stdin")?);
+        let reader = BufReader::new(child.stdout.take().context("failed to capture stdout")?);
         let stdout_lines = Box::new(reader.lines());
 
         let mut proc = ChildProcess {
@@ -74,17 +64,20 @@ impl Engine {
         })
     }
 
-    /// Analizza una posizione FEN a profondità fissa.
-    pub fn analyze(&self, fen: &str, depth: u32) -> Result<AnalysisResult> {
+    /// Analizza una posizione FEN a profondità e thread configurabili.
+    pub fn analyze(&self, fen: &str, depth: u32, threads: u32) -> Result<AnalysisResult> {
         let mut proc = self.child.blocking_lock();
+        let depth = depth.clamp(1, 30);
+        let threads = threads.clamp(1, 32);
 
         // Determina lato al tratto dal FEN per normalizzazione.
-        let side_to_move = fen
-            .split_whitespace()
-            .nth(1)
-            .unwrap_or("w");
+        let side_to_move = fen.split_whitespace().nth(1).unwrap_or("w");
         let black_to_move = side_to_move == "b";
 
+        send_command(
+            &mut *proc,
+            &format!("setoption name Threads value {}", threads),
+        )?;
         send_command(&mut *proc, &format!("position fen {}", fen))?;
         send_command(&mut *proc, &format!("go depth {}", depth))?;
 
@@ -155,7 +148,12 @@ fn send_command(proc: &mut ChildProcess, cmd: &str) -> Result<()> {
 fn read_line(proc: &mut ChildProcess) -> Result<String> {
     proc.stdout_lines
         .next()
-        .unwrap_or_else(|| Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "engine stdout closed")))
+        .unwrap_or_else(|| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "engine stdout closed",
+            ))
+        })
         .map_err(Into::into)
 }
 
@@ -173,9 +171,12 @@ fn capture_regex<'a>(line: &'a str, pattern: &str) -> Option<&'a str> {
     // Regex minimalista: supporta solo pattern semplici come "abc (\\d+)".
     let prefix_end = pattern.find('(')?;
     let prefix = &pattern[..prefix_end];
-    let suffix_start = pattern[prefix_end..].find(')').map(|i| prefix_end + i + 1)?;
+    let suffix_start = pattern[prefix_end..]
+        .find(')')
+        .map(|i| prefix_end + i + 1)?;
 
-    let line_after_prefix = line.strip_prefix(prefix)?;
+    let prefix_start = line.find(prefix)?;
+    let line_after_prefix = &line[prefix_start + prefix.len()..];
     let suffix = &pattern[suffix_start..];
 
     if suffix.is_empty() {

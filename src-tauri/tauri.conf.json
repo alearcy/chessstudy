@@ -30,6 +30,10 @@
     "active": true,
     "targets": "all",
     "license": "GPL-3.0",
+    "resources": {
+      "binaries/stockfish": "binaries/stockfish",
+      "binaries/stockfish-x86_64-pc-windows-msvc.exe": "binaries/stockfish-x86_64-pc-windows-msvc.exe"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -149,6 +149,7 @@ export function getEngine(): StockfishEngine {
 
 export interface AnalyzeOptions {
   depth?: number;
+  threads?: number;
   onProgress?: (done: number, total: number) => void;
   /** Oggetto mutabile: settare `cancelled = true` per interrompere. */
   signal?: { cancelled: boolean };
@@ -236,6 +237,31 @@ interface NativeEval {
   best_move_uci: string | null;
 }
 
+export interface StockfishSettings {
+  stockfish_depth: number;
+  stockfish_threads: number;
+}
+
+let stockfishSettingsPromise: Promise<StockfishSettings> | null = null;
+
+export function resetStockfishSettingsCache(): void {
+  stockfishSettingsPromise = null;
+}
+
+export async function getStockfishSettings(): Promise<StockfishSettings> {
+  if (!isTauri()) {
+    return { stockfish_depth: 15, stockfish_threads: 1 };
+  }
+  if (!stockfishSettingsPromise) {
+    stockfishSettingsPromise = import("@tauri-apps/api/core")
+      .then(({ invoke }) =>
+        invoke<StockfishSettings>("get_settings")
+      )
+      .catch(() => ({ stockfish_depth: 15, stockfish_threads: 1 }));
+  }
+  return stockfishSettingsPromise;
+}
+
 /** Converte il risultato nativo (snake_case) in PositionEval. */
 function toPositionEval(ne: NativeEval): PositionEval {
   return {
@@ -251,7 +277,9 @@ async function analyzePositionsNative(
   fens: string[],
   options: AnalyzeOptions
 ): Promise<PositionEval[]> {
-  const depth = options.depth ?? 15;
+  const settings = await getStockfishSettings();
+  const depth = options.depth ?? settings.stockfish_depth;
+  const threads = options.threads ?? settings.stockfish_threads;
   // Lazy import: @tauri-apps/api non esiste in contesto browser.
   const { invoke } = await import("@tauri-apps/api/core");
   const results: PositionEval[] = [];
@@ -261,6 +289,7 @@ async function analyzePositionsNative(
     const raw = await invoke<NativeEval>("analyze_position", {
       fen: fens[i],
       depth,
+      threads,
     });
     results.push(toPositionEval(raw));
     options.onProgress?.(i + 1, fens.length);
@@ -275,7 +304,8 @@ async function analyzePositionsWasm(
   fens: string[],
   options: AnalyzeOptions
 ): Promise<PositionEval[]> {
-  const depth = options.depth ?? 15;
+  const settings = await getStockfishSettings();
+  const depth = options.depth ?? settings.stockfish_depth;
   const engine = getEngine();
   await engine.whenReady();
   const results: PositionEval[] = [];

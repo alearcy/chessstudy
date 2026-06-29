@@ -4,6 +4,8 @@
 
 ## Completed
 
+- la libreria stockfish 18 ora viene usata in maniera grezza e solo per Mac. Visto che l'app sarà Mac/Windows, vorrei ci fosserò entrambe le versione compilate. Inoltre vorrei poter avere dei settaggi modificabili a frontend per scegliere la profondità di ragionamento di Stockfish e quanti CPU usare.
+
 - sostituire le emoticons con delle icone, possibilmente prese direttamente dalla libreria shadcn
 
 - Sostituire react-chessboard con [chessground](https://github.com/lichess-org/chessground)
@@ -72,6 +74,7 @@
 - [x] Tema dark app-wide (→ `docs/specs/dark-theme.md`)
 
 ## Todo
+- [ ] Sostituire OpenRouter con un modello opensource leggero che giri in locale. Gemma potrebbe andar bene per analizzare gli scacchi?
 - [ ] Aggiungere test minimi
   - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
 - [ ] Ridurre bundle iniziale

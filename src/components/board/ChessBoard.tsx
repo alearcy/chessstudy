@@ -47,6 +47,7 @@ interface ChessBoardViewProps {
   onAnalyze?: () => void;
   analyzing?: boolean;
   analysisProgress?: { done: number; total: number } | null;
+  analysisDepth?: number;
   canAnalyze?: boolean;
   onCancelAnalysis?: () => void;
   /** Se true, l'analisi è in corso automaticamente (non mostra il bottone). */
@@ -266,6 +267,7 @@ export default function ChessBoardView({
   onAnalyze,
   analyzing = false,
   analysisProgress = null,
+  analysisDepth,
   canAnalyze = false,
   onCancelAnalysis,
   autoAnalysis: _autoAnalysis = false, // prop mantenuto per compatibilità
@@ -432,17 +434,23 @@ export default function ChessBoardView({
           <Button
             variant={analyzing ? "default" : "ghost"}
             size="icon-xs"
+            className="relative"
             disabled={!onAnalyze || (!analyzing && !canAnalyze)}
             onClick={analyzing ? onCancelAnalysis : onAnalyze}
             title={
               analyzing
-                ? "Annulla analisi"
+                ? `Annulla analisi Stockfish d${analysisDepth ?? "?"}`
                 : canAnalyze
-                  ? "Analizza partita con Stockfish 18"
+                  ? `Analizza partita con Stockfish 18${analysisDepth ? ` a profondità ${analysisDepth}` : ""}`
                   : "Nessuna posizione da analizzare"
             }
           >
             <Brain className="size-4" />
+            {analysisDepth && !analyzing && (
+              <span className="absolute -right-1 -top-1 rounded-full bg-primary px-1 text-[9px] leading-3 text-primary-foreground">
+                d{analysisDepth}
+              </span>
+            )}
           </Button>
         )}
 

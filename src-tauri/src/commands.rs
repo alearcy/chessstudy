@@ -1,6 +1,8 @@
-use crate::commentary::{CommentaryInput, CommentaryResult, GameAnalysisInput, GameAnalysisMove, GameAnalysisResult};
+use crate::commentary::{
+    CommentaryInput, CommentaryResult, GameAnalysisInput, GameAnalysisMove, GameAnalysisResult,
+};
 use crate::llm::OpenRouterClient;
-use crate::settings::OpenRouterSettings;
+use crate::settings::{normalize_stockfish_depth, normalize_stockfish_threads, OpenRouterSettings};
 use crate::stockfish::{AnalysisResult, Engine as SfEngine};
 use std::sync::Mutex;
 use tauri::State;
@@ -17,9 +19,19 @@ pub fn analyze_position(
     state: State<'_, AppState>,
     fen: String,
     depth: u32,
+    threads: Option<u32>,
 ) -> Result<AnalysisResult, String> {
-    let engine = state.engine.lock().map_err(|e| format!("mutex poison: {}", e))?;
-    engine.analyze(&fen, depth).map_err(|e| format!("analysis error: {}", e))
+    let engine = state
+        .engine
+        .lock()
+        .map_err(|e| format!("mutex poison: {}", e))?;
+    engine
+        .analyze(
+            &fen,
+            normalize_stockfish_depth(Some(depth)),
+            normalize_stockfish_threads(threads),
+        )
+        .map_err(|e| format!("analysis error: {}", e))
 }
 
 /// Restituisce il percorso del binario Stockfish (per diagnostica).
@@ -37,8 +49,10 @@ pub fn stockfish_path(state: State<'_, AppState>) -> String {
 /// Argomenti per `set_settings`.
 #[derive(serde::Deserialize)]
 pub struct SetSettingsArgs {
-    pub api_key: Option<String>,
+    pub api_key: Option<Option<String>>,
     pub model: Option<String>,
+    pub stockfish_depth: Option<u32>,
+    pub stockfish_threads: Option<u32>,
 }
 
 /// Stato restituito da `get_settings` (non espone la key raw).
@@ -46,6 +60,8 @@ pub struct SetSettingsArgs {
 pub struct SettingsInfo {
     pub api_key_configured: bool,
     pub model: String,
+    pub stockfish_depth: u32,
+    pub stockfish_threads: u32,
 }
 
 /// Salva le impostazioni OpenRouter.
@@ -55,22 +71,39 @@ pub fn set_settings(
     app: tauri::AppHandle,
     args: SetSettingsArgs,
 ) -> Result<SettingsInfo, String> {
+    let previous = state
+        .settings
+        .lock()
+        .map_err(|e| format!("mutex poison: {}", e))?
+        .clone();
+
     let new_settings = OpenRouterSettings {
-        api_key: args.api_key,
-        model: args.model.or_else(|| {
-            state.settings.lock().ok().and_then(|s| s.model.clone())
-        }),
+        api_key: args.api_key.unwrap_or(previous.api_key),
+        model: args.model.or_else(|| previous.model.clone()),
+        stockfish_depth: Some(normalize_stockfish_depth(
+            args.stockfish_depth.or(previous.stockfish_depth),
+        )),
+        stockfish_threads: Some(normalize_stockfish_threads(
+            args.stockfish_threads.or(previous.stockfish_threads),
+        )),
     };
 
     crate::settings::save_settings(&app, &new_settings)
         .map_err(|e| format!("save error: {}", e))?;
 
-    let mut guard = state.settings.lock().map_err(|e| format!("mutex poison: {}", e))?;
+    let mut guard = state
+        .settings
+        .lock()
+        .map_err(|e| format!("mutex poison: {}", e))?;
     *guard = new_settings.clone();
 
     Ok(SettingsInfo {
         api_key_configured: new_settings.api_key.is_some(),
-        model: new_settings.model.unwrap_or_else(|| "openai/gpt-4o-mini".to_string()),
+        model: new_settings
+            .model
+            .unwrap_or_else(|| "openai/gpt-4o-mini".to_string()),
+        stockfish_depth: normalize_stockfish_depth(new_settings.stockfish_depth),
+        stockfish_threads: normalize_stockfish_threads(new_settings.stockfish_threads),
     })
 }
 
@@ -86,8 +119,15 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
     let model = settings
         .and_then(|s| s.model.clone())
         .unwrap_or_else(|| "openai/gpt-4o-mini".to_string());
+    let stockfish_depth = normalize_stockfish_depth(settings.and_then(|s| s.stockfish_depth));
+    let stockfish_threads = normalize_stockfish_threads(settings.and_then(|s| s.stockfish_threads));
 
-    SettingsInfo { api_key_configured, model }
+    SettingsInfo {
+        api_key_configured,
+        model,
+        stockfish_depth,
+        stockfish_threads,
+    }
 }
 
 /// Rimuove la API key (mantiene il model).
@@ -96,22 +136,41 @@ pub fn clear_api_key(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<SettingsInfo, String> {
-    let model = {
-        let guard = state.settings.lock().map_err(|e| format!("mutex poison: {}", e))?;
-        guard.model.clone()
+    let (model, stockfish_depth, stockfish_threads) = {
+        let guard = state
+            .settings
+            .lock()
+            .map_err(|e| format!("mutex poison: {}", e))?;
+        (
+            guard.model.clone(),
+            guard.stockfish_depth,
+            guard.stockfish_threads,
+        )
     };
 
-    let new_settings = OpenRouterSettings { api_key: None, model };
+    let new_settings = OpenRouterSettings {
+        api_key: None,
+        model,
+        stockfish_depth,
+        stockfish_threads,
+    };
 
     crate::settings::save_settings(&app, &new_settings)
         .map_err(|e| format!("save error: {}", e))?;
 
-    let mut guard = state.settings.lock().map_err(|e| format!("mutex poison: {}", e))?;
+    let mut guard = state
+        .settings
+        .lock()
+        .map_err(|e| format!("mutex poison: {}", e))?;
     *guard = new_settings.clone();
 
     Ok(SettingsInfo {
         api_key_configured: false,
-        model: new_settings.model.unwrap_or_else(|| "openai/gpt-4o-mini".to_string()),
+        model: new_settings
+            .model
+            .unwrap_or_else(|| "openai/gpt-4o-mini".to_string()),
+        stockfish_depth: normalize_stockfish_depth(new_settings.stockfish_depth),
+        stockfish_threads: normalize_stockfish_threads(new_settings.stockfish_threads),
     })
 }
 
@@ -135,7 +194,10 @@ pub struct GenerateCommentaryArgs {
 }
 
 fn make_client(state: &AppState) -> Result<OpenRouterClient, String> {
-    let guard = state.settings.lock().map_err(|e| format!("mutex poison: {}", e))?;
+    let guard = state
+        .settings
+        .lock()
+        .map_err(|e| format!("mutex poison: {}", e))?;
     let api_key = guard
         .api_key
         .as_ref()
@@ -170,7 +232,9 @@ pub async fn generate_commentary(
         best_move_san: args.best_move_san,
     };
 
-    crate::commentary::generate(&client, &input).await.map_err(|e| format!("commentary error: {}", e))
+    crate::commentary::generate(&client, &input)
+        .await
+        .map_err(|e| format!("commentary error: {}", e))
 }
 
 /// Input per generare commenti su più mosse.
@@ -206,7 +270,9 @@ pub async fn generate_batch_commentary(
         })
         .collect();
 
-    crate::commentary::generate_batch(&client, &inputs).await.map_err(|e| format!("batch commentary error: {}", e))
+    crate::commentary::generate_batch(&client, &inputs)
+        .await
+        .map_err(|e| format!("batch commentary error: {}", e))
 }
 
 // ── Game Analysis ─────────────────────────────────────────────────────────────
@@ -244,16 +310,23 @@ pub async fn generate_game_analysis(
         white_name: args.white_name.unwrap_or_else(|| "il Bianco".to_string()),
         black_name: args.black_name.unwrap_or_else(|| "il Nero".to_string()),
         result: args.result,
-        moves: args.moves.iter().map(|m| GameAnalysisMove {
-            move_number: m.move_number,
-            index: m.index,
-            san_italian: crate::commentary::san_to_italian_public(&m.san),
-            player: m.player.clone(),
-            eval_before: m.eval_before.clone(),
-            eval_after: m.eval_after.clone(),
-            classification: m.classification.clone(),
-            best_san_italian: m.best_san.as_ref().map(|b| crate::commentary::san_to_italian_public(b)),
-        }).collect(),
+        moves: args
+            .moves
+            .iter()
+            .map(|m| GameAnalysisMove {
+                move_number: m.move_number,
+                index: m.index,
+                san_italian: crate::commentary::san_to_italian_public(&m.san),
+                player: m.player.clone(),
+                eval_before: m.eval_before.clone(),
+                eval_after: m.eval_after.clone(),
+                classification: m.classification.clone(),
+                best_san_italian: m
+                    .best_san
+                    .as_ref()
+                    .map(|b| crate::commentary::san_to_italian_public(b)),
+            })
+            .collect(),
         key_swings: args.key_swings,
     };
     crate::commentary::analyze_game(&client, &input)

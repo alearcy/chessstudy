@@ -38,6 +38,7 @@ import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
 import ErrorNotice from "@/components/ErrorNotice";
 import {
   analyzePositions,
+  getStockfishSettings,
   uciToArrow,
   toEvalFields,
   formatEval,
@@ -98,6 +99,7 @@ export default function LessonDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [gameAnalysisError, setGameAnalysisError] = useState<string | null>(null);
+  const [stockfishDepth, setStockfishDepth] = useState<number | null>(null);
   const analysisSignalRef = useRef<{ cancelled: boolean } | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
@@ -228,6 +230,18 @@ const selectedBoard = useMemo(
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const loadStockfishDepth = () => {
+      void getStockfishSettings().then((settings) => {
+        setStockfishDepth(settings.stockfish_depth);
+      });
+    };
+    loadStockfishDepth();
+    window.addEventListener("stockfish-settings-changed", loadStockfishDepth);
+    return () =>
+      window.removeEventListener("stockfish-settings-changed", loadStockfishDepth);
+  }, []);
 
   // Auto-analisi Stockfish in modalità Analysis all'ingresso.
   // Salta se tutte le posizioni hanno già eval persistito.
@@ -637,7 +651,6 @@ const selectedBoard = useMemo(
     setAnalysisProgress({ done: 0, total: fens.length });
     try {
       const evals: PositionEval[] = await analyzePositions(fens, {
-        depth: 15,
         signal,
         onProgress: (done, total) => setAnalysisProgress({ done, total }),
       });
@@ -1183,6 +1196,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                 onAnalyze={handleAnalyze}
                 analyzing={analyzing}
                 analysisProgress={analysisProgress}
+                analysisDepth={stockfishDepth ?? undefined}
                 canAnalyze={chess.moves.length > 0 || !!selectedBoard}
                 onCancelAnalysis={handleCancelAnalysis}
                 lessonMode={lesson.mode}
@@ -1286,6 +1300,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                     onAnalyze={handleAnalyze}
                     analyzing={analyzing}
                     analysisProgress={analysisProgress}
+                    analysisDepth={stockfishDepth ?? undefined}
                     canAnalyze={chess.moves.length > 0 || !!selectedBoard}
                     onCancelAnalysis={handleCancelAnalysis}
                     lessonMode={lesson.mode}

@@ -5,29 +5,65 @@ mod settings;
 mod stockfish;
 
 use commands::AppState;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::Manager;
 
 /// Risolve il percorso del binario Stockfish:
 /// 1. Variabile d'ambiente `STOCKFISH_PATH`
-/// 2. `src-tauri/binaries/stockfish` (sviluppo)
-/// 3. `stockfish` nel PATH di sistema
-fn resolve_stockfish_path() -> String {
+/// 2. `src-tauri/binaries/stockfish-<target>` (sviluppo)
+/// 3. `src-tauri/binaries/stockfish(.exe)` (compatibilità)
+/// 4. `stockfish` nel PATH di sistema
+fn resolve_stockfish_path(app_handle: &tauri::AppHandle) -> String {
     if let Ok(path) = std::env::var("STOCKFISH_PATH") {
-        if std::path::Path::new(&path).exists() {
+        if Path::new(&path).exists() {
             log::info!("using STOCKFISH_PATH: {}", path);
             return path;
         }
     }
 
-    let dev_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/stockfish");
-    if dev_path.exists() {
-        log::info!("using development binary: {}", dev_path.display());
-        return dev_path.to_string_lossy().to_string();
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        let resource_binaries_dir = resource_dir.join("binaries");
+        for candidate in stockfish_binary_candidates(&resource_binaries_dir) {
+            if candidate.exists() {
+                log::info!("using bundled binary: {}", candidate.display());
+                return candidate.to_string_lossy().to_string();
+            }
+        }
+    }
+
+    let binaries_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
+    for candidate in stockfish_binary_candidates(&binaries_dir) {
+        if candidate.exists() {
+            log::info!("using development binary: {}", candidate.display());
+            return candidate.to_string_lossy().to_string();
+        }
     }
 
     log::info!("using system stockfish from PATH");
     "stockfish".to_string()
+}
+
+fn stockfish_binary_candidates(base_dir: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        candidates.push(base_dir.join("stockfish-aarch64-apple-darwin"));
+    }
+    if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        candidates.push(base_dir.join("stockfish-x86_64-apple-darwin"));
+    }
+    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        candidates.push(base_dir.join("stockfish-x86_64-pc-windows-msvc.exe"));
+        candidates.push(base_dir.join("stockfish.exe"));
+    }
+
+    candidates.push(base_dir.join(if cfg!(windows) {
+        "stockfish.exe"
+    } else {
+        "stockfish"
+    }));
+    candidates
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,14 +79,16 @@ pub fn run() {
             }
 
             // Init Stockfish engine.
-            let binary_path = resolve_stockfish_path();
-            let engine = stockfish::Engine::new(&binary_path)
-                .expect("failed to start stockfish engine");
+            let binary_path = resolve_stockfish_path(app.handle());
+            let engine =
+                stockfish::Engine::new(&binary_path).expect("failed to start stockfish engine");
 
             // Load OpenRouter settings from disk.
             let openrouter_settings = settings::load_settings(app.handle());
-            log::info!("OpenRouter settings loaded: api_key_configured={}",
-                openrouter_settings.api_key.is_some());
+            log::info!(
+                "OpenRouter settings loaded: api_key_configured={}",
+                openrouter_settings.api_key.is_some()
+            );
 
             app.manage(AppState {
                 engine: Mutex::new(engine),
