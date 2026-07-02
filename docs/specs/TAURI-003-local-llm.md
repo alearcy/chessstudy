@@ -2,7 +2,7 @@
 
 ## Obiettivo
 Sostituire il servizio di commento rule-based (`explainService.ts`) con un LLM
-locale (Gemma 4 E2B, 5B params, Q4_K_S ~2.1 GB) eseguito via `llama-cpp-2` nel
+locale (Qwen3 4B, Q4_K_M ~2.4 GB) eseguito via `llama-cpp-2` nel
 backend Rust di Tauri. Il modello genera commenti didattici in italiano a partire
 dall'analisi Stockfish della posizione. Fallback automatico a `explainService.ts`
 se il modello non è disponibile.
@@ -20,19 +20,19 @@ Frontend (React)                         Backend (Rust/Tauri)
 │    → rule-based (TS)  │               │ llm::Inference::prompt()     │
 │                       │               │   (llama-cpp-2)              │
 │  batchExplain()       │──invoke()────▶│       ↓                     │
-│    → invoke native    │               │ Gemma 4 E2B Q4_K_S.gguf     │
-│    multi-move batch   │               │   (~2.1 GB, app_data_dir)    │
+│    → invoke native    │               │ Qwen3 4B Q4_K_M.gguf    │
+│    multi-move batch   │               │   (~2.4 GB, resource_dir)    │
 └───────────────────────┘               └──────────────────────────────┘
 ```
 
 ## Subtask A — `llm.rs`: LLM Inference Engine
 
 ### Modello
-- **Nome**: `gemma-4-e2b-it-Q4_K_S.gguf`
-- **URL**: `https://huggingface.co/bartowski/gemma-4-e2b-it-GGUF/resolve/main/gemma-4-e2b-it-Q4_K_S.gguf`
-- **Dimensione**: ~2.1 GB
-- **Posizione**: `app_data_dir()/models/gemma-4-e2b-it-Q4_K_S.gguf`
-- **Download**: on-demand al primo avvio, con progress event via Tauri
+- **Nome**: `Qwen3-4B-Q4_K_M.gguf`
+- **Origine locale**: `src-tauri/models/Qwen3-4B-Q4_K_M.gguf`
+- **Dimensione**: ~2.4 GB
+- **Posizione**: `resource_dir()/models/Qwen3-4B-Q4_K_M.gguf`
+- **Distribuzione**: incluso nelle risorse Tauri.
 
 ### Struct `LlmEngine`
 ```rust
@@ -114,9 +114,8 @@ async fn generate_batch_commentary(
 
 ## Subtask D — Download modello on-demand ❌ Rimosso
 
-Il modello Gemma 4 E2B richiede autenticazione HuggingFace (licenza Google).
-Non è liberamente scaricabile. Il file `.gguf` (Q4_K_XL, ~2.4 GB) è incluso
-nel repository via Git LFS (`models/*.gguf`).
+Il modello Qwen3 4B è distribuito con licenza Apache-2.0. Il file `.gguf`
+(Q4_K_M, ~2.4 GB) è incluso nel repository via Git LFS (`models/*.gguf`).
 
 ## Subtask E — Frontend: `explainService.ts`
 

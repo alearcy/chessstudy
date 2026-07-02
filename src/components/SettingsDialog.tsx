@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Brain, CheckCircle, Cpu, Gauge, Loader2, Save, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -18,8 +17,6 @@ interface SettingsDialogProps {
   onSettingsChanged?: () => void;
 }
 
-const DEFAULT_LLM_BASE_URL = "http://localhost:11434";
-const DEFAULT_LLM_MODEL = "gemma3:4b";
 const DEFAULT_STOCKFISH_DEPTH = 15;
 const DEFAULT_STOCKFISH_THREADS = 1;
 
@@ -31,8 +28,7 @@ const DEPTH_OPTIONS = [
 ] as const;
 
 interface SettingsInfo {
-  llm_base_url: string;
-  llm_model: string;
+  llm_model_path: string;
   stockfish_depth: number;
   stockfish_threads: number;
 }
@@ -40,16 +36,13 @@ interface SettingsInfo {
 interface LlmStatus {
   ready: boolean;
   model_available: boolean;
-  base_url: string;
-  model: string;
+  model_path: string;
 }
 
 export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }: SettingsDialogProps) {
-  const [llmBaseUrl, setLlmBaseUrl] = useState(DEFAULT_LLM_BASE_URL);
-  const [llmModel, setLlmModel] = useState(DEFAULT_LLM_MODEL);
+  const [llmModelPath, setLlmModelPath] = useState("");
   const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
   const [checkingLlm, setCheckingLlm] = useState(false);
-  const [savingLlm, setSavingLlm] = useState(false);
   const [stockfishDepth, setStockfishDepth] = useState(DEFAULT_STOCKFISH_DEPTH);
   const [stockfishThreads, setStockfishThreads] = useState(DEFAULT_STOCKFISH_THREADS);
   const [savingStockfish, setSavingStockfish] = useState(false);
@@ -93,8 +86,7 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const info = await invoke<SettingsInfo>("get_settings");
-      setLlmBaseUrl(info.llm_base_url || DEFAULT_LLM_BASE_URL);
-      setLlmModel(info.llm_model || DEFAULT_LLM_MODEL);
+      setLlmModelPath(info.llm_model_path);
       setStockfishDepth(normalizeDepthOption(info.stockfish_depth));
       setStockfishThreads(normalizeCpuOption(info.stockfish_threads, buildCpuOptions(detectedThreads)));
     } catch {
@@ -109,27 +101,6 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
       setError(null);
     }
   }, [open, isTauri, loadSettings, checkLlmStatus]);
-
-  const handleSaveLlm = async () => {
-    if (!isTauri) return;
-    setSavingLlm(true);
-    setError(null);
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("set_settings", {
-        args: {
-          llm_base_url: llmBaseUrl,
-          llm_model: llmModel,
-        },
-      });
-      await checkLlmStatus();
-      onSettingsChanged?.();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setSavingLlm(false);
-    }
-  };
 
   const handleSaveStockfish = async () => {
     if (!isTauri) return;
@@ -167,7 +138,7 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
           </DialogTitle>
           <DialogDescription>
             {isTauri
-              ? "Configura AI locale e analisi Stockfish."
+              ? "Controlla AI locale e configura analisi Stockfish."
               : "Avvia l'app con Tauri desktop per modificare le impostazioni."}
           </DialogDescription>
         </DialogHeader>
@@ -204,47 +175,25 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
                   ) : llmStatus?.ready ? (
                     <span className="flex items-center gap-1 font-medium text-green-600">
                       <CheckCircle className="size-4" />
-                      Server locale attivo
+                      Modello GGUF caricato
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <XCircle className="size-4" />
-                      Server locale non raggiungibile
+                      Modello GGUF non disponibile
                     </span>
                   )}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="llm-base-url" className="text-sm font-medium">
-                      URL server
-                    </label>
-                    <Input
-                      id="llm-base-url"
-                      value={llmBaseUrl}
-                      onChange={(e) => setLlmBaseUrl(e.target.value)}
-                      placeholder={DEFAULT_LLM_BASE_URL}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="llm-model" className="text-sm font-medium">
-                      Modello
-                    </label>
-                    <Input
-                      id="llm-model"
-                      value={llmModel}
-                      onChange={(e) => setLlmModel(e.target.value)}
-                      placeholder={DEFAULT_LLM_MODEL}
-                    />
-                  </div>
+                <div className="flex flex-col gap-1 rounded-md border bg-muted/40 px-3 py-2">
+                  <span className="text-xs font-medium text-muted-foreground">Modello</span>
+                  <code className="break-all text-xs">
+                    {llmStatus?.model_path || llmModelPath}
+                  </code>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Default: Ollama locale con {DEFAULT_LLM_MODEL}. Gemma 4B e leggero abbastanza per commenti didattici brevi.
+                  Il modello gira nel backend Rust tramite llama.cpp; nessun server esterno richiesto.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={handleSaveLlm} disabled={savingLlm}>
-                    {savingLlm ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                    <span className="ml-1">Salva AI</span>
-                  </Button>
                   <Button variant="outline" onClick={checkLlmStatus} disabled={checkingLlm}>
                     {checkingLlm && <Loader2 className="mr-1 size-4 animate-spin" />}
                     Verifica

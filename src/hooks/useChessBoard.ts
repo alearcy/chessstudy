@@ -122,6 +122,12 @@ export function useChessBoard(initialFen: string = START_FEN) {
     );
   }, []);
 
+  const setMoveStockfishComment = useCallback((index: number, stockfishComment: string | null) => {
+    setMoves((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, stockfishComment } : m))
+    );
+  }, []);
+
   // --- Annotazioni (frecce / evidenziazioni) per la posizione corrente ---
 
   const currentArrows: BoardArrow[] =
@@ -222,6 +228,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
     replaceMove,
     setMoveComment,
     setMoveAiComment,
+    setMoveStockfishComment,
     setArrows,
     setHighlights,
     undo,

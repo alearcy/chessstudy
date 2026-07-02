@@ -1,25 +1,26 @@
-# ADR-0004: Switch da OpenRouter a LLM locale open source
+# ADR-0004: Switch da OpenRouter a GGUF embedded via Rust
 
 ## Stato: Accettato
 
 ## Contesto
-ADR-0003 ha scelto OpenRouter per ridurre complessita rispetto a `llama-cpp` embedded. Il nuovo requisito chiede un modello open source che giri in locale, senza dipendenza cloud e senza API key.
+ADR-0003 ha scelto OpenRouter per ridurre complessita rispetto a `llama-cpp` embedded. Il requisito corrente richiede invece un modello open source locale servito direttamente dall'app, senza API key cloud e senza un servizio esterno come Ollama.
 
 ## Decisione
-- Sostituire il client OpenRouter con un client LLM locale.
-- Usare di default un server locale Ollama-compatible su `http://localhost:11434`.
-- Usare `gemma3:4b` come modello default configurabile.
-- Salvare `llm_base_url` e `llm_model` in `settings.json`.
-- Mantenere `commentary.rs` invariato per prompt, parsing e output.
-- Mantenere fallback rule-based se il server locale non e raggiungibile.
+- Sostituire il client OpenRouter con un engine locale basato su `llama-cpp-2`.
+- Conservare il modello GGUF nel progetto in `src-tauri/models/`.
+- Caricare il GGUF all'avvio del backend Rust/Tauri.
+- Includere il modello nelle risorse Tauri.
+- Usare `commentary.rs` invariato per prompt, parsing e contratti frontend.
+- Esporre `llm_status()` come stato del modello caricato.
 
 ## Alternative considerate
-- Reintrodurre `llama-cpp` embedded: piu autonomo, ma riapre problemi di build, accelerazione GPU, modello multi-GB e packaging cross-platform.
-- Mantenere OpenRouter come opzione: maggiore flessibilita, ma mantiene dipendenza cloud e API key.
-- WebLLM/WebGPU: evita backend esterno, ma aumenta rischio browser/webview e prestazioni variabili.
+- Server locale Ollama-compatible: rifiutato, perche richiede un processo separato fuori dall'app.
+- Mantenere OpenRouter opzionale: rifiutato, perche mantiene dipendenza cloud e API key.
+- WebLLM/WebGPU: rifiutato, perche sposta carico e instabilita nel webview.
 
 ## Conseguenze
-- Positiva: zero API key cloud, privacy locale, build Rust semplice.
-- Positiva: modello facilmente sostituibile via settings.
-- Negativa: l'utente deve avere un server locale LLM avviato e il modello installato.
-- Neutrale: Gemma non calcola la parte scacchistica; Stockfish resta fonte tattica, il LLM produce spiegazione didattica.
+- Positiva: inferenza locale in-process, privacy locale, nessuna API key.
+- Positiva: packaging Tauri contiene il modello richiesto.
+- Negativa: bundle molto piu grande per via del GGUF.
+- Negativa: build Rust piu pesante e dipendente da toolchain native llama.cpp.
+- Neutrale: Stockfish resta la fonte tattica; il LLM produce la spiegazione didattica.

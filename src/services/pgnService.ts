@@ -163,6 +163,7 @@ export async function importPgnToLesson(
     moveNotation: m.san,
     fen: m.fenAfter,
     comment: m.comment,
+    stockfishComment: null,
     arrows: [],
     highlights: [],
     createdAt: now,

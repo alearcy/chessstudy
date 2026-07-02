@@ -7,13 +7,7 @@ use tauri::Manager;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     #[serde(default)]
-    pub api_key: Option<String>,
-    #[serde(default)]
-    pub model: Option<String>,
-    #[serde(default)]
-    pub llm_base_url: Option<String>,
-    #[serde(default)]
-    pub llm_model: Option<String>,
+    pub llm_model_path: Option<String>,
     #[serde(default)]
     pub stockfish_depth: Option<u32>,
     #[serde(default)]
@@ -22,8 +16,11 @@ pub struct AppSettings {
 
 pub const DEFAULT_STOCKFISH_DEPTH: u32 = 15;
 pub const DEFAULT_STOCKFISH_THREADS: u32 = 1;
-pub const DEFAULT_LLM_BASE_URL: &str = "http://localhost:11434";
-pub const DEFAULT_LLM_MODEL: &str = "gemma3:4b";
+pub const DEFAULT_LLM_MODEL_PATH: &str = "models/Qwen3-4B-Q4_K_M.gguf";
+const LEGACY_LLM_MODEL_PATHS: &[&str] = &[
+    "models/gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
+    "models/gemma-4-E4B-it-UD-Q4_K_XL.gguf",
+];
 
 pub fn normalize_stockfish_depth(depth: Option<u32>) -> u32 {
     depth.unwrap_or(DEFAULT_STOCKFISH_DEPTH).clamp(1, 30)
@@ -33,26 +30,20 @@ pub fn normalize_stockfish_threads(threads: Option<u32>) -> u32 {
     threads.unwrap_or(DEFAULT_STOCKFISH_THREADS).clamp(1, 32)
 }
 
-pub fn normalize_llm_base_url(base_url: Option<String>) -> String {
-    base_url
+pub fn normalize_llm_model_path(model_path: Option<String>) -> String {
+    let path = model_path
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_LLM_BASE_URL.to_string())
-        .trim_end_matches('/')
-        .to_string()
-}
-
-pub fn normalize_llm_model(model: Option<String>) -> String {
-    model
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_LLM_MODEL.to_string())
+        .unwrap_or_else(|| DEFAULT_LLM_MODEL_PATH.to_string());
+    if LEGACY_LLM_MODEL_PATHS.contains(&path.as_str()) {
+        DEFAULT_LLM_MODEL_PATH.to_string()
+    } else {
+        path
+    }
 }
 
 fn empty_settings() -> AppSettings {
     AppSettings {
-        api_key: None,
-        model: None,
-        llm_base_url: Some(DEFAULT_LLM_BASE_URL.to_string()),
-        llm_model: Some(DEFAULT_LLM_MODEL.to_string()),
+        llm_model_path: Some(DEFAULT_LLM_MODEL_PATH.to_string()),
         stockfish_depth: Some(DEFAULT_STOCKFISH_DEPTH),
         stockfish_threads: Some(DEFAULT_STOCKFISH_THREADS),
     }

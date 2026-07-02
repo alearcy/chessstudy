@@ -1,10 +1,10 @@
 use crate::commentary::{
     CommentaryInput, CommentaryResult, GameAnalysisInput, GameAnalysisMove, GameAnalysisResult,
+    MoveDiagnosis,
 };
 use crate::llm::LocalLlmClient;
 use crate::settings::{
-    normalize_llm_base_url, normalize_llm_model, normalize_stockfish_depth,
-    normalize_stockfish_threads, AppSettings,
+    normalize_llm_model_path, normalize_stockfish_depth, normalize_stockfish_threads, AppSettings,
 };
 use crate::stockfish::{AnalysisResult, Engine as SfEngine};
 use std::sync::Mutex;
@@ -13,6 +13,7 @@ use tauri::State;
 /// Stato condiviso dell'applicazione.
 pub struct AppState {
     pub engine: Mutex<SfEngine>,
+    pub llm: Mutex<Option<LocalLlmClient>>,
     pub settings: Mutex<AppSettings>,
 }
 
@@ -52,10 +53,7 @@ pub fn stockfish_path(state: State<'_, AppState>) -> String {
 /// Argomenti per `set_settings`.
 #[derive(serde::Deserialize)]
 pub struct SetSettingsArgs {
-    pub api_key: Option<Option<String>>,
-    pub model: Option<String>,
-    pub llm_base_url: Option<String>,
-    pub llm_model: Option<String>,
+    pub llm_model_path: Option<String>,
     pub stockfish_depth: Option<u32>,
     pub stockfish_threads: Option<u32>,
 }
@@ -63,10 +61,7 @@ pub struct SetSettingsArgs {
 /// Stato restituito da `get_settings` (non espone la key raw).
 #[derive(serde::Serialize)]
 pub struct SettingsInfo {
-    pub api_key_configured: bool,
-    pub model: String,
-    pub llm_base_url: String,
-    pub llm_model: String,
+    pub llm_model_path: String,
     pub stockfish_depth: u32,
     pub stockfish_threads: u32,
 }
@@ -85,13 +80,8 @@ pub fn set_settings(
         .clone();
 
     let new_settings = AppSettings {
-        api_key: args.api_key.unwrap_or(previous.api_key),
-        model: args.model.or_else(|| previous.model.clone()),
-        llm_base_url: Some(normalize_llm_base_url(
-            args.llm_base_url.or(previous.llm_base_url.clone()),
-        )),
-        llm_model: Some(normalize_llm_model(
-            args.llm_model.or(previous.llm_model.clone()),
+        llm_model_path: Some(normalize_llm_model_path(
+            args.llm_model_path.or(previous.llm_model_path.clone()),
         )),
         stockfish_depth: Some(normalize_stockfish_depth(
             args.stockfish_depth.or(previous.stockfish_depth),
@@ -111,10 +101,7 @@ pub fn set_settings(
     *guard = new_settings.clone();
 
     Ok(SettingsInfo {
-        api_key_configured: new_settings.api_key.is_some(),
-        model: new_settings.model.unwrap_or_default(),
-        llm_base_url: normalize_llm_base_url(new_settings.llm_base_url),
-        llm_model: normalize_llm_model(new_settings.llm_model),
+        llm_model_path: normalize_llm_model_path(new_settings.llm_model_path),
         stockfish_depth: normalize_stockfish_depth(new_settings.stockfish_depth),
         stockfish_threads: normalize_stockfish_threads(new_settings.stockfish_threads),
     })
@@ -125,72 +112,15 @@ pub fn set_settings(
 pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
     let guard = state.settings.lock().ok();
     let settings = guard.as_ref();
-    let api_key_configured = settings
-        .and_then(|s| s.api_key.as_ref())
-        .map(|k| !k.is_empty())
-        .unwrap_or(false);
-    let model = settings.and_then(|s| s.model.clone()).unwrap_or_default();
-    let llm_base_url = normalize_llm_base_url(settings.and_then(|s| s.llm_base_url.clone()));
-    let llm_model = normalize_llm_model(settings.and_then(|s| s.llm_model.clone()));
+    let llm_model_path = normalize_llm_model_path(settings.and_then(|s| s.llm_model_path.clone()));
     let stockfish_depth = normalize_stockfish_depth(settings.and_then(|s| s.stockfish_depth));
     let stockfish_threads = normalize_stockfish_threads(settings.and_then(|s| s.stockfish_threads));
 
     SettingsInfo {
-        api_key_configured,
-        model,
-        llm_base_url,
-        llm_model,
+        llm_model_path,
         stockfish_depth,
         stockfish_threads,
     }
-}
-
-/// Rimuove la vecchia API key eventualmente migrata da versioni precedenti.
-#[tauri::command]
-pub fn clear_api_key(
-    state: State<'_, AppState>,
-    app: tauri::AppHandle,
-) -> Result<SettingsInfo, String> {
-    let (model, llm_base_url, llm_model, stockfish_depth, stockfish_threads) = {
-        let guard = state
-            .settings
-            .lock()
-            .map_err(|e| format!("mutex poison: {}", e))?;
-        (
-            guard.model.clone(),
-            guard.llm_base_url.clone(),
-            guard.llm_model.clone(),
-            guard.stockfish_depth,
-            guard.stockfish_threads,
-        )
-    };
-
-    let new_settings = AppSettings {
-        api_key: None,
-        model,
-        llm_base_url,
-        llm_model,
-        stockfish_depth,
-        stockfish_threads,
-    };
-
-    crate::settings::save_settings(&app, &new_settings)
-        .map_err(|e| format!("save error: {}", e))?;
-
-    let mut guard = state
-        .settings
-        .lock()
-        .map_err(|e| format!("mutex poison: {}", e))?;
-    *guard = new_settings.clone();
-
-    Ok(SettingsInfo {
-        api_key_configured: false,
-        model: new_settings.model.unwrap_or_default(),
-        llm_base_url: normalize_llm_base_url(new_settings.llm_base_url),
-        llm_model: normalize_llm_model(new_settings.llm_model),
-        stockfish_depth: normalize_stockfish_depth(new_settings.stockfish_depth),
-        stockfish_threads: normalize_stockfish_threads(new_settings.stockfish_threads),
-    })
 }
 
 // ── Comandi LLM ───────────────────────────────────────────────────────────────
@@ -212,24 +142,26 @@ pub struct GenerateCommentaryArgs {
     pub best_move_san: Option<String>,
 }
 
-fn make_client(state: &AppState) -> Result<LocalLlmClient, String> {
+fn with_client<T>(
+    state: &AppState,
+    f: impl FnOnce(&LocalLlmClient) -> Result<T, anyhow::Error>,
+) -> Result<T, String> {
     let guard = state
-        .settings
+        .llm
         .lock()
         .map_err(|e| format!("mutex poison: {}", e))?;
-    let base_url = normalize_llm_base_url(guard.llm_base_url.clone());
-    let model = normalize_llm_model(guard.llm_model.clone());
-    Ok(LocalLlmClient::new(base_url, model))
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "LLM locale non disponibile".to_string())?;
+    f(client).map_err(|e| e.to_string())
 }
 
 /// Genera un commento didattico per una mossa usando un LLM locale.
 #[tauri::command]
-pub async fn generate_commentary(
+pub fn generate_commentary(
     state: State<'_, AppState>,
     args: GenerateCommentaryArgs,
 ) -> Result<CommentaryResult, String> {
-    let client = make_client(&state)?;
-
     let input = CommentaryInput {
         fen_before: args.fen_before,
         fen_after: args.fen_after,
@@ -245,8 +177,7 @@ pub async fn generate_commentary(
         best_move_san: args.best_move_san,
     };
 
-    crate::commentary::generate(&client, &input)
-        .await
+    with_client(&state, |client| crate::commentary::generate(client, &input))
         .map_err(|e| format!("commentary error: {}", e))
 }
 
@@ -258,12 +189,10 @@ pub struct BatchCommentaryArgs {
 
 /// Genera commenti didattici per un batch di mosse.
 #[tauri::command]
-pub async fn generate_batch_commentary(
+pub fn generate_batch_commentary(
     state: State<'_, AppState>,
     args: BatchCommentaryArgs,
 ) -> Result<Vec<CommentaryResult>, String> {
-    let client = make_client(&state)?;
-
     let inputs: Vec<CommentaryInput> = args
         .moves
         .iter()
@@ -283,9 +212,10 @@ pub async fn generate_batch_commentary(
         })
         .collect();
 
-    crate::commentary::generate_batch(&client, &inputs)
-        .await
-        .map_err(|e| format!("batch commentary error: {}", e))
+    with_client(&state, |client| {
+        crate::commentary::generate_batch(client, &inputs)
+    })
+    .map_err(|e| format!("batch commentary error: {}", e))
 }
 
 // ── Game Analysis ─────────────────────────────────────────────────────────────
@@ -305,20 +235,27 @@ pub struct GameAnalysisArgs {
 pub struct GameAnalysisMoveArg {
     pub move_number: u32,
     pub index: u32,
+    pub fen_before: String,
+    pub fen_after: String,
     pub san: String,
     pub player: String,
     pub eval_before: String,
     pub eval_after: String,
+    pub eval_before_cp: Option<i32>,
+    pub eval_after_cp: Option<i32>,
+    pub eval_drop_cp: i32,
     pub classification: String,
     pub best_san: Option<String>,
+    pub best_move_lan: Option<String>,
+    pub stockfish_comment: Option<String>,
+    pub diagnosis: Option<MoveDiagnosis>,
 }
 
 #[tauri::command]
-pub async fn generate_game_analysis(
+pub fn generate_game_analysis(
     state: State<'_, AppState>,
     args: GameAnalysisArgs,
 ) -> Result<GameAnalysisResult, String> {
-    let client = make_client(&state)?;
     let input = GameAnalysisInput {
         white_name: args.white_name.unwrap_or_else(|| "il Bianco".to_string()),
         black_name: args.black_name.unwrap_or_else(|| "il Nero".to_string()),
@@ -329,22 +266,37 @@ pub async fn generate_game_analysis(
             .map(|m| GameAnalysisMove {
                 move_number: m.move_number,
                 index: m.index,
+                fen_before: m.fen_before.clone(),
+                fen_after: m.fen_after.clone(),
                 san_italian: crate::commentary::san_to_italian_public(&m.san),
                 player: m.player.clone(),
                 eval_before: m.eval_before.clone(),
                 eval_after: m.eval_after.clone(),
+                eval_before_cp: m.eval_before_cp,
+                eval_after_cp: m.eval_after_cp,
+                eval_drop_cp: m.eval_drop_cp,
                 classification: m.classification.clone(),
                 best_san_italian: m
                     .best_san
                     .as_ref()
                     .map(|b| crate::commentary::san_to_italian_public(b)),
+                best_move_lan: m.best_move_lan.clone(),
+                stockfish_comment: m.stockfish_comment.clone(),
+                diagnosis: m.diagnosis.clone(),
             })
             .collect(),
         key_swings: args.key_swings,
     };
-    crate::commentary::analyze_game(&client, &input)
-        .await
-        .map_err(|e| format!("game analysis error: {}", e))
+    match with_client(&state, |client| {
+        crate::commentary::analyze_game(client, &input)
+    }) {
+        Ok(result) => Ok(result),
+        Err(error) if error == "LLM locale non disponibile" => Ok(
+            crate::commentary::build_stockfish_game_analysis_fallback(&input),
+        ),
+        Err(error) => Err(error),
+    }
+    .map_err(|e| format!("game analysis error: {}", e))
 }
 
 /// Stato dell'LLM locale.
@@ -352,29 +304,24 @@ pub async fn generate_game_analysis(
 pub struct LlmStatus {
     pub ready: bool,
     pub model_available: bool,
-    pub base_url: String,
-    pub model: String,
+    pub model_path: String,
 }
 
 /// Verifica lo stato dell'LLM.
 #[tauri::command]
-pub async fn llm_status(state: State<'_, AppState>) -> Result<LlmStatus, String> {
-    let (base_url, model) = match state.settings.lock() {
-        Ok(settings) => (
-            normalize_llm_base_url(settings.llm_base_url.clone()),
-            normalize_llm_model(settings.llm_model.clone()),
-        ),
-        Err(_) => ("".to_string(), "".to_string()),
-    };
-    let ready = match make_client(&state) {
-        Ok(client) => client.is_available().await,
-        Err(_) => false,
-    };
+pub fn llm_status(state: State<'_, AppState>) -> Result<LlmStatus, String> {
+    let guard = state
+        .llm
+        .lock()
+        .map_err(|e| format!("mutex poison: {}", e))?;
+    let ready = guard.as_ref().is_some_and(LocalLlmClient::is_available);
 
     Ok(LlmStatus {
         ready,
         model_available: ready,
-        base_url,
-        model,
+        model_path: guard
+            .as_ref()
+            .map(|client| client.model_path().display().to_string())
+            .unwrap_or_default(),
     })
 }

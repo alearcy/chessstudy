@@ -25,4 +25,5 @@ tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tokio = { version = "1", features = ["process", "io-util", "sync", "time", "fs"] }
 anyhow = "1"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+encoding_rs = "0.8"
+llama-cpp-2 = "0.1.150"

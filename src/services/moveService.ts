@@ -7,6 +7,7 @@ function normalizeMove(m: Move): Move {
     ...m,
     comment: m.comment ?? "",
     aiComment: m.aiComment ?? null,
+    stockfishComment: m.stockfishComment ?? null,
     arrows: m.arrows ?? [],
     highlights: m.highlights ?? [],
     evalCp: m.evalCp ?? null,
@@ -40,7 +41,7 @@ export async function createMove(move: Omit<Move, "id" | "createdAt">): Promise<
 
 export async function updateMove(
   id: number,
-  data: Partial<Pick<Move, "comment" | "aiComment" | "fen" | "moveNotation" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
+  data: Partial<Pick<Move, "comment" | "aiComment" | "stockfishComment" | "fen" | "moveNotation" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
 ): Promise<void> {
   await db.moves.update(id, data);
 }

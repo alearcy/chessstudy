@@ -66,6 +66,45 @@ fn stockfish_binary_candidates(base_dir: &Path) -> Vec<PathBuf> {
     candidates
 }
 
+fn resolve_llm_model_path(app_handle: &tauri::AppHandle, configured_path: &str) -> PathBuf {
+    if let Ok(path) = std::env::var("LLM_MODEL_PATH") {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            log::info!("using LLM_MODEL_PATH: {}", path.display());
+            return path;
+        }
+    }
+
+    let configured = PathBuf::from(configured_path);
+    if configured.is_absolute() && configured.exists() {
+        log::info!("using configured LLM model: {}", configured.display());
+        return configured;
+    }
+
+    let development_candidate = Path::new(env!("CARGO_MANIFEST_DIR")).join(configured_path);
+    if cfg!(debug_assertions) && development_candidate.exists() {
+        log::info!(
+            "using development LLM model: {}",
+            development_candidate.display()
+        );
+        return development_candidate;
+    }
+
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        let candidate = resource_dir.join(configured_path);
+        if candidate.exists() {
+            log::info!("using bundled LLM model: {}", candidate.display());
+            return candidate;
+        }
+    }
+
+    log::info!(
+        "using development LLM model fallback: {}",
+        development_candidate.display()
+    );
+    development_candidate
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -85,14 +124,29 @@ pub fn run() {
 
             // Load app settings from disk.
             let app_settings = settings::load_settings(app.handle());
-            log::info!(
-                "local LLM settings loaded: base_url={}, model={}",
-                settings::normalize_llm_base_url(app_settings.llm_base_url.clone()),
-                settings::normalize_llm_model(app_settings.llm_model.clone())
+            let llm_model_path = resolve_llm_model_path(
+                app.handle(),
+                &settings::normalize_llm_model_path(app_settings.llm_model_path.clone()),
             );
+            log::info!(
+                "embedded LLM settings loaded: model_path={}",
+                llm_model_path.display()
+            );
+            let llm = match llm::LocalLlmClient::new(&llm_model_path) {
+                Ok(client) => Some(client),
+                Err(error) => {
+                    log::error!(
+                        "failed to load embedded LLM from {}: {:#}",
+                        llm_model_path.display(),
+                        error
+                    );
+                    None
+                }
+            };
 
             app.manage(AppState {
                 engine: Mutex::new(engine),
+                llm: Mutex::new(llm),
                 settings: Mutex::new(app_settings),
             });
 
@@ -103,7 +157,6 @@ pub fn run() {
             commands::stockfish_path,
             commands::set_settings,
             commands::get_settings,
-            commands::clear_api_key,
             commands::generate_commentary,
             commands::generate_batch_commentary,
             commands::generate_game_analysis,

@@ -83,6 +83,7 @@ export async function convertAnalysisToStudy(
         parentId: m.parentId,
         order: m.order,
         comment: m.comment ?? "",
+        stockfishComment: m.stockfishComment ?? null,
         arrows: m.arrows ?? [],
         highlights: m.highlights ?? [],
         createdAt: new Date(),
