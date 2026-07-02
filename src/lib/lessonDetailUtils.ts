@@ -91,18 +91,18 @@ export function computeKeySwings(
     const afterMate = move.evalMate ?? null;
     const beforeScore = evalScore(beforeCp, beforeMate);
     const afterScore = evalScore(afterCp, afterMate);
-    const cpLoss = beforeScore - afterScore;
+    const isWhiteMove = i % 2 === 0;
+    const cpLoss = isWhiteMove ? beforeScore - afterScore : afterScore - beforeScore;
 
     const cls = moveClassification(cpLoss);
     if (cls?.label === "!!" || cls?.label === "!" || !cls) continue;
     const playerName = i % 2 === 0 ? whiteName : blackName;
-    const lossPawn = cpLoss / 100;
     const clsLabel =
       cls.label === "??" ? "ERRORE GRAVE" :
       cls.label === "?" ? "ERRORE" :
       cls.label === "?!" ? "IMPRECISIONE" : "BUONA";
     swings.push({
-      desc: `Mossa ${Math.floor(i / 2) + 1}. ${move.moveNotation} di ${playerName} (${clsLabel}, ${lossPawn >= 0 ? "-" : "+"}${Math.abs(lossPawn).toFixed(1)} pedoni)`,
+      desc: `Mossa ${Math.floor(i / 2) + 1}. ${move.moveNotation} di ${playerName} (${clsLabel})`,
       absLoss: Math.abs(cpLoss),
     });
   }

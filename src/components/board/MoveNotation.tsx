@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, ReactNode } from "react";
 import { CircleCheck, Eye, EyeOff, MessageSquare, Star } from "lucide-react";
 import { Chess } from "chess.js";
 import type { Move } from "@/types";
-import { formatEval, evalScore, moveClassification } from "@/services/analysisService";
+import { evalScore, moveClassification } from "@/services/analysisService";
 
 interface MoveNotationProps {
   moves: Move[];
@@ -121,7 +121,7 @@ export default function MoveNotation({
     const white = {
       san: formatSan(moves[i].moveNotation, true, useIcons),
       index: i + 1,
-      hasComment: !!moves[i].comment?.trim(),
+      hasComment: !!(moves[i].stockfishComment?.trim() || moves[i].comment?.trim()),
       evalCp: moves[i].evalCp ?? null,
       evalMate: moves[i].evalMate ?? null,
       isBestMove: i === 0
@@ -149,7 +149,7 @@ export default function MoveNotation({
       black = {
         san: formatSan(moves[i + 1].moveNotation, false, useIcons),
         index: i + 2,
-        hasComment: !!moves[i + 1].comment?.trim(),
+        hasComment: !!(moves[i + 1].stockfishComment?.trim() || moves[i + 1].comment?.trim()),
         evalCp: moves[i + 1].evalCp ?? null,
         evalMate: moves[i + 1].evalMate ?? null,
         isBestMove: isMoveBest(i + 1, moves[i].fen, moves[i].evalBestMoveUci),
@@ -255,6 +255,13 @@ export default function MoveNotation({
 }
 
 /** Badge eval: valore numerico + sigla classificazione. */
+function evalTrendLabel(cp: number | null, mate: number | null) {
+  if (mate !== null) return mate > 0 ? "Bianco decisivo" : "Nero decisivo";
+  if (cp === null || Math.abs(cp) < 40) return "pari";
+  if (cp > 0) return cp >= 180 ? "Bianco +" : "Bianco";
+  return cp <= -180 ? "Nero +" : "Nero";
+}
+
 function EvalBadge({
   cp,
   mate,
@@ -288,7 +295,7 @@ function EvalBadge({
         }`}
         title={cls ? `Valutazione: ${cls.label}` : undefined}
       >
-        {formatEval(cp, mate)}
+        {evalTrendLabel(cp, mate)}
       </span>
       {cls && (
         <MoveClassBadge

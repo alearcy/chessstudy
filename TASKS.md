@@ -76,6 +76,7 @@
 - [x] Tema dark app-wide (→ `docs/specs/dark-theme.md`)
 
 ## Todo
+- [ ] Togliere dai commenti riferimenti a centipawn o ripetizioni tipo "per stockfish la mossa migliore era". Lasciamo solo la classificazione come buona mossa o cattiva mossa, quale sarebbe stata la mossa migliore senza dire "secondo stockfish" e lasciamo l'individuazione dei pattern tattici. Per quanto riguarda i punteggi come +1.5. -1 ecc...creiamo una barra verticale animata che mostra come è messo il bianco e il nero, come fanno gli altri siti di scacchi come chess.com o lichess.org.
 - [ ] Aggiungere test minimi
   - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
 - [ ] Ridurre bundle iniziale

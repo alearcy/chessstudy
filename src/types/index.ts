@@ -58,6 +58,8 @@ export interface Move {
   comment: string;
   /** Commento didattico AI (analisi partita, momenti chiave). */
   aiComment?: string | null;
+  /** Commento deterministico generato dai dati Stockfish della mossa. */
+  stockfishComment?: string | null;
   /** Frecce disegnate su questa posizione. */
   arrows: BoardArrow[];
   /** Case evidenziate su questa posizione. */

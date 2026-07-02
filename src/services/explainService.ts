@@ -1,4 +1,5 @@
 import { Chess, Square, PieceSymbol, Color } from "chess.js";
+import type { Diagnosis } from "@/services/coachDiagnostics";
 import type { MoveExplanationInput, MoveExplanation, TacticalPattern, Severity } from "@/types";
 
 /** Verifica se l'LLM nativo è disponibile. */
@@ -25,6 +26,23 @@ const PIECE_SYMBOLS: Record<string, string> = {
   wp: "♟", wn: "♞", wb: "♝", wr: "♜", wq: "♛", wk: "♔",
   bp: "♟", bn: "♞", bb: "♝", br: "♜", bq: "♛", bk: "♚",
 };
+
+function expandChessSymbols(text: string | null): string | null {
+  if (!text) return text;
+  return text
+    .replaceAll("♔", "re")
+    .replaceAll("♚", "re")
+    .replaceAll("♕", "regina")
+    .replaceAll("♛", "regina")
+    .replaceAll("♖", "torre")
+    .replaceAll("♜", "torre")
+    .replaceAll("♗", "alfiere")
+    .replaceAll("♝", "alfiere")
+    .replaceAll("♘", "cavallo")
+    .replaceAll("♞", "cavallo")
+    .replaceAll("♙", "pedone")
+    .replaceAll("♟", "pedone");
+}
 
 /** Simbolo pezzo + casa per display. */
 function pieceLabel(square: Square, game: Chess): string {
@@ -409,11 +427,6 @@ function severityBadge(s: Severity): string {
   return map[s];
 }
 
-function formatCpLoss(cpLoss: number | null): string {
-  if (cpLoss == null) return "";
-  return `${(cpLoss / 100).toFixed(1)} pedoni`;
-}
-
 /** Etichetta del giocatore che ha mosso: nome PGN se disponibile, altrimenti "il Bianco"/"il Nero". */
 function playerLabel(playedBy: "w" | "b", whiteName: string | null | undefined, blackName: string | null | undefined): string {
   if (playedBy === "w") return whiteName || "il Bianco";
@@ -505,7 +518,7 @@ export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanati
   }
 
   const summary = buildSummary(severity, playedMoveSan, cpLoss, tactics);
-  const details = buildDetails(severity, playedMoveSan, playedBy, player, cpLoss, beforeFen, beforeEval, afterEval, tactics, stockfishExplains);
+  const details = buildDetails(severity, playedMoveSan, playedBy, player, beforeFen, beforeEval, afterEval, tactics, stockfishExplains);
 
   return { summary, details, severity, tactics, stockfishExplains };
 }
@@ -513,8 +526,17 @@ export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanati
 function buildSummary(severity: Severity, san: string, cpLoss: number | null, tactics: TacticalPattern[]): string {
   const badge = severityBadge(severity);
   const label = severityLabel(severity);
-  const lossStr = cpLoss != null ? ` (-${formatCpLoss(cpLoss)})` : "";
-  let sentence = `${badge} ${san} — ${label}${lossStr}.`;
+  const impact =
+    cpLoss == null || severity === "best"
+      ? ""
+      : cpLoss >= 250
+        ? ": la posizione peggiora molto"
+        : cpLoss >= 120
+          ? ": la posizione peggiora in modo importante"
+          : cpLoss >= 50
+            ? ": la posizione peggiora leggermente"
+            : "";
+  let sentence = `${badge} ${san} — ${label}${impact}.`;
   const fork = tactics.find((t) => t.type === "fork");
   if (fork && severity !== "best") sentence += ` Subisci una forchetta.`;
   const hanging = tactics.find((t) => t.type === "hanging_piece");
@@ -527,7 +549,6 @@ function buildDetails(
   playedSan: string,
   _playedBy: "w" | "b",
   player: string,
-  cpLoss: number | null,
   _beforeFen: string,
   beforeEval: MoveExplanationInput["beforeEval"],
   afterEval: MoveExplanationInput["afterEval"],
@@ -538,7 +559,7 @@ function buildDetails(
 
   switch (severity) {
     case "blunder":
-      details.push(`${player} perde ${formatCpLoss(cpLoss!)} di vantaggio.`);
+      details.push(`${player} perde molto vantaggio.`);
       if (tactics.length > 0) {
         details.push("La posizione ora contiene debolezze tattiche:");
         for (const t of tactics.slice(0, 3)) details.push(`• ${t.description}`);
@@ -546,26 +567,26 @@ function buildDetails(
       if (stockfishExplains) details.push(stockfishExplains);
       break;
     case "mistake":
-details.push(`${player} cede ${formatCpLoss(cpLoss)}.`);
+details.push(`${player} concede un vantaggio importante.`);
       if (stockfishExplains) details.push(stockfishExplains);
       for (const t of tactics.slice(0, 2)) details.push(`• ${t.description}`);
       break;
     case "inaccuracy":
-details.push(`Piccola imprecisione di ${player}: ${formatCpLoss(cpLoss)} di svantaggio.`);
+details.push(`Piccola imprecisione di ${player}: la posizione peggiora leggermente.`);
       if (stockfishExplains) details.push(stockfishExplains);
       break;
     case "good": {
       const bestSan = beforeEval.bestMoveUci ? uciToSan(_beforeFen, beforeEval.bestMoveUci) : null;
       if (bestSan && bestSan === playedSan) {
-        details.push(`${player} ha giocato la mossa migliore secondo Stockfish.`);
+        details.push(`${player} ha trovato la continuazione piu precisa.`);
       } else {
-        details.push(`Mossa solida di ${player}, vicina all'ottimale (solo -${formatCpLoss(cpLoss)}).`);
+        details.push(`Mossa solida di ${player}, vicina alla continuazione piu precisa.`);
       }
       }
       for (const t of tactics.slice(0, 2)) details.push(`• ${t.description}`);
       break;
     case "best":
-details.push(`${player} ha giocato la mossa esattamente corrispondente alla prima scelta di Stockfish.`);
+details.push(`${player} ha giocato la continuazione piu precisa.`);
       for (const t of tactics.slice(0, 3)) details.push(`• ${t.description}`);
       break;
   }
@@ -749,12 +770,20 @@ export interface GameAnalysisArgs {
   moves: Array<{
     moveNumber: number;
     index: number;
+    fenBefore: string;
+    fenAfter: string;
     san: string;
     player: string;
     evalBefore: string;
     evalAfter: string;
+    evalBeforeCp: number | null;
+    evalAfterCp: number | null;
+    evalDropCp: number;
     classification: string;
     bestSan: string | null;
+    bestMoveLan: string | null;
+    stockfishComment: string | null;
+    diagnosis: Diagnosis;
   }>;
   keySwings: string[];
 }
@@ -762,12 +791,15 @@ export interface GameAnalysisArgs {
 export interface GameAnalysisMoveComment {
   index: number;
   comment: string;
+  source?: "llm" | "diagnosis_fallback" | "stockfish_fallback" | string;
 }
 
 export interface GameAnalysisResult {
   overview: string;
   judgment: string;
   moveComments: GameAnalysisMoveComment[];
+  source?: "llm" | "fallback" | string;
+  rawLlmOutput?: unknown | null;
 }
 
 export async function analyzeGame(input: GameAnalysisArgs): Promise<GameAnalysisResult> {
@@ -776,6 +808,16 @@ export async function analyzeGame(input: GameAnalysisArgs): Promise<GameAnalysis
     overview: string;
     judgment: string;
     moveComments: GameAnalysisMoveComment[];
-  }>("generate_game_analysis", { args: input });
+    source?: string;
+    rawLlmOutput?: unknown | null;
+  }>("generate_game_analysis", {
+    args: {
+      ...input,
+      moves: input.moves.map((move) => ({
+        ...move,
+        stockfishComment: expandChessSymbols(move.stockfishComment),
+      })),
+    },
+  });
   return result;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Pencil, Trash2, NotebookPen, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, NotebookPen } from "lucide-react";
 import { getLesson, updateLesson, deleteLesson, convertAnalysisToStudy } from "@/services/lessonService";
 import {
   getBoard,
@@ -13,7 +13,6 @@ import {
   getMovesByBoard,
   createMove,
   updateMove,
-  updateMoveEval,
   deleteMovesFromOrder,
   deleteMovesByBoard,
 } from "@/services/moveService";
@@ -32,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { useChessBoard } from "@/hooks/useChessBoard";
 import ChessBoardView from "@/components/board/ChessBoard";
+import EvalBar from "@/components/analysis/EvalBar";
 import MoveNotation from "@/components/board/MoveNotation";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
@@ -41,16 +41,15 @@ import {
   getStockfishSettings,
   uciToArrow,
   toEvalFields,
-  formatEval,
   evalScore,
   moveClassification,
   type PositionEval,
 } from "@/services/analysisService";
 import { explainMoveRuleBased } from "@/services/explainService";
 import { analyzeGame } from "@/services/explainService";
+import { buildCriticalMoveDiagnostics } from "@/services/coachDiagnostics";
 import { Chess } from "chess.js";
 import AnalysisMarkdown from "@/components/lesson/AnalysisMarkdown";
-import MoveAiCommentBlock from "@/components/lesson/MoveAiCommentBlock";
 import MoveCommentPreview from "@/components/lesson/MoveCommentPreview";
 import StudyBoardSidebar from "@/components/lesson/StudyBoardSidebar";
 import {
@@ -64,6 +63,50 @@ import {
 import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
 
 const SAVE_DEBOUNCE_MS = 800;
+
+const waitForNextPaint = () =>
+  new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+
+function stockfishCommentForMove(args: {
+  move: Move;
+  beforeCp: number | null;
+  beforeMate: number | null;
+  afterCp: number | null;
+  afterMate: number | null;
+  cpLoss: number;
+  bestSan: string | null;
+}): string {
+  const cls = moveClassification(args.cpLoss);
+  const classification =
+    cls?.label === "??" ? "errore grave" :
+    cls?.label === "?" ? "errore" :
+    cls?.label === "?!" ? "imprecisione" :
+    args.cpLoss <= -50 ? "buona risorsa" :
+    "mossa solida";
+  const swing =
+    Math.abs(args.cpLoss) >= 250
+      ? ", la posizione peggiora molto"
+      : Math.abs(args.cpLoss) >= 120
+        ? ", la posizione peggiora in modo importante"
+        : Math.abs(args.cpLoss) >= 25
+          ? ", la posizione peggiora leggermente"
+      : ", posizione quasi invariata";
+  const best =
+    args.bestSan && args.bestSan !== args.move.moveNotation
+      ? ` La continuazione piu precisa era ${args.bestSan}.`
+      : " La mossa giocata coincide con la scelta principale o resta pienamente giocabile.";
+
+  return `Analisi: ${args.move.moveNotation} - ${classification}.${swing}.${best}`;
+}
+
+function evalPositionLabel(cp: number | null, mate: number | null) {
+  if (mate !== null) return mate > 0 ? "Bianco decisivo" : "Nero decisivo";
+  if (cp === null || Math.abs(cp) < 40) return "equilibrio";
+  if (cp > 0) return cp >= 180 ? "Bianco meglio" : "Bianco leggermente meglio";
+  return cp <= -180 ? "Nero meglio" : "Nero leggermente meglio";
+}
 
 export default function LessonDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -626,7 +669,13 @@ const selectedBoard = useMemo(
             afterEval,
           });
           const commentText = [exp.summary, ...exp.details].join("\n");
-          await updateMove(move.id, { comment: commentText });
+          await updateMove(move.id, {
+            comment: commentText,
+            aiComment: null,
+            stockfishComment: commentText,
+          });
+          chess.setMoveStockfishComment(i, commentText);
+          chess.setMoveAiComment(i, null);
         } catch {
           // non critico
         }
@@ -663,7 +712,30 @@ const selectedBoard = useMemo(
       for (let i = 1; i < evals.length; i++) {
         const move = moveList[i - 1];
         if (move.id == null) continue;
-await updateMoveEval(move.id, toEvalFields(evals[i]));
+        const beforeEval = evals[i - 1];
+        const afterEval = evals[i];
+        const isWhite = (i - 1) % 2 === 0;
+        const beforeScore = evalScore(beforeEval.scoreCp, beforeEval.scoreMate);
+        const afterScore = evalScore(afterEval.scoreCp, afterEval.scoreMate);
+        const cpLoss = isWhite ? beforeScore - afterScore : afterScore - beforeScore;
+        const beforeFen = i === 1 ? startFen : moveList[i - 2]?.fen;
+        const bestSan = beforeEval.bestMoveUci && beforeFen
+          ? uciToSan(beforeFen, beforeEval.bestMoveUci)
+          : null;
+
+        await updateMove(move.id, {
+          ...toEvalFields(afterEval),
+          aiComment: null,
+          stockfishComment: stockfishCommentForMove({
+            move,
+            beforeCp: beforeEval.scoreCp,
+            beforeMate: beforeEval.scoreMate,
+            afterCp: afterEval.scoreCp,
+            afterMate: afterEval.scoreMate,
+            cpLoss,
+            bestSan,
+          }),
+        });
       }
 
       // Genera commenti rule-based usando evals freschi (non chess.moves).
@@ -715,9 +787,8 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
     setGameAnalysisLoading(true);
     setGameAnalysisError(null);
 
-    // Yield to event loop so React renders the loading overlay before
-    // the synchronous prep work and the async LLM call.
-    await new Promise((r) => setTimeout(r, 0));
+    // Ensure the overlay is painted before the local LLM starts consuming CPU.
+    await waitForNextPaint();
 
     try {
       const moveList = chess.moves;
@@ -733,7 +804,7 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
 
         const beforeScore = evalScore(beforeCp, beforeMate);
         const afterScore = evalScore(afterCp, afterMate);
-        const cpLoss = beforeScore - afterScore;
+        const cpLoss = isWhite ? beforeScore - afterScore : afterScore - beforeScore;
         const cls = moveClassification(cpLoss);
 
         const classLabel =
@@ -751,14 +822,36 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
         return {
           moveNumber: Math.floor(i / 2) + 1,
           index: i,
+          fenBefore: beforeFen,
+          fenAfter: m.fen,
           san: m.moveNotation,
           player: isWhite ? "Bianco" : "Nero",
           evalBefore: formatEvalForPrompt(beforeCp, beforeMate),
           evalAfter: formatEvalForPrompt(afterCp, afterMate),
+          evalBeforeCp: beforeCp,
+          evalAfterCp: afterCp,
           classification: classLabel,
           bestSan,
+          bestMoveLan: bestUci,
+          stockfishComment: m.comment?.trim() || null,
         };
       });
+      const criticalMoves = buildCriticalMoveDiagnostics(moves);
+      console.groupCollapsed("[game-analysis] payload diagnostico inviato all'LLM");
+      console.table(
+        criticalMoves.map((move) => ({
+          index: move.index,
+          moveNumber: move.moveNumber,
+          san: move.san,
+          classification: move.classification,
+          evalDropCp: move.evalDropCp,
+          diagnosis: move.diagnosis.type,
+          facts: move.diagnosis.facts.join(" | "),
+          bestSan: move.bestSan,
+        }))
+      );
+      console.log("criticalMoves", criticalMoves);
+      console.groupEnd();
 
       const keySwings = computeKeySwings(
         moveList,
@@ -772,9 +865,23 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
         whiteName: selectedBoard?.whiteName ?? null,
         blackName: selectedBoard?.blackName ?? null,
         result: selectedBoard?.headers?.["Result"] ?? null,
-        moves,
+        moves: criticalMoves,
         keySwings,
       });
+      console.groupCollapsed("[game-analysis] output LLM / fallback");
+      console.log("source", result.source ?? "unknown");
+      console.log("rawLlmOutput", result.rawLlmOutput ?? null);
+      console.log("overview", result.overview);
+      console.log("judgment", result.judgment);
+      console.table(
+        result.moveComments.map((comment) => ({
+          index: comment.index,
+          source: comment.source ?? "unknown",
+          comment: comment.comment,
+        }))
+      );
+      console.log("moveComments", result.moveComments);
+      console.groupEnd();
 
       // Sommario: panoramica + giudizio concatenati (markdown).
       const summaryMd = [result.overview, result.judgment]
@@ -786,27 +893,17 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       syncBoardInList(boardId, { gameAnalysis: cleanedSummary });
 
       // Pulisci aiComment stale su tutte le mosse (rigenerazione).
-      for (const m of moveList) {
+      for (const [index, m] of moveList.entries()) {
         if (m.id != null && m.aiComment) {
           await updateMove(m.id, { aiComment: null });
-          const idx = moveList.indexOf(m);
-          if (idx >= 0) chess.setMoveAiComment(idx, null);
+          chess.setMoveAiComment(index, null);
         }
       }
 
-      // Distribuisci i commenti dei momenti chiave sulle mosse correlate.
-      for (const mc of result.moveComments) {
-        if (mc.index < 0 || mc.index >= moveList.length) continue;
-        const target = moveList[mc.index];
-        if (!target?.id) continue;
-        const cleaned = cleanGameAnalysisText(mc.comment);
-        if (!cleaned.trim()) continue;
-        await updateMove(target.id, { aiComment: cleaned });
-        chess.setMoveAiComment(mc.index, cleaned);
-      }
+      await reloadBoardFromDb(boardId);
     } catch (e) {
       console.error("[game-analysis] errore", e);
-      setGameAnalysisError("Analisi AI fallita. Verifica che il server LLM locale sia attivo.");
+      setGameAnalysisError("Analisi AI fallita. Verifica che il modello GGUF sia disponibile.");
     } finally {
       setGameAnalysisLoading(false);
     }
@@ -1077,13 +1174,6 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
 
   return (
     <div className="w-full">
-      {gameAnalysisLoading && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
-          <Loader2 className="size-10 animate-spin text-primary mb-4" />
-          <span className="text-lg font-semibold text-foreground">L&apos;AI sta analizzando la partita...</span>
-          <span className="text-sm text-muted-foreground mt-1">Potrebbe richiedere qualche secondo</span>
-        </div>
-      )}
       <Button
         variant="ghost"
         size="sm"
@@ -1170,12 +1260,16 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
       )}
 
       {lesson.mode === "analysis" && selectedBoard ? (
-        <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-[12rem_minmax(30rem,42rem)_minmax(14rem,0.8fr)_20rem] 2xl:grid-cols-[13rem_minmax(34rem,46rem)_minmax(16rem,0.85fr)_22rem] xl:justify-center">
+        <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-[12rem_minmax(32.5rem,44.5rem)_20rem] 2xl:grid-cols-[13rem_minmax(36.5rem,48.5rem)_22rem] xl:justify-center">
           <div><PgnHeadersSidebar headers={selectedBoard.headers ?? {}} /></div>
 
           <section className="flex min-w-0 flex-col gap-4 items-center">
             <div className="w-full">
-              <ChessBoardView
+              <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-2">
+                <div className="pointer-events-none flex">
+                  <EvalBar cp={currentEvalCp} mate={currentEvalMate} />
+                </div>
+                <ChessBoardView
                 fen={chess.fen}
                 arrows={chess.currentArrows}
                 highlights={chess.currentHighlights}
@@ -1208,26 +1302,15 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                 boardOrientation={flipped ? "black" : "white"}
                 onFlip={handleFlip}
               />
+              </div>
             </div>
             {(currentEvalCp != null || currentEvalMate != null) && (
               <div className="w-full flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="font-mono tabular-nums">
-                  Valutazione: <span className="text-foreground font-semibold">{formatEval(currentEvalCp, currentEvalMate)}</span>
+                  Valutazione: <span className="text-foreground font-semibold">{evalPositionLabel(currentEvalCp, currentEvalMate)}</span>
                 </span>
                 <span className="text-xs">(profondità {currentEvalDepth})</span>
               </div>
-            )}
-          </section>
-
-          <section className="flex min-w-0 flex-col gap-3">
-            {gameAnalysisText ? (
-              <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
-                <AnalysisMarkdown text={gameAnalysisText} />
-              </div>
-            ) : (
-              <p className="flex items-center gap-1.5 text-sm text-muted-foreground italic">
-                Nessuna analisi AI. Usa il pulsante <Sparkles className="size-4" /> per generarla.
-              </p>
             )}
           </section>
 
@@ -1235,14 +1318,9 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
             <MoveCommentPreview
               currentMove={chess.currentMove}
               historyIndex={chess.historyIndex}
-              text={moveCommentDraft}
+              text={chess.currentMove?.stockfishComment ?? ""}
               stockfishLabel
             />
-            {chess.currentMove?.aiComment && (
-              <MoveAiCommentBlock
-                text={chess.currentMove.aiComment}
-              />
-            )}
             <MoveNotation
               moves={chess.moves}
               currentMoveIndex={chess.historyIndex}
@@ -1279,7 +1357,11 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
             {selectedBoard ? (
               <>
                 <div className="w-full">
-                  <ChessBoardView
+                  <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-2">
+                <div className="pointer-events-none flex">
+                  <EvalBar cp={currentEvalCp} mate={currentEvalMate} />
+                </div>
+                <ChessBoardView
                     fen={chess.fen}
                     arrows={chess.currentArrows}
                     highlights={chess.currentHighlights}
@@ -1312,11 +1394,12 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                     boardOrientation={flipped ? "black" : "white"}
                     onFlip={handleFlip}
                   />
+              </div>
                 </div>
                 {(currentEvalCp != null || currentEvalMate != null) && (
                   <div className="w-full flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="font-mono tabular-nums">
-                      Valutazione: <span className="text-foreground font-semibold">{formatEval(currentEvalCp, currentEvalMate)}</span>
+                      Valutazione: <span className="text-foreground font-semibold">{evalPositionLabel(currentEvalCp, currentEvalMate)}</span>
                     </span>
                     <span className="text-xs">(profondità {currentEvalDepth})</span>
                   </div>
@@ -1332,14 +1415,9 @@ await updateMoveEval(move.id, toEvalFields(evals[i]));
                       <MoveCommentPreview
                         currentMove={chess.currentMove}
                         historyIndex={chess.historyIndex}
-                        text={moveCommentDraft}
+                        text={chess.currentMove?.stockfishComment ?? moveCommentDraft}
                       />
-                      {chess.currentMove?.aiComment && (
-                        <MoveAiCommentBlock
-                          text={chess.currentMove.aiComment}
-                        />
-                      )}
-                    </>
+                              </>
                   ) : (
                     <>
                       <div className="flex gap-1 p-1 bg-muted rounded-lg" role="tablist">
