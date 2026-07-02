@@ -1,8 +1,7 @@
 ---
-name: task
+name: work-on-task
 description: Use when the user asks to work on a task, start a new feature, pick a task from TASKS.md, implement something, or when you recognize that a task from TASKS.md needs to be started. Also triggers when the user says things like "lavoriamo su", "iniziamo", "prossimo task", "next task", "work on", "let's start", "implement".
 user-invocable: true
-argument-hint: [task name or number]
 ---
 
 # Task Workflow — Step Mandatory Process
@@ -17,15 +16,7 @@ Check pending tasks in `./TASKS.md`.
 
 Select the next logical task, or ask the user which one. If `$ARGUMENTS` is provided, use it to identify the task.
 
-## Step 3 — Create a feature branch
-
-Following GitFlow:
-
-- Ensure no other feature branch exists and no files need to be committed/staged
-- **Ask the user before creating the branch, committing, or staging**
-- Create: `feature/<task-slug>` (e.g. `feature/product-catalog`)
-
-## Step 4 — Check architectural decisions
+## Step 3 — Check architectural decisions
 
 If the task involves architecture:
 
@@ -33,7 +24,7 @@ If the task involves architecture:
 - Read `docs/specs/` for architectural consistency
 - Don't contradict past specs without explicitly acknowledging the change
 
-## Step 5 — Plan
+## Step 4 — Plan
 
 Use `EnterPlanMode` to create the implementation strategy:
 
@@ -41,14 +32,14 @@ Use `EnterPlanMode` to create the implementation strategy:
 - Include technical details: API routes, data models, workflow steps, conventions
 - Do NOT plan for future tasks
 
-## Step 6 — Create spec
+## Step 5 — Create spec
 
 Once the user accepts the plan:
 
 - **Immediately** create `docs/specs/<task-name>.md` with the planned technical details
 - This serves as decisions documentation for future reference
 
-## Step 7 — Check existing tech debt
+## Step 6 — Check existing tech debt
 
 Before implementing, read all files in `docs/tech-debt/` and check if any open debt item is relevant to the current task:
 
@@ -57,7 +48,7 @@ Before implementing, read all files in `docs/tech-debt/` and check if any open d
 - If no → proceed, but reference the debt file in any code that touches the workaround
 
 
-## Step 8 — Implement with TDD (and surface tech debt)
+## Step 7 — Implement with TDD (and surface tech debt)
 
 For ALL feature implementation:
 
@@ -69,14 +60,15 @@ Never implement first and write tests after.
 
 If during implementation a workaround, stub, missing dependency, or TODO is encountered → **immediately invoke the `/find-tech-debt` skill** before continuing.
 
-## Step 9 — Update tracking
+## Step 8 — Update tracking
 
 - Update `TASKS.md` with progress
 - Add discovered subtasks if any
 - **TASKS.md format rules:**
-  - **In Progress**: move the task title only (no description, no checkbox) under `## In Progress`
-  - **Completed**: move the task title only (no description, no checkbox) under `## Completed`
-  - **Todo**: pending tasks keep their full description with `- [ ]` checkbox
+  - Task **status is encoded by its section** (`## In Progress` / `## Todo` / `## Done`) — do NOT put a checkbox on the task line itself.
+  - **Checkboxes are for subtasks only**: under an In Progress task, list subtasks as `- [ ]` / `- [x]` to show progress within the task.
+  - **In Progress / Done**: move the task line (`- <ID> <title>`) into the section; no task-level checkbox.
+  - **Todo**: keep the task line with its one-line description (and Spec link if any); no checkbox.
   - A task's full description lives in its spec (`docs/specs/<task-name>.md`), not in TASKS.md tracking sections
 
 ## Step 10 — Subtask completion
@@ -84,7 +76,6 @@ If during implementation a workaround, stub, missing dependency, or TODO is enco
 Always ask before moving to the next subtask:
 
 - If the user wants to review → pause and wait
-- If they want to move on → commit, clear context, proceed
 
 ## Step 11 — Task completion
 
@@ -92,7 +83,6 @@ When all subtasks are completed:
 
 1. Check with the user for confirmation
 2. Mark the parent task as completed in `TASKS.md`
-3. Commit and push the feature/hotfix branch
 
 ## Critical rules to follow
 
