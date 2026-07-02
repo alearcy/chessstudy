@@ -78,6 +78,8 @@
 
 ## Todo
 - [ ] Eliminare qualsiasi traccia di LLM e AI, non ne ho più bisogno. Cancella anche modello locale.
+- [ ] Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
+- [ ] Elimina i simboli dei pezzi nei commenti didattici e sostituisci con i nomi dei pezzi in italiano. Inoltre se individui una forchetta, un'infilata o altre tattiche, colora di giallo le case dei pezzi coinvolti.
 - [ ] Aggiungere test minimi
   - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
 - [ ] Ridurre bundle iniziale
