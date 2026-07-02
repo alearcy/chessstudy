@@ -33,7 +33,7 @@ function App() {
               variant="ghost"
               size="icon-xs"
               onClick={() => setSettingsOpen(true)}
-              title="Impostazioni AI"
+              title="Impostazioni"
             >
               <Settings className="size-4" />
             </Button>

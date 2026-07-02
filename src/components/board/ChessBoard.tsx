@@ -54,7 +54,7 @@ interface ChessBoardViewProps {
   autoAnalysis?: boolean;
   /** Modalità lezione (per decidere quali controlli mostrare). */
   lessonMode?: "study" | "analysis";
-  /** Analisi partita con AI (game-level, una sola chiamata). */
+  /** Analisi partita completa. */
   onGameAnalysis?: () => void;
   gameAnalysisLoading?: boolean;
   /** Casa di destinazione dell'ultima mossa, per badge di classificazione. */
@@ -464,8 +464,8 @@ export default function ChessBoardView({
               onClick={onGameAnalysis}
               title={
                 gameAnalysisLoading
-                  ? "L'AI sta analizzando la partita..."
-                  : "Analizza la partita con l'AI"
+                  ? "Analisi partita in corso..."
+                  : "Analizza la partita"
               }
             >
               {gameAnalysisLoading ? (

@@ -75,9 +75,9 @@
 - [x] color the previous home in the chessboard, then remove the color after the next move. It aim to visualize the move and the home from the rhe pawn/piece come from. For example, if I move from e4 to e5, color e4. Then if I move from e5 to e6 uncolor e4 and color e5 and so on. (→ `docs/specs/last-move-origin-highlight.md`)
 - [x] Tema dark app-wide (→ `docs/specs/dark-theme.md`)
 - [x] Togliere dai commenti riferimenti a centipawn o ripetizioni tipo "per stockfish la mossa migliore era". Lasciamo solo la classificazione come buona mossa o cattiva mossa, quale sarebbe stata la mossa migliore senza dire "secondo stockfish" e lasciamo l'individuazione dei pattern tattici. Per quanto riguarda i punteggi come +1.5. -1 ecc...creiamo una barra verticale animata che mostra come è messo il bianco e il nero, come fanno gli altri siti di scacchi come chess.com o lichess.org.
+- [x] Eliminare qualsiasi traccia di LLM e AI, non ne ho più bisogno. Cancella anche modello locale.
 
 ## Todo
-- [ ] Eliminare qualsiasi traccia di LLM e AI, non ne ho più bisogno. Cancella anche modello locale.
 - [ ] Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
 - [ ] Elimina i simboli dei pezzi nei commenti didattici e sostituisci con i nomi dei pezzi in italiano. Inoltre se individui una forchetta, un'infilata o altre tattiche, colora di giallo le case dei pezzi coinvolti.
 - [ ] Aggiungere test minimi

@@ -115,10 +115,10 @@ export function useChessBoard(initialFen: string = START_FEN) {
     );
   }, []);
 
-  /** Aggiorna il commento AI di una mossa in memoria (dopo persistenza). */
-  const setMoveAiComment = useCallback((index: number, aiComment: string | null) => {
+  /** Aggiorna il commento di analisi di una mossa in memoria (dopo persistenza). */
+  const setMoveAnalysisComment = useCallback((index: number, analysisComment: string | null) => {
     setMoves((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, aiComment } : m))
+      prev.map((m, i) => (i === index ? { ...m, analysisComment } : m))
     );
   }, []);
 
@@ -227,7 +227,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
     makeMove,
     replaceMove,
     setMoveComment,
-    setMoveAiComment,
+    setMoveAnalysisComment,
     setMoveStockfishComment,
     setArrows,
     setHighlights,

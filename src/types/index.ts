@@ -44,7 +44,7 @@ export interface Board {
   blackName?: string | null;
   /** Header PGN completi (per visualizzazione strutturata in analisi). */
   headers?: Record<string, string | null>;
-  /** Analisi testuale dell'intera partita generata dall'AI (game-level). */
+  /** Analisi testuale dell'intera partita. */
   gameAnalysis?: string;
 }
 
@@ -56,8 +56,8 @@ export interface Move {
   parentId: number | null;
   order: number;
   comment: string;
-  /** Commento didattico AI (analisi partita, momenti chiave). */
-  aiComment?: string | null;
+  /** Commento didattico dell'analisi partita. */
+  analysisComment?: string | null;
   /** Commento deterministico generato dai dati Stockfish della mossa. */
   stockfishComment?: string | null;
   /** Frecce disegnate su questa posizione. */

@@ -1,19 +1,6 @@
 import { Chess, Square, PieceSymbol, Color } from "chess.js";
 import type { Diagnosis } from "@/services/coachDiagnostics";
 import type { MoveExplanationInput, MoveExplanation, TacticalPattern, Severity } from "@/types";
-
-/** Verifica se l'LLM nativo è disponibile. */
-async function isLlmReady(): Promise<boolean> {
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const status = await invoke<{ ready: boolean }>("llm_status");
-    console.log("[LLM] isLlmReady: status =", status);
-    return status.ready;
-  } catch (e) {
-    console.log("[LLM] isLlmReady: error =", e);
-    return false;
-  }
-}
 // ============================================================================
 // Costanti
 // ============================================================================
@@ -437,68 +424,7 @@ function playerLabel(playedBy: "w" | "b", whiteName: string | null | undefined, 
 // Generatore principale
 // ============================================================================
 
-/** Formato restituito dal comando Rust `generate_commentary` (serde). */
-interface NativeCommentary {
-  summary: string;
-  details: string;
-  severity: string;
-}
-
-function nativeSeverityToType(s: string): Severity {
-  const map: Record<string, Severity> = {
-    best: "best",
-    good: "good",
-    inaccuracy: "inaccuracy",
-    mistake: "mistake",
-    blunder: "blunder",
-  };
-  return map[s] ?? "good";
-}
-
-async function explainMoveNative(input: MoveExplanationInput): Promise<MoveExplanation> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  const bestSan = input.beforeEval.bestMoveUci
-    ? uciToSan(input.beforeFen, input.beforeEval.bestMoveUci)
-    : null;
-
-  const result = await invoke<NativeCommentary>("generate_commentary", {
-    args: {
-      fen_before: input.beforeFen,
-      fen_after: input.afterFen,
-      played_san: input.playedMoveSan,
-      played_by: input.playedBy,
-      white_name: input.whiteName ?? null,
-      black_name: input.blackName ?? null,
-      eval_cp: input.beforeEval.cp,
-      eval_mate: input.beforeEval.mate,
-      eval_depth: input.beforeEval.depth,
-      after_eval_cp: input.afterEval.cp,
-      after_eval_mate: input.afterEval.mate,
-      best_move_san: bestSan,
-    },
-  });
-
-  return {
-    summary: result.summary,
-    details: [result.details],
-    severity: nativeSeverityToType(result.severity),
-    tactics: [],
-    stockfishExplains: null,
-  };
-}
-
 export async function explainMove(input: MoveExplanationInput): Promise<MoveExplanation> {
-  if (await isLlmReady()) {
-    try {
-      const exp = await explainMoveNative(input);
-      console.log("[LLM] commento generato:", exp.summary);
-      return exp;
-    } catch (e) {
-      console.error("[LLM] fallback a rule-based:", e);
-    }
-  } else {
-    console.log("[LLM] non disponibile, uso rule-based");
-  }
   return explainMoveRuleBased(input);
 }
 
@@ -675,56 +601,7 @@ export interface BatchExplainInput {
 }
 
 export async function batchExplain(input: BatchExplainInput): Promise<MoveExplanation[]> {
-  if (await isLlmReady()) {
-    try {
-      return await batchExplainNative(input);
-    } catch {
-      // Fallback a rule-based.
-    }
-  }
   return batchExplainRuleBased(input);
-}
-
-async function batchExplainNative(input: BatchExplainInput): Promise<MoveExplanation[]> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  const { startFen, moves, boardEval } = input;
-
-  const batchMoves = moves.map((move, i) => {
-    const playedBy = i % 2 === 0 ? "w" : "b";
-    const beforeFen = i === 0 ? startFen : moves[i - 1].fen;
-    const bestSan = i === 0 && boardEval.bestMoveUci
-      ? uciToSan(beforeFen, boardEval.bestMoveUci)
-      : null;
-
-    return {
-      fen_before: beforeFen,
-      fen_after: move.fen,
-      played_san: move.san,
-      played_by: playedBy,
-      white_name: input.whiteName ?? null,
-      black_name: input.blackName ?? null,
-      eval_cp: i === 0 ? boardEval.cp : moves[i - 1].evalCp,
-      eval_mate: i === 0 ? boardEval.mate : moves[i - 1].evalMate,
-      eval_depth: boardEval.depth,
-      after_eval_cp: move.evalCp,
-      after_eval_mate: move.evalMate,
-      best_move_san: bestSan,
-    };
-  });
-
-  const results = await invoke<NativeCommentary[]>("generate_batch_commentary", {
-    args: {
-      moves: batchMoves,
-    },
-  });
-
-  return results.map((r) => ({
-    summary: r.summary,
-    details: [r.details],
-    severity: nativeSeverityToType(r.severity),
-    tactics: [],
-    stockfishExplains: null,
-  }));
 }
 
 function batchExplainRuleBased(input: BatchExplainInput): MoveExplanation[] {
@@ -791,33 +668,69 @@ export interface GameAnalysisArgs {
 export interface GameAnalysisMoveComment {
   index: number;
   comment: string;
-  source?: "llm" | "diagnosis_fallback" | "stockfish_fallback" | string;
+  source?: "diagnosis_fallback" | "stockfish_fallback" | string;
 }
 
 export interface GameAnalysisResult {
   overview: string;
   judgment: string;
   moveComments: GameAnalysisMoveComment[];
-  source?: "llm" | "fallback" | string;
-  rawLlmOutput?: unknown | null;
+  source?: "stockfish" | "fallback" | string;
 }
 
 export async function analyzeGame(input: GameAnalysisArgs): Promise<GameAnalysisResult> {
-  const { invoke } = await import("@tauri-apps/api/core");
-  const result = await invoke<{
-    overview: string;
-    judgment: string;
-    moveComments: GameAnalysisMoveComment[];
-    source?: string;
-    rawLlmOutput?: unknown | null;
-  }>("generate_game_analysis", {
-    args: {
-      ...input,
-      moves: input.moves.map((move) => ({
-        ...move,
-        stockfishComment: expandChessSymbols(move.stockfishComment),
-      })),
-    },
-  });
-  return result;
+  const comments = input.moves
+    .filter((move) => move.classification === "ERRORE" || move.classification === "ERRORE GRAVE")
+    .map((move) => ({
+      index: move.index,
+      comment: buildGameMoveComment(move),
+      source: move.stockfishComment ? "stockfish_fallback" : "diagnosis_fallback",
+    }));
+
+  return {
+    overview: buildGameOverview(input),
+    judgment: buildGameJudgment(input),
+    moveComments: comments,
+    source: "stockfish",
+  };
+}
+
+function buildGameOverview(input: GameAnalysisArgs): string {
+  const white = input.whiteName || "il Bianco";
+  const black = input.blackName || "il Nero";
+  const result = input.result ? ` Risultato: ${input.result}.` : "";
+  const criticalMoves = input.moves.filter(
+    (move) => move.classification === "ERRORE" || move.classification === "ERRORE GRAVE",
+  );
+
+  if (criticalMoves.length === 0) {
+    return `${white} e ${black} hanno giocato senza errori gravi rilevati da Stockfish.${result}`;
+  }
+
+  return `${white} e ${black} hanno giocato una partita con ${criticalMoves.length} momenti critici rilevati da Stockfish.${result}`;
+}
+
+function buildGameJudgment(input: GameAnalysisArgs): string {
+  if (input.keySwings.length > 0) {
+    return input.keySwings.slice(0, 3).join(" ");
+  }
+
+  const severeCount = input.moves.filter((move) => move.classification === "ERRORE GRAVE").length;
+  const errorCount = input.moves.filter((move) => move.classification === "ERRORE").length;
+
+  if (severeCount > 0) {
+    return `Il punto principale sono ${severeCount} errori gravi: conviene rivedere quelle posizioni prima di studiare il resto.`;
+  }
+  if (errorCount > 0) {
+    return `La partita contiene ${errorCount} errori: concentrati sulle alternative indicate da Stockfish.`;
+  }
+  return "La partita non mostra svolte critiche nei dati analizzati.";
+}
+
+function buildGameMoveComment(move: GameAnalysisArgs["moves"][number]): string {
+  const stockfishText = expandChessSymbols(move.stockfishComment);
+  const best = move.bestSan ? ` Una continuazione migliore era ${move.bestSan}.` : "";
+  const why = stockfishText ? ` ${stockfishText}` : "";
+
+  return `${move.classification} alla mossa ${move.moveNumber}: ${move.san}.${best}${why}`.trim();
 }

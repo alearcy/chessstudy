@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Brain, CheckCircle, Cpu, Gauge, Loader2, Save, XCircle } from "lucide-react";
+import { Cpu, Gauge, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,32 +25,22 @@ const DEPTH_OPTIONS = [
   { value: 15, label: "Bilanciata", hint: "scelta consigliata" },
   { value: 20, label: "Profonda", hint: "piu lenta" },
   { value: 25, label: "Molto profonda", hint: "molto lenta" },
-] as const;
+];
 
 interface SettingsInfo {
-  llm_model_path: string;
   stockfish_depth: number;
   stockfish_threads: number;
 }
 
-interface LlmStatus {
-  ready: boolean;
-  model_available: boolean;
-  model_path: string;
-}
-
 export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }: SettingsDialogProps) {
-  const [llmModelPath, setLlmModelPath] = useState("");
-  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
-  const [checkingLlm, setCheckingLlm] = useState(false);
   const [stockfishDepth, setStockfishDepth] = useState(DEFAULT_STOCKFISH_DEPTH);
   const [stockfishThreads, setStockfishThreads] = useState(DEFAULT_STOCKFISH_THREADS);
   const [savingStockfish, setSavingStockfish] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isTauri, setIsTauri] = useState<boolean | null>(null);
   const detectedThreads =
-    typeof navigator.hardwareConcurrency === "number"
-      ? Math.min(navigator.hardwareConcurrency, 32)
+    typeof navigator !== "undefined" && navigator.hardwareConcurrency
+      ? navigator.hardwareConcurrency
       : null;
   const cpuOptions = buildCpuOptions(detectedThreads);
 
@@ -67,40 +57,24 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
     check();
   }, []);
 
-  const checkLlmStatus = useCallback(async () => {
-    if (!isTauri) return;
-    setCheckingLlm(true);
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const status = await invoke<LlmStatus>("llm_status");
-      setLlmStatus(status);
-    } catch {
-      setLlmStatus(null);
-    } finally {
-      setCheckingLlm(false);
-    }
-  }, [isTauri]);
-
   const loadSettings = useCallback(async () => {
     if (!isTauri) return;
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const info = await invoke<SettingsInfo>("get_settings");
-      setLlmModelPath(info.llm_model_path);
       setStockfishDepth(normalizeDepthOption(info.stockfish_depth));
       setStockfishThreads(normalizeCpuOption(info.stockfish_threads, buildCpuOptions(detectedThreads)));
-    } catch {
-      setLlmStatus(null);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
-  }, [isTauri, detectedThreads]);
+  }, [detectedThreads, isTauri]);
 
   useEffect(() => {
-    if (open && isTauri !== false) {
+    if (open && isTauri) {
       loadSettings();
-      checkLlmStatus();
-      setError(null);
     }
-  }, [open, isTauri, loadSettings, checkLlmStatus]);
+  }, [open, isTauri, loadSettings]);
 
   const handleSaveStockfish = async () => {
     if (!isTauri) return;
@@ -119,10 +93,9 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
       resetStockfishSettingsCache();
       setStockfishDepth(depth);
       setStockfishThreads(threads);
-      window.dispatchEvent(new Event("stockfish-settings-changed"));
       onSettingsChanged?.();
-    } catch (e) {
-      setError(String(e));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingStockfish(false);
     }
@@ -130,147 +103,84 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Gauge className="size-5" />
-            Impostazioni
-          </DialogTitle>
-          <DialogDescription>
-            {isTauri
-              ? "Controlla AI locale e configura analisi Stockfish."
-              : "Avvia l'app con Tauri desktop per modificare le impostazioni."}
-          </DialogDescription>
+          <DialogTitle>Impostazioni</DialogTitle>
+          <DialogDescription>Configura la profondita e le risorse usate da Stockfish.</DialogDescription>
         </DialogHeader>
 
         {!isTauri ? (
           <div className="py-4 text-center text-sm text-muted-foreground">
-            {isTauri === null ? (
-              <div className="flex items-center justify-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
-                Verifica ambiente...
-              </div>
-            ) : (
-              <p>
-                Le impostazioni sono disponibili solo nell&apos;app desktop.
-                Avvia con <code className="rounded bg-muted px-1">npm run tauri dev</code>.
-              </p>
-            )}
+            Le impostazioni Stockfish sono disponibili nell'app desktop.
           </div>
         ) : (
-          <>
-            <div className="flex flex-col gap-4">
-              <section className="flex flex-col gap-3 border-b pb-4">
-                <h3 className="flex items-center gap-2 text-sm font-semibold">
-                  <Brain className="size-4" />
-                  AI locale
-                </h3>
-                <div className="flex items-center gap-2 text-sm">
-                  <span>Stato:</span>
-                  {checkingLlm ? (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin" />
-                      Verifica...
-                    </span>
-                  ) : llmStatus?.ready ? (
-                    <span className="flex items-center gap-1 font-medium text-green-600">
-                      <CheckCircle className="size-4" />
-                      Modello GGUF caricato
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <XCircle className="size-4" />
-                      Modello GGUF non disponibile
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1 rounded-md border bg-muted/40 px-3 py-2">
-                  <span className="text-xs font-medium text-muted-foreground">Modello</span>
-                  <code className="break-all text-xs">
-                    {llmStatus?.model_path || llmModelPath}
-                  </code>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Il modello gira nel backend Rust tramite llama.cpp; nessun server esterno richiesto.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={checkLlmStatus} disabled={checkingLlm}>
-                    {checkingLlm && <Loader2 className="mr-1 size-4 animate-spin" />}
-                    Verifica
-                  </Button>
-                </div>
-              </section>
+          <div className="space-y-5 py-2">
+            {error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
 
-              <section className="flex flex-col gap-3 border-b pb-4">
-                <h3 className="flex items-center gap-2 text-sm font-semibold">
-                  <Gauge className="size-4" />
-                  Stockfish
-                </h3>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="stockfish-depth" className="text-sm font-medium">
-                      Profondità
-                    </label>
-                    <select
-                      id="stockfish-depth"
-                      value={stockfishDepth}
-                      onChange={(e) => setStockfishDepth(Number(e.target.value))}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-                    >
-                      {DEPTH_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label} - d{option.value}, {option.hint}
-                        </option>
-                      ))}
-                    </select>
-                    {stockfishDepth >= 20 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Profondità alte possono aumentare molto il tempo di analisi.
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <label htmlFor="stockfish-threads" className="flex items-center gap-1 text-sm font-medium">
-                      <Cpu className="size-4" />
-                      CPU
-                    </label>
-                    <select
-                      id="stockfish-threads"
-                      value={stockfishThreads}
-                      onChange={(e) => setStockfishThreads(Number(e.target.value))}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-                    >
-                      {cpuOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label} - {option.description}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-muted-foreground">
-                      {detectedThreads
-                        ? `Rilevati ${detectedThreads} thread logici.`
-                        : "Numero core non disponibile: valori conservativi."}
-                    </p>
-                  </div>
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Cpu className="size-4" />
+                Stockfish
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <Gauge className="size-4" />
+                    Profondita
+                  </label>
+                  <select
+                    value={stockfishDepth}
+                    onChange={(event) => setStockfishDepth(Number(event.target.value))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                  >
+                    {DEPTH_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} - depth {option.value}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {DEPTH_OPTIONS.find((option) => option.value === stockfishDepth)?.hint}
+                  </p>
                 </div>
-                <div>
-                  <Button variant="outline" onClick={handleSaveStockfish} disabled={savingStockfish}>
-                    {savingStockfish ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                    <span className="ml-1">Salva Stockfish</span>
-                  </Button>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <Cpu className="size-4" />
+                    CPU
+                  </label>
+                  <select
+                    value={stockfishThreads}
+                    onChange={(event) => setStockfishThreads(Number(event.target.value))}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                  >
+                    {cpuOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    {detectedThreads ? `Rilevati ${detectedThreads} thread logici.` : "Thread CPU non rilevati."}
+                  </p>
                 </div>
-              </section>
-
-              {error && <p className="text-sm text-destructive">{error}</p>}
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Chiudi
-              </Button>
-            </DialogFooter>
-          </>
+              </div>
+            </section>
+          </div>
         )}
+
+        <DialogFooter>
+          {isTauri && (
+            <Button variant="outline" onClick={handleSaveStockfish} disabled={savingStockfish}>
+              {savingStockfish ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              <span className="ml-1">Salva Stockfish</span>
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -284,7 +194,7 @@ function normalizeDepthOption(value: number) {
 
 function normalizeCpuOption(
   value: number,
-  options: Array<{ value: number; label: string; description: string }>
+  options: Array<{ value: number; label: string }>,
 ) {
   return options.some((option) => option.value === value)
     ? value
@@ -296,13 +206,13 @@ function buildCpuOptions(detectedThreads: number | null) {
   const balanced = Math.max(1, Math.min(Math.ceil(max / 2), 32));
   const fast = Math.max(balanced, Math.min(max, 32));
   const options = [
-    { value: 1, label: "Leggera", description: "impatto minimo" },
-    { value: balanced, label: "Bilanciata", description: "scelta consigliata" },
-    { value: fast, label: "Rapida", description: detectedThreads ? "usa piu CPU" : "usa piu risorse" },
+    { value: 1, label: "1 thread" },
+    { value: balanced, label: `${balanced} thread` },
+    { value: fast, label: `${fast} thread` },
   ];
+
   const uniqueOptions = options.filter(
-    (option, index) =>
-      options.findIndex((candidate) => candidate.value === option.value) === index
+    (option, index, list) => list.findIndex((item) => item.value === option.value) === index,
   );
   return uniqueOptions.sort((a, b) => a.value - b.value);
 }

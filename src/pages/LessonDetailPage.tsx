@@ -671,11 +671,11 @@ const selectedBoard = useMemo(
           const commentText = [exp.summary, ...exp.details].join("\n");
           await updateMove(move.id, {
             comment: commentText,
-            aiComment: null,
+            analysisComment: null,
             stockfishComment: commentText,
           });
           chess.setMoveStockfishComment(i, commentText);
-          chess.setMoveAiComment(i, null);
+          chess.setMoveAnalysisComment(i, null);
         } catch {
           // non critico
         }
@@ -725,7 +725,7 @@ const selectedBoard = useMemo(
 
         await updateMove(move.id, {
           ...toEvalFields(afterEval),
-          aiComment: null,
+          analysisComment: null,
           stockfishComment: stockfishCommentForMove({
             move,
             beforeCp: beforeEval.scoreCp,
@@ -787,7 +787,7 @@ const selectedBoard = useMemo(
     setGameAnalysisLoading(true);
     setGameAnalysisError(null);
 
-    // Ensure the overlay is painted before the local LLM starts consuming CPU.
+    // Ensure the overlay is painted before the analysis starts.
     await waitForNextPaint();
 
     try {
@@ -837,7 +837,7 @@ const selectedBoard = useMemo(
         };
       });
       const criticalMoves = buildCriticalMoveDiagnostics(moves);
-      console.groupCollapsed("[game-analysis] payload diagnostico inviato all'LLM");
+      console.groupCollapsed("[game-analysis] payload diagnostico");
       console.table(
         criticalMoves.map((move) => ({
           index: move.index,
@@ -868,9 +868,8 @@ const selectedBoard = useMemo(
         moves: criticalMoves,
         keySwings,
       });
-      console.groupCollapsed("[game-analysis] output LLM / fallback");
+      console.groupCollapsed("[game-analysis] output");
       console.log("source", result.source ?? "unknown");
-      console.log("rawLlmOutput", result.rawLlmOutput ?? null);
       console.log("overview", result.overview);
       console.log("judgment", result.judgment);
       console.table(
@@ -892,18 +891,18 @@ const selectedBoard = useMemo(
       await updateBoard(boardId, { gameAnalysis: cleanedSummary });
       syncBoardInList(boardId, { gameAnalysis: cleanedSummary });
 
-      // Pulisci aiComment stale su tutte le mosse (rigenerazione).
+      // Pulisci analysisComment stale su tutte le mosse (rigenerazione).
       for (const [index, m] of moveList.entries()) {
-        if (m.id != null && m.aiComment) {
-          await updateMove(m.id, { aiComment: null });
-          chess.setMoveAiComment(index, null);
+        if (m.id != null && m.analysisComment) {
+          await updateMove(m.id, { analysisComment: null });
+          chess.setMoveAnalysisComment(index, null);
         }
       }
 
       await reloadBoardFromDb(boardId);
     } catch (e) {
       console.error("[game-analysis] errore", e);
-      setGameAnalysisError("Analisi AI fallita. Verifica che il modello GGUF sia disponibile.");
+      setGameAnalysisError("Analisi partita fallita. Controlla i dati della partita e riprova.");
     } finally {
       setGameAnalysisLoading(false);
     }
@@ -1239,7 +1238,7 @@ const selectedBoard = useMemo(
         )}
         {gameAnalysisError && (
           <ErrorNotice
-            title="AI"
+            title="Analisi partita"
             message={gameAnalysisError}
             onRetry={handleGameAnalysis}
             onDismiss={() => setGameAnalysisError(null)}

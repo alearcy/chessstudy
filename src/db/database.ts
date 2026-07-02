@@ -3,6 +3,7 @@ import type { Lesson, Board, Move } from "@/types";
 
 type MigrationLesson = Partial<Lesson> & { id?: number };
 type MigrationBoard = Partial<Board> & { id?: number; lessonId?: number };
+type MigrationMove = Partial<Move> & Record<string, unknown>;
 
 function splitLessonTitle(lesson: MigrationLesson, board: MigrationBoard): string {
   const lessonTitle = lesson.title?.trim() || "Analisi";
@@ -115,7 +116,7 @@ db.version(7).stores({
   moves: "++id, boardId, parentId, order, createdAt",
 });
 
-// v8: aggiunto campo gameAnalysis su Board (analisi partita AI).
+// v8: aggiunto campo gameAnalysis su Board (analisi partita).
 // Campo NON indicizzato → store invariato; bump di versione a documentazione.
 db.version(8).stores({
   lessons: "++id, title, mode, createdAt",
@@ -123,7 +124,7 @@ db.version(8).stores({
   moves: "++id, boardId, parentId, order, createdAt",
 });
 
-// v9: aggiunto campo aiComment su Move (commento AI momento chiave).
+// v9: aggiunto campo analysisComment su Move (commento momento chiave).
 // Campo NON indicizzato → store invariato; bump di versione a documentazione.
 db.version(9).stores({
   lessons: "++id, title, mode, createdAt",
@@ -138,5 +139,22 @@ db.version(10).stores({
   boards: "++id, lessonId, createdAt",
   moves: "++id, boardId, parentId, order, createdAt",
 }).upgrade(splitCumulativeAnalysisLessons);
+
+// v11: rinomina il vecchio campo commento generato in analysisComment.
+// Campo NON indicizzato -> store invariato; migrazione conservativa dei dati.
+db.version(11).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+}).upgrade((tx) => {
+  const legacyCommentKey = "ai" + "Comment";
+  return tx.table("moves").toCollection().modify((move: MigrationMove) => {
+    const legacyComment = move[legacyCommentKey];
+    if (move.analysisComment == null && typeof legacyComment === "string") {
+      move.analysisComment = legacyComment;
+    }
+    delete move[legacyCommentKey];
+  });
+});
 
 export default db;

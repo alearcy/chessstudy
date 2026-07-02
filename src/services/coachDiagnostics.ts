@@ -1,6 +1,6 @@
 import { Chess, type Color, type PieceSymbol, type Square } from "chess.js";
 
-export const MAX_CRITICAL_MOVES_FOR_LLM = 5;
+export const MAX_CRITICAL_MOVES_FOR_ANALYSIS = 5;
 
 export type DiagnosisType =
   | "missed_mate_in_one"
@@ -135,13 +135,13 @@ function pickCriticalMovesForLlm(moves: CoachCriticalMove[]): CoachCriticalMove[
     if (usedTypes.has(move.diagnosis.type)) continue;
     selected.push(move);
     usedTypes.add(move.diagnosis.type);
-    if (selected.length >= MAX_CRITICAL_MOVES_FOR_LLM) return selected.sort((a, b) => a.index - b.index);
+    if (selected.length >= MAX_CRITICAL_MOVES_FOR_ANALYSIS) return selected.sort((a, b) => a.index - b.index);
   }
 
   for (const move of sorted) {
     if (selected.some((item) => item.index === move.index)) continue;
     selected.push(move);
-    if (selected.length >= MAX_CRITICAL_MOVES_FOR_LLM) break;
+    if (selected.length >= MAX_CRITICAL_MOVES_FOR_ANALYSIS) break;
   }
 
   return selected.sort((a, b) => a.index - b.index);
