@@ -39,15 +39,17 @@ export function useChessBoard(initialFen: string = START_FEN) {
       startFen: string,
       loadedMoves: Move[],
       loadedStartArrows: BoardArrow[] = [],
-      loadedStartHighlights: string[] = []
+      loadedStartHighlights: string[] = [],
+      initialHistoryIndex = 0
     ) => {
       game.current.load(startFen);
       const fens = [startFen, ...loadedMoves.map((m) => m.fen)];
-      game.current.load(fens[fens.length - 1]);
+      const nextHistoryIndex = Math.min(Math.max(initialHistoryIndex, 0), fens.length - 1);
+      game.current.load(fens[nextHistoryIndex]);
       setHistory(fens);
       setMoves(loadedMoves);
-      setHistoryIndex(loadedMoves.length);
-      setFen(fens[fens.length - 1]);
+      setHistoryIndex(nextHistoryIndex);
+      setFen(fens[nextHistoryIndex]);
       setStartArrows(loadedStartArrows);
       setStartHighlights(loadedStartHighlights);
     },
