@@ -10,8 +10,8 @@ const PIECE_VALUES: Record<string, number> = {
 };
 
 const PIECE_SYMBOLS: Record<string, string> = {
-  wp: "♟", wn: "♞", wb: "♝", wr: "♜", wq: "♛", wk: "♔",
-  bp: "♟", bn: "♞", bb: "♝", br: "♜", bq: "♛", bk: "♚",
+  wp: "pedone", wn: "cavallo", wb: "alfiere", wr: "torre", wq: "regina", wk: "re",
+  bp: "pedone", bn: "cavallo", bb: "alfiere", br: "torre", bq: "regina", bk: "re",
 };
 
 function expandChessSymbols(text: string | null): string | null {
@@ -31,7 +31,7 @@ function expandChessSymbols(text: string | null): string | null {
     .replaceAll("♟", "pedone");
 }
 
-/** Simbolo pezzo + casa per display. */
+/** Nome pezzo per display. */
 function pieceLabel(square: Square, game: Chess): string {
   const p = game.get(square);
   if (!p) return square;

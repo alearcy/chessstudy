@@ -4,6 +4,10 @@
 
 ## Completed
 
+- [x] Rimuovere le etichette testuali "pari", "Bianco" e "Nero" dalle mosse nella sidebar, mantenendo la barra valutazione animata.
+
+- [x] Elimina i simboli dei pezzi nei commenti didattici e sostituisci con i nomi dei pezzi in italiano. Inoltre se individui una forchetta, un'infilata o altre tattiche, colora di giallo le case dei pezzi coinvolti.
+
 - Sostituire OpenRouter con un modello opensource leggero che giri in locale. Gemma potrebbe andar bene per analizzare gli scacchi?
 
 - la libreria stockfish 18 ora viene usata in maniera grezza e solo per Mac. Visto che l'app sarà Mac/Windows, vorrei ci fosserò entrambe le versione compilate. Inoltre vorrei poter avere dei settaggi modificabili a frontend per scegliere la profondità di ragionamento di Stockfish e quanti CPU usare.
@@ -79,7 +83,6 @@
 
 ## Todo
 - [x] Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
-- [ ] Elimina i simboli dei pezzi nei commenti didattici e sostituisci con i nomi dei pezzi in italiano. Inoltre se individui una forchetta, un'infilata o altre tattiche, colora di giallo le case dei pezzi coinvolti.
 - [ ] Aggiungere test minimi
   - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
 - [ ] Ridurre bundle iniziale

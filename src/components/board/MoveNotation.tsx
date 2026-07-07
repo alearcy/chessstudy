@@ -211,7 +211,6 @@ export default function MoveNotation({
                         mate={white.evalMate}
                         cpLoss={white.cpLoss}
                         isBestMove={white.isBestMove}
-                        active={currentMoveIndex === white.index}
                       />
                       {white.hasComment && (
                         <MessageSquare className="size-3 shrink-0 opacity-70" />
@@ -237,7 +236,6 @@ export default function MoveNotation({
                         mate={black.evalMate}
                         cpLoss={black.cpLoss}
                         isBestMove={black.isBestMove}
-                        active={currentMoveIndex === black.index}
                       />
                       {black.hasComment && (
                         <MessageSquare className="size-3 shrink-0 opacity-70" />
@@ -254,26 +252,16 @@ export default function MoveNotation({
   );
 }
 
-/** Badge eval: valore numerico + sigla classificazione. */
-function evalTrendLabel(cp: number | null, mate: number | null) {
-  if (mate !== null) return mate > 0 ? "Bianco decisivo" : "Nero decisivo";
-  if (cp === null || Math.abs(cp) < 40) return "pari";
-  if (cp > 0) return cp >= 180 ? "Bianco +" : "Bianco";
-  return cp <= -180 ? "Nero +" : "Nero";
-}
-
 function EvalBadge({
   cp,
   mate,
   cpLoss,
   isBestMove,
-  active,
 }: {
   cp: number | null;
   mate: number | null;
   cpLoss: number | null;
   isBestMove: boolean;
-  active: boolean;
 }) {
   const hasEval = cp != null || mate != null;
   if (!hasEval) return null;
@@ -289,14 +277,6 @@ function EvalBadge({
 
   return (
     <span className="flex items-center gap-0.5 shrink-0 text-[12px] tabular-nums font-bold">
-      <span
-        className={`px-1.5 rounded ${
-          active ? "bg-primary-foreground/20" : "bg-muted"
-        }`}
-        title={cls ? `Valutazione: ${cls.label}` : undefined}
-      >
-        {evalTrendLabel(cp, mate)}
-      </span>
       {cls && (
         <MoveClassBadge
           label={cls.label}

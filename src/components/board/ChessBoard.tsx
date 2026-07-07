@@ -74,8 +74,8 @@ interface ChessBoardViewProps {
   onFlip?: () => void;
 }
 
-const HIGHLIGHT_COLOR = "rgba(34, 197, 94, 0.45)";
-const LAST_MOVE_COLOR = "rgba(255, 213, 79, 0.55)";
+const HIGHLIGHT_COLOR = "rgba(250, 204, 21, 0.48)";
+const LAST_MOVE_COLOR = "rgba(56, 189, 248, 0.45)";
 const CHECK_COLOR = "rgba(239, 68, 68, 0.65)";
 const ARROW_COLOR = "rgb(255,170,0)";
 const ANALYSIS_ARROW_COLOR = "rgb(59,130,246)";

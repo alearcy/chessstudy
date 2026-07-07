@@ -130,6 +130,12 @@ export function useChessBoard(initialFen: string = START_FEN) {
     );
   }, []);
 
+  const setMoveHighlights = useCallback((index: number, highlights: string[]) => {
+    setMoves((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, highlights } : m))
+    );
+  }, []);
+
   // --- Annotazioni (frecce / evidenziazioni) per la posizione corrente ---
 
   const currentArrows: BoardArrow[] =
@@ -231,6 +237,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
     setMoveComment,
     setMoveAnalysisComment,
     setMoveStockfishComment,
+    setMoveHighlights,
     setArrows,
     setHighlights,
     undo,

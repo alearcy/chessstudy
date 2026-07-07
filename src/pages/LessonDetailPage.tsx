@@ -669,13 +669,18 @@ const selectedBoard = useMemo(
             afterEval,
           });
           const commentText = [exp.summary, ...exp.details].join("\n");
+          const tacticalHighlights = Array.from(
+            new Set(exp.tactics.flatMap((tactic) => tactic.squares))
+          );
           await updateMove(move.id, {
             comment: commentText,
             analysisComment: null,
             stockfishComment: commentText,
+            highlights: tacticalHighlights,
           });
           chess.setMoveStockfishComment(i, commentText);
           chess.setMoveAnalysisComment(i, null);
+          chess.setMoveHighlights(i, tacticalHighlights);
         } catch {
           // non critico
         }
