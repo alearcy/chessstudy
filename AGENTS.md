@@ -8,8 +8,8 @@ All commands must be run from `chessstudy/`.
 ## Commands
 - `npm run dev` — Vite dev server
 - `npm run build` — runs `tsc -b && vite build` (typecheck then build)
+- `npm test` — runs the Vitest suite
 - `npm run lint` — `eslint .` (**no eslint config exists yet**; will fail)
-- No test framework configured (no vitest/jest).
 
 ## Stack (actual, not plan.md)
 React **19** (not 18), React Router **v7** (not v6), Tailwind CSS **v4** via `@tailwindcss/vite` plugin (not v3+PostCSS), chess.js v1, react-chessboard v4, Dexie.js v4, Shadcn/ui New York style.

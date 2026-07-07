@@ -4,6 +4,9 @@
 
 ## Completed
 
+- [x] Aggiungere test minimi
+  - Coperti parsing/eval, hook scacchiera e persistenza core con Vitest.
+
 - [x] Rimuovere le etichette testuali "pari", "Bianco" e "Nero" dalle mosse nella sidebar, mantenendo la barra valutazione animata.
 
 - [x] Elimina i simboli dei pezzi nei commenti didattici e sostituisci con i nomi dei pezzi in italiano. Inoltre se individui una forchetta, un'infilata o altre tattiche, colora di giallo le case dei pezzi coinvolti.
@@ -83,7 +86,5 @@
 
 ## Todo
 - [x] Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
-- [ ] Aggiungere test minimi
-  - Coprire parsing/eval, hook scacchiera e persistenza core con framework da scegliere.
 - [ ] Ridurre bundle iniziale
   - Introdurre lazy loading/code splitting per moduli pesanti: chessboard, markdown, PGN, AI/Stockfish.
