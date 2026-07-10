@@ -41,7 +41,7 @@ function App() {
         </header>
         <main className="px-4 py-4">
           <Routes>
-            <Route path="/" element={<LessonsPage />} />
+            <Route path="/" element={<LessonsPage onOpenSettings={() => setSettingsOpen(true)} />} />
             <Route path="/lesson/:id" element={<LessonDetailPage />} />
           </Routes>
         </main>

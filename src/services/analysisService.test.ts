@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatEval, moveClassification } from "@/services/analysisService";
+import { evalScore, formatEval, moveClassification } from "@/services/analysisService";
 
 describe("analysisService eval helpers", () => {
   it("formats centipawn and mate evaluations for display", () => {
@@ -15,5 +15,10 @@ describe("analysisService eval helpers", () => {
     expect(moveClassification(80)).toMatchObject({ label: "?!" });
     expect(moveClassification(180)).toMatchObject({ label: "?" });
     expect(moveClassification(350)).toMatchObject({ label: "??" });
+  });
+
+  it("makes a shorter forced mate substantially better than a longer one", () => {
+    expect(evalScore(null, 1) - evalScore(null, 5)).toBeGreaterThanOrEqual(300);
+    expect(evalScore(null, -5) - evalScore(null, -1)).toBeGreaterThanOrEqual(300);
   });
 });

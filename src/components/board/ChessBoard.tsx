@@ -15,7 +15,6 @@ import {
   RotateCcw,
   X,
   Brain,
-  Sparkles,
   Loader2,
   GraduationCap,
   ArrowUpDown,
@@ -54,9 +53,6 @@ interface ChessBoardViewProps {
   autoAnalysis?: boolean;
   /** Modalità lezione (per decidere quali controlli mostrare). */
   lessonMode?: "study" | "analysis";
-  /** Analisi partita completa. */
-  onGameAnalysis?: () => void;
-  gameAnalysisLoading?: boolean;
   /** Casa di destinazione dell'ultima mossa, per badge di classificazione. */
   lastMoveSquare?: Square | null;
   /** Casa di partenza dell'ultima mossa, da evidenziare (giallo). */
@@ -272,15 +268,13 @@ export default function ChessBoardView({
   onCancelAnalysis,
   autoAnalysis: _autoAnalysis = false, // prop mantenuto per compatibilità
   lessonMode,
-  onGameAnalysis,
-  gameAnalysisLoading = false,
   onConvertToStudy,
   converting = false,
   boardOrientation = "white",
   onFlip,
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
-  const [coordinatesOnSquares, setCoordinatesOnSquares] = useState(true);
+  const [coordinatesOnSquares, setCoordinatesOnSquares] = useState(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef<Api | null>(null);
   const onMoveRef = useRef(onMove);
@@ -456,25 +450,6 @@ export default function ChessBoardView({
 
         {lessonMode === "analysis" && (
           <>
-            <div className="w-px h-6 bg-border mx-1" />
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={gameAnalysisLoading || analyzing}
-              onClick={onGameAnalysis}
-              title={
-                gameAnalysisLoading
-                  ? "Analisi partita in corso..."
-                  : "Analizza la partita"
-              }
-            >
-              {gameAnalysisLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Sparkles className="size-4" />
-              )}
-              <span className="hidden sm:inline ml-1">Analisi partita</span>
-            </Button>
             <Button
               variant="ghost"
               size="icon-xs"

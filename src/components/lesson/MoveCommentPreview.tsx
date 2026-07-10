@@ -7,6 +7,7 @@ interface MoveCommentPreviewProps {
   historyIndex: number;
   text: string;
   stockfishLabel?: boolean;
+  onMateLineClick?: (mateIn: number) => void;
 }
 
 export default function MoveCommentPreview({
@@ -14,12 +15,13 @@ export default function MoveCommentPreview({
   historyIndex,
   text,
   stockfishLabel = false,
+  onMateLineClick,
 }: MoveCommentPreviewProps) {
   return (
     <div className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap shrink-0">
       {currentMove ? (
         text.trim() ? (
-          <FormattedMoveComment text={text} />
+          <FormattedMoveComment text={text} onMateLineClick={onMateLineClick} />
         ) : (
           <span className="text-muted-foreground italic">
             Nessun commento per la mossa {historyIndex}. {currentMove.moveNotation}.
@@ -34,10 +36,16 @@ export default function MoveCommentPreview({
   );
 }
 
-function FormattedMoveComment({ text }: { text: string }) {
+function FormattedMoveComment({
+  text,
+  onMateLineClick,
+}: {
+  text: string;
+  onMateLineClick?: (mateIn: number) => void;
+}) {
   const parsed = parseBadgePrefix(text);
   if (!parsed) {
-    return <span className="whitespace-pre-wrap">{text}</span>;
+    return <MateLineText text={text} onMateLineClick={onMateLineClick} />;
   }
 
   const icon =
@@ -57,7 +65,42 @@ function FormattedMoveComment({ text }: { text: string }) {
           {parsed.label}
         </span>
       )}
-      {parsed.rest}
+      <MateLineText text={parsed.rest} onMateLineClick={onMateLineClick} />
+    </span>
+  );
+}
+
+function MateLineText({
+  text,
+  onMateLineClick,
+}: {
+  text: string;
+  onMateLineClick?: (mateIn: number) => void;
+}) {
+  if (!onMateLineClick) {
+    return <span className="whitespace-pre-wrap">{text}</span>;
+  }
+
+  const parts = text.split(/(matto in \d+)/gi);
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {parts.map((part, index) => {
+        const match = part.match(/^matto in (\d+)$/i);
+        if (!match) return <span key={`plain-${index}`}>{part}</span>;
+
+        const mateIn = Number(match[1]);
+        return (
+          <button
+            key={`mate-${index}`}
+            type="button"
+            className="font-medium text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => onMateLineClick(mateIn)}
+          >
+            {part}
+          </button>
+        );
+      })}
     </span>
   );
 }

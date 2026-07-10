@@ -121,7 +121,11 @@ export default function MoveNotation({
     const white = {
       san: formatSan(moves[i].moveNotation, true, useIcons),
       index: i + 1,
-      hasComment: !!(moves[i].stockfishComment?.trim() || moves[i].comment?.trim()),
+      hasComment: !!(
+        moves[i].stockfishComment?.trim() ||
+        moves[i].analysisComment?.trim() ||
+        moves[i].comment?.trim()
+      ),
       evalCp: moves[i].evalCp ?? null,
       evalMate: moves[i].evalMate ?? null,
       isBestMove: i === 0
@@ -149,7 +153,11 @@ export default function MoveNotation({
       black = {
         san: formatSan(moves[i + 1].moveNotation, false, useIcons),
         index: i + 2,
-        hasComment: !!(moves[i + 1].stockfishComment?.trim() || moves[i + 1].comment?.trim()),
+        hasComment: !!(
+          moves[i + 1].stockfishComment?.trim() ||
+          moves[i + 1].analysisComment?.trim() ||
+          moves[i + 1].comment?.trim()
+        ),
         evalCp: moves[i + 1].evalCp ?? null,
         evalMate: moves[i + 1].evalMate ?? null,
         isBestMove: isMoveBest(i + 1, moves[i].fen, moves[i].evalBestMoveUci),
@@ -166,7 +174,7 @@ export default function MoveNotation({
   return (
     <div
       className={`border rounded-lg bg-card ${
-        fullHeight ? "flex flex-col min-h-0 self-stretch" : ""
+        fullHeight ? "flex flex-1 flex-col min-h-0 self-stretch" : ""
       }`}
     >
       <div className="px-3 py-2 border-b bg-muted/50 flex items-center justify-between shrink-0">

@@ -27,11 +27,11 @@ export default function EvalBar({ cp, mate }: EvalBarProps) {
 
   return (
     <div
-      className="flex h-full min-h-[18rem] w-8 shrink-0 flex-col items-center"
+      className="flex h-full min-h-[18rem] w-10 shrink-0 flex-col items-center"
       aria-label={`Valutazione posizione: ${label}`}
       title={label}
     >
-      <div className="relative h-full min-h-[16rem] w-5 overflow-hidden rounded border border-border bg-background shadow-sm">
+      <div className="relative h-full min-h-[16rem] w-7 overflow-hidden rounded border border-border bg-background shadow-sm">
         <div
           className="absolute left-0 top-0 w-full bg-neutral-950 transition-[height] duration-500 ease-out"
           style={{ height: `${black}%` }}

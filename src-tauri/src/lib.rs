@@ -24,40 +24,32 @@ fn is_usable_stockfish_binary(path: &Path) -> bool {
 /// 2. `src-tauri/binaries/stockfish-<target>` (sviluppo)
 /// 3. `src-tauri/binaries/stockfish(.exe)` (compatibilità)
 /// 4. `stockfish` nel PATH di sistema
-fn resolve_stockfish_path(app_handle: &tauri::AppHandle) -> String {
+fn resolve_stockfish_path(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
     if let Ok(path) = std::env::var("STOCKFISH_PATH") {
-        if is_usable_stockfish_binary(Path::new(&path)) {
-            log::info!("using STOCKFISH_PATH: {}", path);
-            return path;
-        } else {
-            log::warn!("ignoring invalid STOCKFISH_PATH: {}", path);
+        let path = PathBuf::from(path);
+        if is_usable_stockfish_binary(&path) {
+            return Some(path);
         }
+        log::warn!("ignoring invalid STOCKFISH_PATH: {}", path.display());
     }
 
     if let Ok(resource_dir) = app_handle.path().resource_dir() {
         let resource_binaries_dir = resource_dir.join("binaries");
         for candidate in stockfish_binary_candidates(&resource_binaries_dir) {
             if is_usable_stockfish_binary(&candidate) {
-                log::info!("using bundled binary: {}", candidate.display());
-                return candidate.to_string_lossy().to_string();
-            } else if candidate.exists() {
-                log::warn!("ignoring invalid bundled binary: {}", candidate.display());
+                return Some(candidate);
             }
         }
     }
 
-    let binaries_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries");
-    for candidate in stockfish_binary_candidates(&binaries_dir) {
+    let manifest_binaries_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries");
+    for candidate in stockfish_binary_candidates(&manifest_binaries_dir) {
         if is_usable_stockfish_binary(&candidate) {
-            log::info!("using development binary: {}", candidate.display());
-            return candidate.to_string_lossy().to_string();
-        } else if candidate.exists() {
-            log::warn!("ignoring invalid development binary: {}", candidate.display());
+            return Some(candidate);
         }
     }
 
-    log::info!("using system stockfish from PATH");
-    "stockfish".to_string()
+    None
 }
 
 fn stockfish_binary_candidates(base_dir: &Path) -> Vec<PathBuf> {
@@ -65,20 +57,22 @@ fn stockfish_binary_candidates(base_dir: &Path) -> Vec<PathBuf> {
 
     if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
         candidates.push(base_dir.join("stockfish-aarch64-apple-darwin"));
+        candidates.push(base_dir.join("stockfish-macos-m1-apple-silicon"));
+        candidates.push(base_dir.join("stockfish-src").join("stockfish-macos-m1-apple-silicon"));
     }
     if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
         candidates.push(base_dir.join("stockfish-x86_64-apple-darwin"));
     }
-    if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+    if cfg!(target_os = "windows") {
         candidates.push(base_dir.join("stockfish-x86_64-pc-windows-msvc.exe"));
         candidates.push(base_dir.join("stockfish.exe"));
     }
+    if cfg!(target_os = "linux") {
+        candidates.push(base_dir.join("stockfish-x86_64-unknown-linux-gnu"));
+        candidates.push(base_dir.join("stockfish"));
+    }
 
-    candidates.push(base_dir.join(if cfg!(windows) {
-        "stockfish.exe"
-    } else {
-        "stockfish"
-    }));
+    candidates.push(base_dir.join("stockfish"));
     candidates
 }
 
@@ -96,15 +90,23 @@ pub fn run() {
 
             // Init Stockfish engine.
             let binary_path = resolve_stockfish_path(app.handle());
-            let engine = match stockfish::Engine::new(&binary_path) {
-                Ok(engine) => Some(engine),
-                Err(error) => {
-                    log::error!("failed to start stockfish engine at {}: {:#}", binary_path, error);
+            let engine = match binary_path {
+                Some(path) => {
+                    let path_display = path.display().to_string();
+                    match stockfish::Engine::new(&path_display) {
+                        Ok(engine) => Some(engine),
+                        Err(error) => {
+                            log::error!("failed to start stockfish engine at {}: {:#}", path_display, error);
+                            None
+                        }
+                    }
+                }
+                None => {
+                    log::warn!("no usable stockfish binary found; native analysis disabled");
                     None
                 }
             };
 
-            // Load app settings from disk.
             let app_settings = settings::load_settings(app.handle());
 
             app.manage(AppState {

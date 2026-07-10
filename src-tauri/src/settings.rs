@@ -10,6 +10,10 @@ pub struct AppSettings {
     pub stockfish_depth: Option<u32>,
     #[serde(default)]
     pub stockfish_threads: Option<u32>,
+    #[serde(default)]
+    pub lichess_username: Option<String>,
+    #[serde(default)]
+    pub chesscom_username: Option<String>,
 }
 
 pub const DEFAULT_STOCKFISH_DEPTH: u32 = 15;
@@ -23,10 +27,27 @@ pub fn normalize_stockfish_threads(threads: Option<u32>) -> u32 {
     threads.unwrap_or(DEFAULT_STOCKFISH_THREADS).clamp(1, 32)
 }
 
+pub fn normalize_username(username: Option<String>) -> String {
+    username.unwrap_or_default().trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_username;
+
+    #[test]
+    fn username_settings_are_trimmed_and_default_to_empty() {
+        assert_eq!(normalize_username(Some("  arcy  ".to_string())), "arcy");
+        assert_eq!(normalize_username(None), "");
+    }
+}
+
 fn empty_settings() -> AppSettings {
     AppSettings {
         stockfish_depth: Some(DEFAULT_STOCKFISH_DEPTH),
         stockfish_threads: Some(DEFAULT_STOCKFISH_THREADS),
+        lichess_username: Some(String::new()),
+        chesscom_username: Some(String::new()),
     }
 }
 

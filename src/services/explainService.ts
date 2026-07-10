@@ -14,23 +14,6 @@ const PIECE_SYMBOLS: Record<string, string> = {
   bp: "pedone", bn: "cavallo", bb: "alfiere", br: "torre", bq: "regina", bk: "re",
 };
 
-function expandChessSymbols(text: string | null): string | null {
-  if (!text) return text;
-  return text
-    .replaceAll("♔", "re")
-    .replaceAll("♚", "re")
-    .replaceAll("♕", "regina")
-    .replaceAll("♛", "regina")
-    .replaceAll("♖", "torre")
-    .replaceAll("♜", "torre")
-    .replaceAll("♗", "alfiere")
-    .replaceAll("♝", "alfiere")
-    .replaceAll("♘", "cavallo")
-    .replaceAll("♞", "cavallo")
-    .replaceAll("♙", "pedone")
-    .replaceAll("♟", "pedone");
-}
-
 /** Nome pezzo per display. */
 function pieceLabel(square: Square, game: Chess): string {
   const p = game.get(square);
@@ -41,16 +24,7 @@ function pieceLabel(square: Square, game: Chess): string {
 
 /** Verifica se la casa `sq` è attaccata da almeno un pezzo del colore dato. */
 function isSquareAttackedBy(game: Chess, square: Square, byColor: Color): boolean {
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const sq = (String.fromCharCode(97 + c) + (8 - r)) as Square;
-      const p = game.get(sq);
-      if (!p || p.color !== byColor) continue;
-      const moves = game.moves({ square: sq, verbose: true });
-      if (moves.some((m) => m.to === square)) return true;
-    }
-  }
-  return false;
+  return game.attackers(square, byColor).length > 0;
 }
 
 // ============================================================================
@@ -73,7 +47,10 @@ function calcCpLoss(
 }
 
 function evalToScore(cp: number | null, mate: number | null): number {
-  if (mate != null) return mate > 0 ? 100_000 - mate : -100_000 - mate;
+  if (mate != null) {
+    const mateScore = Math.max(1_000, 100_000 - Math.abs(mate) * 1_000);
+    return mate > 0 ? mateScore : -mateScore;
+  }
   if (cp != null) return cp;
   return 0;
 }
@@ -100,6 +77,7 @@ function detectHangingPieces(game: Chess, attacker: Color): TacticalPattern[] {
       const sq = (String.fromCharCode(97 + c) + (8 - r)) as Square;
       const piece = game.get(sq);
       if (!piece || piece.color !== defender) continue;
+      if (piece.type === "k") continue;
 
       const isAttacked = isSquareAttackedBy(game, sq, attacker);
       if (!isAttacked) continue;
@@ -136,15 +114,16 @@ function detectForks(game: Chess, attacker: Color): TacticalPattern[] {
       const piece = game.get(sq);
       if (!piece || piece.color !== attacker) continue;
 
-      const attacked: { sq: Square; piece: ReturnType<Chess["get"]> }[] = [];
-      const moves = game.moves({ square: sq, verbose: true });
+      const attacked: { sq: Square; piece: NonNullable<ReturnType<Chess["get"]>> }[] = [];
 
-      for (const m of moves) {
-        if (!m.captured) continue; // solo catture contano come minaccia
-        const target = game.get(m.to);
-        if (!target || target.color !== defender) continue;
-        if (!attacked.some((a) => a.sq === m.to)) {
-          attacked.push({ sq: m.to, piece: target });
+      for (let targetRank = 0; targetRank < 8; targetRank++) {
+        for (let targetFile = 0; targetFile < 8; targetFile++) {
+          const targetSquare = (String.fromCharCode(97 + targetFile) + (8 - targetRank)) as Square;
+          const target = game.get(targetSquare);
+          if (!target || target.color !== defender) continue;
+          if (game.attackers(targetSquare, attacker).includes(sq)) {
+            attacked.push({ sq: targetSquare, piece: target });
+          }
         }
       }
 
@@ -290,20 +269,23 @@ function detectMateThreat(game: Chess): TacticalPattern[] {
   const moves = game.moves({ verbose: true });
 
   for (const m of moves) {
-    const copy = new Chess(game.fen());
+    let isMate = false;
     try {
-      copy.move({ from: m.from, to: m.to, promotion: (m.promotion || undefined) as PieceSymbol | undefined });
+      game.move({ from: m.from, to: m.to, promotion: (m.promotion || undefined) as PieceSymbol | undefined });
+      isMate = game.isCheckmate();
+      game.undo();
     } catch {
+      game.undo();
       continue;
     }
-    if (copy.isCheckmate()) {
+    if (isMate) {
       const player = game.turn() === "w" ? "Il Bianco" : "Il Nero";
       patterns.push({
         type: "mate_threat",
         actor: "",
         victims: ["Re"],
         squares: [m.to],
-        description: `${player} minaccia matto in 1 con ${m.san}.`,
+        description: `${player} ha matto in una mossa con ${m.san}.`,
       });
       break;
     }
@@ -316,23 +298,8 @@ function detectDoubleCheck(game: Chess): TacticalPattern[] {
 
   const turn = game.turn();
   const opponent: Color = turn === "w" ? "b" : "w";
-  let checkCount = 0;
-
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const sq = (String.fromCharCode(97 + c) + (8 - r)) as Square;
-      const p = game.get(sq);
-      if (!p || p.color !== opponent) continue;
-      const moves = game.moves({ square: sq, verbose: true });
-      for (const m of moves) {
-        const target = game.get(m.to);
-        if (target && target.type === "k" && target.color === turn) {
-          checkCount++;
-          break;
-        }
-      }
-    }
-  }
+  const kingSquare = findKingSquare(game, turn);
+  const checkCount = kingSquare ? game.attackers(kingSquare, opponent).length : 0;
 
   if (checkCount >= 2) {
     return [{
@@ -346,24 +313,36 @@ function detectDoubleCheck(game: Chess): TacticalPattern[] {
   return [];
 }
 
+function findKingSquare(game: Chess, color: Color): Square | null {
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const square = (String.fromCharCode(97 + c) + (8 - r)) as Square;
+      const piece = game.get(square);
+      if (piece?.color === color && piece.type === "k") return square;
+    }
+  }
+  return null;
+}
+
 // ============================================================================
 // API pubblica: detection
 // ============================================================================
 
-export function detectTactics(fen: string): TacticalPattern[] {
+export function detectTactics(fen: string, attackerColor?: Color): TacticalPattern[] {
   const game = new Chess(fen);
   if (game.isGameOver()) return [];
 
-  const turn = game.turn();
-  const attacker: Color = turn === "w" ? "b" : "w";
+  const attacker = attackerColor ?? game.turn();
 
   const patterns: TacticalPattern[] = [];
-  patterns.push(...detectDoubleCheck(game));
+  if (attacker === (game.turn() === "w" ? "b" : "w")) {
+    patterns.push(...detectDoubleCheck(game));
+  }
   patterns.push(...detectForks(game, attacker));
   patterns.push(...detectPins(game, attacker));
   patterns.push(...detectSkewers(game, attacker));
   patterns.push(...detectHangingPieces(game, attacker));
-  patterns.push(...detectMateThreat(game));
+  if (attacker === game.turn()) patterns.push(...detectMateThreat(game));
   return patterns;
 }
 
@@ -435,12 +414,23 @@ export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanati
   const cpLoss = calcCpLoss(playedBy, beforeEval.cp, beforeEval.mate, afterEval.cp, afterEval.mate);
   const isBestMove = checkIsBestMove(beforeFen, beforeEval.bestMoveUci, playedMoveSan);
   const severity = classifySeverity(cpLoss, isBestMove);
-  const tactics = detectTactics(input.afterFen);
+  const opponent: Color = playedBy === "w" ? "b" : "w";
+  const tacticalSide = severity === "inaccuracy" || severity === "mistake" || severity === "blunder"
+    ? opponent
+    : playedBy;
+  const tactics = detectTactics(input.afterFen, tacticalSide);
 
   let stockfishExplains: string | null = null;
   if (beforeEval.bestMoveUci && severity !== "best") {
     const bestSan = uciToSan(beforeFen, beforeEval.bestMoveUci);
-    stockfishExplains = stockfishExplanation(beforeFen, playedMoveSan, bestSan, beforeEval.bestMoveUci, tactics, player);
+    stockfishExplains = stockfishExplanation(
+      beforeFen,
+      playedMoveSan,
+      bestSan,
+      beforeEval.bestMoveUci,
+      player,
+      playedBy
+    );
   }
 
   const summary = buildSummary(severity, playedMoveSan, cpLoss, tactics);
@@ -464,7 +454,9 @@ function buildSummary(severity: Severity, san: string, cpLoss: number | null, ta
             : "";
   let sentence = `${badge} ${san} — ${label}${impact}.`;
   const fork = tactics.find((t) => t.type === "fork");
-  if (fork && severity !== "best") sentence += ` Subisci una forchetta.`;
+  if (fork && (severity === "inaccuracy" || severity === "mistake" || severity === "blunder")) {
+    sentence += " Subisci una forchetta.";
+  }
   const hanging = tactics.find((t) => t.type === "hanging_piece");
   if (hanging && severity === "blunder") sentence += ` ${hanging.description}`;
   return sentence;
@@ -519,7 +511,7 @@ details.push(`${player} ha giocato la continuazione piu precisa.`);
 
   if (afterEval.mate != null) {
     const who = afterEval.mate > 0 ? "Bianco" : "Nero";
-    details.push(`Matto in ${Math.abs(afterEval.mate)} per il ${who} (profondità ${afterEval.depth}).`);
+    details.push(`Matto in ${Math.abs(afterEval.mate)} per il ${who}.`);
   }
   return details;
 }
@@ -529,14 +521,15 @@ function stockfishExplanation(
   playedSan: string,
   bestSan: string,
   bestUci: string,
-tactics: TacticalPattern[],
-  player: string
-): string {
+  player: string,
+  playedBy: Color
+): string | null {
   let materialNote = "";
+  let avoidedTactic: TacticalPattern | null = null;
   try {
     const gamePlayed = new Chess(beforeFen);
     gamePlayed.move(playedSan);
-    const matPlayed = countMaterial(gamePlayed);
+    const matPlayed = materialBalance(gamePlayed, playedBy);
 
     const gameBest = new Chess(beforeFen);
     gameBest.move({
@@ -544,36 +537,52 @@ tactics: TacticalPattern[],
       to: bestUci.slice(2, 4) as Square,
       promotion: bestUci.length > 4 ? (bestUci[4] as PieceSymbol) : undefined,
     });
-    const matBest = countMaterial(gameBest);
+    const matBest = materialBalance(gameBest, playedBy);
 
     if (matPlayed < matBest) {
-materialNote = ` Con ${bestSan} ${player} avrebbe mantenuto ${matBest} punti materiale anziché ${matPlayed}.`;
+      materialNote = `Con ${bestSan} ${player} avrebbe ottenuto più materiale rispetto alla mossa giocata.`;
     }
+
+    const opponent: Color = playedBy === "w" ? "b" : "w";
+    const playedTactics = detectTactics(gamePlayed.fen(), opponent);
+    const bestTacticKeys = new Set(
+      detectTactics(gameBest.fen(), opponent).map(tacticalPatternKey)
+    );
+    avoidedTactic = playedTactics.find(
+      (pattern) =>
+        (pattern.type === "hanging_piece" || pattern.type === "fork" || pattern.type === "mate_threat") &&
+        !bestTacticKeys.has(tacticalPatternKey(pattern))
+    ) ?? null;
   } catch {
     // mossa non legale: ignoriamo
   }
 
   const reasons: string[] = [];
-  reasons.push(`Stockfish suggeriva ${bestSan}.`);
-  if (materialNote) reasons.push(materialNote.trim());
+  if (materialNote) reasons.push(materialNote);
 
-  const missed = tactics.filter((t) => t.type === "hanging_piece" || t.type === "fork").slice(0, 1);
-  if (missed.length > 0) {
-reasons.push(`Con ${bestSan} ${player} avrebbe evitato: ${missed[0].description}`);
+  if (avoidedTactic) {
+    reasons.push(`Con ${bestSan} ${player} avrebbe evitato: ${avoidedTactic.description}`);
   }
-  return reasons.join(" ");
+  return reasons.length > 0 ? reasons.join(" ") : null;
 }
 
-function countMaterial(game: Chess): number {
-  let total = 0;
+function tacticalPatternKey(pattern: TacticalPattern): string {
+  return `${pattern.type}:${[...pattern.squares].sort().join(",")}`;
+}
+
+function materialBalance(game: Chess, color: Color): number {
+  let balance = 0;
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
       const sq = (String.fromCharCode(97 + c) + (8 - r)) as Square;
       const p = game.get(sq);
-      if (p && p.type !== "k") total += PIECE_VALUES[p.type] ?? 0;
+      if (p && p.type !== "k") {
+        const value = PIECE_VALUES[p.type] ?? 0;
+        balance += p.color === color ? value : -value;
+      }
     }
   }
-  return total;
+  return balance;
 }
 
 // ============================================================================
@@ -636,101 +645,45 @@ function batchExplainRuleBased(input: BatchExplainInput): MoveExplanation[] {
   return explanations;
 }
 
-// ============================================================================
-// Game analysis (one-shot)
-// ============================================================================
+export function formatDiagnosisHint(diagnosis: Diagnosis, existingText: string): string | null {
+  if (diagnosis.confidence < 0.55 || diagnosis.type === "generic_eval_loss") {
+    return null;
+  }
 
-export interface GameAnalysisArgs {
-  whiteName: string | null;
-  blackName: string | null;
-  result: string | null;
-  moves: Array<{
-    moveNumber: number;
-    index: number;
-    fenBefore: string;
-    fenAfter: string;
-    san: string;
-    player: string;
-    evalBefore: string;
-    evalAfter: string;
-    evalBeforeCp: number | null;
-    evalAfterCp: number | null;
-    evalDropCp: number;
-    classification: string;
-    bestSan: string | null;
-    bestMoveLan: string | null;
-    stockfishComment: string | null;
-    diagnosis: Diagnosis;
-  }>;
-  keySwings: string[];
+  if (isDiagnosisAlreadyCovered(diagnosis.type, existingText)) {
+    return null;
+  }
+
+  const mainDetail = diagnosis.mustMention.find((item) => item.trim().length > 0);
+
+  switch (diagnosis.type) {
+    case "missed_mate_in_one":
+      return "Idea chiave: c'era un matto immediato; prima di scegliere una mossa cerca sempre scacchi forzanti e minacce dirette al Re.";
+    case "allowed_mate_in_one":
+      return "Idea chiave: la mossa lascia un matto immediato all'avversario; quando il Re è esposto controlla sempre gli scacchi forzanti contro di te.";
+    case "missed_high_value_capture":
+      return `Idea chiave: c'era materiale importante da catturare${mainDetail ? ` (${mainDetail})` : ""}; prima di fare una mossa tranquilla controlla le catture forzanti.`;
+    case "queen_tempo_loss":
+      return "Idea chiave: la Donna si è mossa troppo presto mentre lo sviluppo era incompleto; porta prima in gioco cavalli e alfieri.";
+    case "development_problem":
+      return "Idea chiave: il problema è lo sviluppo; prima di cercare piani laterali completa i pezzi leggeri e metti il Re al sicuro.";
+    case "king_safety":
+      return "Idea chiave: il Re resta vulnerabile; prima di prendere iniziative riduci scacchi, inchiodature e minacce dirette contro il Re.";
+  }
 }
 
-export interface GameAnalysisMoveComment {
-  index: number;
-  comment: string;
-  source?: "diagnosis_fallback" | "stockfish_fallback" | string;
-}
-
-export interface GameAnalysisResult {
-  overview: string;
-  judgment: string;
-  moveComments: GameAnalysisMoveComment[];
-  source?: "stockfish" | "fallback" | string;
-}
-
-export async function analyzeGame(input: GameAnalysisArgs): Promise<GameAnalysisResult> {
-  const comments = input.moves
-    .filter((move) => move.classification === "ERRORE" || move.classification === "ERRORE GRAVE")
-    .map((move) => ({
-      index: move.index,
-      comment: buildGameMoveComment(move),
-      source: move.stockfishComment ? "stockfish_fallback" : "diagnosis_fallback",
-    }));
-
-  return {
-    overview: buildGameOverview(input),
-    judgment: buildGameJudgment(input),
-    moveComments: comments,
-    source: "stockfish",
+function isDiagnosisAlreadyCovered(type: Diagnosis["type"], existingText: string): boolean {
+  const text = existingText.toLocaleLowerCase("it");
+  const termsByType: Record<Diagnosis["type"], string[]> = {
+    missed_mate_in_one: ["matto"],
+    allowed_mate_in_one: ["matto"],
+    missed_high_value_capture: ["cattur"],
+    queen_tempo_loss: ["donna", "svilupp"],
+    development_problem: ["svilupp"],
+    king_safety: ["re"],
+    generic_eval_loss: [],
   };
-}
 
-function buildGameOverview(input: GameAnalysisArgs): string {
-  const white = input.whiteName || "il Bianco";
-  const black = input.blackName || "il Nero";
-  const result = input.result ? ` Risultato: ${input.result}.` : "";
-  const criticalMoves = input.moves.filter(
-    (move) => move.classification === "ERRORE" || move.classification === "ERRORE GRAVE",
-  );
-
-  if (criticalMoves.length === 0) {
-    return `${white} e ${black} hanno giocato senza errori gravi rilevati da Stockfish.${result}`;
-  }
-
-  return `${white} e ${black} hanno giocato una partita con ${criticalMoves.length} momenti critici rilevati da Stockfish.${result}`;
-}
-
-function buildGameJudgment(input: GameAnalysisArgs): string {
-  if (input.keySwings.length > 0) {
-    return input.keySwings.slice(0, 3).join(" ");
-  }
-
-  const severeCount = input.moves.filter((move) => move.classification === "ERRORE GRAVE").length;
-  const errorCount = input.moves.filter((move) => move.classification === "ERRORE").length;
-
-  if (severeCount > 0) {
-    return `Il punto principale sono ${severeCount} errori gravi: conviene rivedere quelle posizioni prima di studiare il resto.`;
-  }
-  if (errorCount > 0) {
-    return `La partita contiene ${errorCount} errori: concentrati sulle alternative indicate da Stockfish.`;
-  }
-  return "La partita non mostra svolte critiche nei dati analizzati.";
-}
-
-function buildGameMoveComment(move: GameAnalysisArgs["moves"][number]): string {
-  const stockfishText = expandChessSymbols(move.stockfishComment);
-  const best = move.bestSan ? ` Una continuazione migliore era ${move.bestSan}.` : "";
-  const why = stockfishText ? ` ${stockfishText}` : "";
-
-  return `${move.classification} alla mossa ${move.moveNumber}: ${move.san}.${best}${why}`.trim();
+  const terms = termsByType[type];
+  return text.includes("idea chiave") && terms.length > 0 && terms.every((term) => text.includes(term));
 }

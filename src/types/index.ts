@@ -56,7 +56,7 @@ export interface Move {
   parentId: number | null;
   order: number;
   comment: string;
-  /** Commento didattico dell'analisi partita. */
+  /** Commento educativo deterministico, separato da Stockfish e dalle note utente. */
   analysisComment?: string | null;
   /** Commento deterministico generato dai dati Stockfish della mossa. */
   stockfishComment?: string | null;

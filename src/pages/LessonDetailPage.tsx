@@ -45,16 +45,12 @@ import {
   moveClassification,
   type PositionEval,
 } from "@/services/analysisService";
-import { explainMoveRuleBased } from "@/services/explainService";
-import { analyzeGame } from "@/services/explainService";
-import { buildCriticalMoveDiagnostics } from "@/services/coachDiagnostics";
+import { explainMoveRuleBased, formatDiagnosisHint } from "@/services/explainService";
+import { diagnoseCriticalMoves, type Diagnosis } from "@/services/coachDiagnostics";
 import { Chess } from "chess.js";
-import AnalysisMarkdown from "@/components/lesson/AnalysisMarkdown";
 import MoveCommentPreview from "@/components/lesson/MoveCommentPreview";
 import StudyBoardSidebar from "@/components/lesson/StudyBoardSidebar";
 import {
-  computeKeySwings,
-  cleanGameAnalysisText,
   formatEvalForPrompt,
   getKingStatus,
   sanToSquare,
@@ -64,17 +60,8 @@ import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
 
 const SAVE_DEBOUNCE_MS = 800;
 
-const waitForNextPaint = () =>
-  new Promise<void>((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
-
 function stockfishCommentForMove(args: {
   move: Move;
-  beforeCp: number | null;
-  beforeMate: number | null;
-  afterCp: number | null;
-  afterMate: number | null;
   cpLoss: number;
   bestSan: string | null;
 }): string {
@@ -108,6 +95,15 @@ function evalPositionLabel(cp: number | null, mate: number | null) {
   return cp <= -180 ? "Nero meglio" : "Nero leggermente meglio";
 }
 
+function uciToChessMove(uci: string) {
+  if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)) return null;
+  return {
+    from: uci.slice(0, 2),
+    to: uci.slice(2, 4),
+    promotion: uci[4],
+  };
+}
+
 export default function LessonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -129,8 +125,6 @@ export default function LessonDetailPage() {
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [gameAnalysisLoading, setGameAnalysisLoading] = useState(false);
-  const [gameAnalysisText, setGameAnalysisText] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<{
     done: number;
@@ -138,10 +132,11 @@ export default function LessonDetailPage() {
   } | null>(null);
   const [movePersistencePending, setMovePersistencePending] = useState(false);
   const [movePersistenceError, setMovePersistenceError] = useState<string | null>(null);
+  const [mateLinePreviewFen, setMateLinePreviewFen] = useState<string | null>(null);
+  const [mateLineStatus, setMateLineStatus] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [gameAnalysisError, setGameAnalysisError] = useState<string | null>(null);
   const [stockfishDepth, setStockfishDepth] = useState<number | null>(null);
   const analysisSignalRef = useRef<{ cancelled: boolean } | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
@@ -153,6 +148,7 @@ export default function LessonDetailPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>("");
   const moveCommentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mateLineTimerRef = useRef<number | null>(null);
   const lastSavedCommentRef = useRef<string>("");
   const commentMoveIdRef = useRef<number | null>(null);
   const persistedMoveIdsByOrderRef = useRef<Map<number, number>>(new Map());
@@ -214,7 +210,6 @@ const selectedBoard = useMemo(
     setNotesDraft(notes);
     lastSavedRef.current = notes;
     setNoteTab("board");
-    setGameAnalysisText(cleanGameAnalysisText(board?.gameAnalysis ?? ""));
   }, [selectedBoardId, boards]);
 
   // Sincronizza il draft del commento mossa quando cambia la mossa corrente.
@@ -627,22 +622,20 @@ const selectedBoard = useMemo(
     }
   };
 
-  // --- Helper: genera commenti rule-based per tutte le mosse ---
-  // Lavora solo sul DB: legge eval dall'array `evals` (non da chess.moves,
-  // che in questo momento è stale). Persiste i commenti senza toccare lo stato.
-  const persistRuleBasedComments = useCallback(
+  // --- Helper: genera spunti educativi separati per tutte le mosse ---
+  // Usa gli eval freschi e persiste in `analysisComment`, senza modificare
+  // il commento utente/PGN o il commento Stockfish.
+  const persistEducationalComments = useCallback(
     async (
       startFen: string,
       moveList: Move[],
       evals: PositionEval[],
-      board: Board
+      board: Board,
+      diagnosticsByIndex: Map<number, Diagnosis>
     ) => {
       for (let i = 0; i < moveList.length; i++) {
         const move = moveList[i];
         if (move.id == null) continue;
-        // Salta se ha già un commento PGN (proveniente dall'import).
-        if (move.comment?.trim()) continue;
-
         const playedBy: "w" | "b" = i % 2 === 0 ? "w" : "b";
         const beforeFen = i === 0 ? startFen : moveList[i - 1]?.fen ?? startFen;
         const beforeEval = {
@@ -668,18 +661,29 @@ const selectedBoard = useMemo(
             beforeEval,
             afterEval,
           });
-          const commentText = [exp.summary, ...exp.details].join("\n");
+          const hasEducationalValue =
+            exp.severity === "inaccuracy" ||
+            exp.severity === "mistake" ||
+            exp.severity === "blunder" ||
+            exp.tactics.length > 0;
+          const explanationText = hasEducationalValue
+            ? exp.details.join("\n")
+            : null;
+          const diagnosis = diagnosticsByIndex.get(i);
+          const diagnosisHint = diagnosis
+            ? formatDiagnosisHint(diagnosis, explanationText ?? "")
+            : null;
+          const commentText = [explanationText, diagnosisHint]
+            .filter((text): text is string => Boolean(text?.trim()))
+            .join("\n") || null;
           const tacticalHighlights = Array.from(
-            new Set(exp.tactics.flatMap((tactic) => tactic.squares))
+            new Set(hasEducationalValue ? exp.tactics.flatMap((tactic) => tactic.squares) : [])
           );
           await updateMove(move.id, {
-            comment: commentText,
-            analysisComment: null,
-            stockfishComment: commentText,
+            analysisComment: commentText,
             highlights: tacticalHighlights,
           });
-          chess.setMoveStockfishComment(i, commentText);
-          chess.setMoveAnalysisComment(i, null);
+          chess.setMoveAnalysisComment(i, commentText);
           chess.setMoveHighlights(i, tacticalHighlights);
         } catch {
           // non critico
@@ -714,6 +718,46 @@ const selectedBoard = useMemo(
       // catturato nella closure è stale e i replaceMove sovrascriverebbero
       // gli eval con valori vecchi. Ricarichiamo tutto dal DB alla fine.
       await updateBoard(boardId, toEvalFields(evals[0]));
+      const diagnosticMoves = moveList.map((m, moveIndex) => {
+        const isWhite = moveIndex % 2 === 0;
+        const beforeEval = evals[moveIndex];
+        const afterEval = evals[moveIndex + 1];
+        const beforeCp = beforeEval.scoreCp;
+        const beforeMate = beforeEval.scoreMate;
+        const afterCp = afterEval.scoreCp;
+        const afterMate = afterEval.scoreMate;
+        const beforeScore = evalScore(beforeCp, beforeMate);
+        const afterScore = evalScore(afterCp, afterMate);
+        const cpLoss = isWhite ? beforeScore - afterScore : afterScore - beforeScore;
+        const cls = moveClassification(cpLoss);
+        const beforeFen = moveIndex === 0 ? startFen : moveList[moveIndex - 1]?.fen ?? startFen;
+        const bestSan = beforeEval.bestMoveUci ? uciToSan(beforeFen, beforeEval.bestMoveUci) : null;
+
+        return {
+          moveNumber: Math.floor(moveIndex / 2) + 1,
+          index: moveIndex,
+          fenBefore: beforeFen,
+          fenAfter: m.fen,
+          san: m.moveNotation,
+          player: isWhite ? selectedBoard.whiteName ?? "Bianco" : selectedBoard.blackName ?? "Nero",
+          evalBefore: formatEvalForPrompt(beforeCp, beforeMate),
+          evalAfter: formatEvalForPrompt(afterCp, afterMate),
+          evalBeforeCp: beforeCp,
+          evalAfterCp: afterCp,
+          classification:
+            cls?.label === "??" ? "ERRORE GRAVE" :
+            cls?.label === "?" ? "ERRORE" :
+            cls?.label === "?!" ? "IMPRECISIONE" :
+            "OK",
+          bestSan,
+          bestMoveLan: beforeEval.bestMoveUci ?? null,
+          stockfishComment: null,
+        };
+      });
+      const diagnosticsByIndex = new Map(
+        diagnoseCriticalMoves(diagnosticMoves).map((move) => [move.index, move.diagnosis])
+      );
+
       for (let i = 1; i < evals.length; i++) {
         const move = moveList[i - 1];
         if (move.id == null) continue;
@@ -733,10 +777,6 @@ const selectedBoard = useMemo(
           analysisComment: null,
           stockfishComment: stockfishCommentForMove({
             move,
-            beforeCp: beforeEval.scoreCp,
-            beforeMate: beforeEval.scoreMate,
-            afterCp: afterEval.scoreCp,
-            afterMate: afterEval.scoreMate,
             cpLoss,
             bestSan,
           }),
@@ -745,10 +785,10 @@ const selectedBoard = useMemo(
 
       // Genera commenti rule-based usando evals freschi (non chess.moves).
       if (!signal.cancelled) {
-        await persistRuleBasedComments(startFen, moveList, evals, {
+        await persistEducationalComments(startFen, moveList, evals, {
           ...selectedBoard,
           ...toEvalFields(evals[0]),
-        });
+        }, diagnosticsByIndex);
       }
 
       // Ricarica board + mosse dal DB in un colpo solo: questo è l'esatto
@@ -780,136 +820,6 @@ const selectedBoard = useMemo(
       setAnalyzing(false);
       setAnalysisProgress(null);
       analysisSignalRef.current = null;
-    }
-  };
-
-  const handleGameAnalysis = async () => {
-    if (!selectedBoard || gameAnalysisLoading) return;
-    const boardId = selectedBoard.id;
-    if (!boardId) return;
-
-    const startFen = selectedBoard.fen;
-    setGameAnalysisLoading(true);
-    setGameAnalysisError(null);
-
-    // Ensure the overlay is painted before the analysis starts.
-    await waitForNextPaint();
-
-    try {
-      const moveList = chess.moves;
-      const startCp = selectedBoard.evalCp ?? null;
-      const startMate = selectedBoard.evalMate ?? null;
-
-      const moves = moveList.map((m, i) => {
-        const isWhite = i % 2 === 0;
-        const beforeCp = i === 0 ? startCp : (moveList[i - 1]?.evalCp ?? null);
-        const beforeMate = i === 0 ? startMate : (moveList[i - 1]?.evalMate ?? null);
-        const afterCp = m.evalCp ?? null;
-        const afterMate = m.evalMate ?? null;
-
-        const beforeScore = evalScore(beforeCp, beforeMate);
-        const afterScore = evalScore(afterCp, afterMate);
-        const cpLoss = isWhite ? beforeScore - afterScore : afterScore - beforeScore;
-        const cls = moveClassification(cpLoss);
-
-        const classLabel =
-          cls?.label === "??" ? "ERRORE GRAVE" :
-          cls?.label === "?" ? "ERRORE" :
-          cls?.label === "?!" ? "IMPRECISIONE" :
-          isWhite ? "OTTIMA" : "BUONA";
-
-        const beforeFen = i === 0 ? startFen : moveList[i - 1].fen;
-        const bestUci = i === 0
-          ? (selectedBoard.evalBestMoveUci ?? null)
-          : (moveList[i - 1]?.evalBestMoveUci ?? null);
-        const bestSan = bestUci ? uciToSan(beforeFen, bestUci) : null;
-
-        return {
-          moveNumber: Math.floor(i / 2) + 1,
-          index: i,
-          fenBefore: beforeFen,
-          fenAfter: m.fen,
-          san: m.moveNotation,
-          player: isWhite ? "Bianco" : "Nero",
-          evalBefore: formatEvalForPrompt(beforeCp, beforeMate),
-          evalAfter: formatEvalForPrompt(afterCp, afterMate),
-          evalBeforeCp: beforeCp,
-          evalAfterCp: afterCp,
-          classification: classLabel,
-          bestSan,
-          bestMoveLan: bestUci,
-          stockfishComment: m.comment?.trim() || null,
-        };
-      });
-      const criticalMoves = buildCriticalMoveDiagnostics(moves);
-      console.groupCollapsed("[game-analysis] payload diagnostico");
-      console.table(
-        criticalMoves.map((move) => ({
-          index: move.index,
-          moveNumber: move.moveNumber,
-          san: move.san,
-          classification: move.classification,
-          evalDropCp: move.evalDropCp,
-          diagnosis: move.diagnosis.type,
-          facts: move.diagnosis.facts.join(" | "),
-          bestSan: move.bestSan,
-        }))
-      );
-      console.log("criticalMoves", criticalMoves);
-      console.groupEnd();
-
-      const keySwings = computeKeySwings(
-        moveList,
-        startCp,
-        startMate,
-        selectedBoard.whiteName ?? "Bianco",
-        selectedBoard.blackName ?? "Nero"
-      );
-
-      const result = await analyzeGame({
-        whiteName: selectedBoard?.whiteName ?? null,
-        blackName: selectedBoard?.blackName ?? null,
-        result: selectedBoard?.headers?.["Result"] ?? null,
-        moves: criticalMoves,
-        keySwings,
-      });
-      console.groupCollapsed("[game-analysis] output");
-      console.log("source", result.source ?? "unknown");
-      console.log("overview", result.overview);
-      console.log("judgment", result.judgment);
-      console.table(
-        result.moveComments.map((comment) => ({
-          index: comment.index,
-          source: comment.source ?? "unknown",
-          comment: comment.comment,
-        }))
-      );
-      console.log("moveComments", result.moveComments);
-      console.groupEnd();
-
-      // Sommario: panoramica + giudizio concatenati (markdown).
-      const summaryMd = [result.overview, result.judgment]
-        .filter((s) => s.trim().length > 0)
-        .join("\n\n");
-      const cleanedSummary = cleanGameAnalysisText(summaryMd);
-      setGameAnalysisText(cleanedSummary);
-      await updateBoard(boardId, { gameAnalysis: cleanedSummary });
-      syncBoardInList(boardId, { gameAnalysis: cleanedSummary });
-
-      // Pulisci analysisComment stale su tutte le mosse (rigenerazione).
-      for (const [index, m] of moveList.entries()) {
-        if (m.id != null && m.analysisComment) {
-          await updateMove(m.id, { analysisComment: null });
-          chess.setMoveAnalysisComment(index, null);
-        }
-      }
-
-      await reloadBoardFromDb(boardId);
-    } catch (e) {
-      console.error("[game-analysis] errore", e);
-      setGameAnalysisError("Analisi partita fallita. Controlla i dati della partita e riprova.");
-    } finally {
-      setGameAnalysisLoading(false);
     }
   };
 
@@ -1147,6 +1057,67 @@ const selectedBoard = useMemo(
     }
   };
 
+  const clearMateLinePreview = useCallback(() => {
+    if (mateLineTimerRef.current !== null) {
+      window.clearTimeout(mateLineTimerRef.current);
+      mateLineTimerRef.current = null;
+    }
+    setMateLinePreviewFen(null);
+    setMateLineStatus(null);
+  }, []);
+
+  useEffect(() => clearMateLinePreview, [clearMateLinePreview]);
+
+  const handleMateLineClick = useCallback(
+    async (mateIn: number) => {
+      const startFen = chess.currentMove?.fen;
+      if (!startFen) return;
+
+      if (mateLineTimerRef.current !== null) {
+        window.clearTimeout(mateLineTimerRef.current);
+        mateLineTimerRef.current = null;
+      }
+
+      setMateLinePreviewFen(startFen);
+      setMateLineStatus("Calcolo la linea di matto...");
+
+      try {
+        const game = new Chess(startFen);
+        const fens = [startFen];
+        const maxPlies = Math.max(1, mateIn * 2 - 1);
+
+        for (let ply = 0; ply < maxPlies && !game.isGameOver(); ply += 1) {
+          const [ev] = await analyzePositions([game.fen()], { depth: Math.max(currentEvalDepth, 12) });
+          const move = ev.bestMoveUci ? uciToChessMove(ev.bestMoveUci) : null;
+          if (!move) break;
+
+          const played = game.move(move);
+          if (!played) break;
+          fens.push(game.fen());
+          if (game.isCheckmate()) break;
+        }
+
+        if (fens.length <= 1) {
+          setMateLineStatus("Linea di matto non disponibile.");
+          return;
+        }
+
+        setMateLineStatus(`Linea di matto: 1/${fens.length - 1}`);
+        fens.slice(1).forEach((fen, index) => {
+          mateLineTimerRef.current = window.setTimeout(() => {
+            setMateLinePreviewFen(fen);
+            setMateLineStatus(`Linea di matto: ${index + 1}/${fens.length - 1}`);
+          }, (index + 1) * 700);
+        });
+      } catch (error) {
+        console.error("[mate-line-preview] errore", error);
+        setMateLineStatus("Impossibile calcolare la linea di matto.");
+      }
+    },
+    [chess.currentMove?.fen, currentEvalDepth]
+  );
+
+
   if (loading) {
     return (
       <div className="text-center py-16 text-muted-foreground">
@@ -1177,11 +1148,17 @@ const selectedBoard = useMemo(
   }
 
   return (
-    <div className="w-full">
+    <div
+      className={
+        lesson.mode === "analysis"
+          ? "w-full xl:flex xl:h-[calc(100dvh-6rem)] xl:min-h-0 xl:flex-col xl:overflow-hidden"
+          : "w-full"
+      }
+    >
       <Button
         variant="ghost"
         size="sm"
-        className="mb-3"
+        className="mb-3 self-start"
         onClick={() => navigate("/")}
       >
         <ArrowLeft className="size-4" />
@@ -1241,14 +1218,6 @@ const selectedBoard = useMemo(
             onDismiss={() => setAnalysisError(null)}
           />
         )}
-        {gameAnalysisError && (
-          <ErrorNotice
-            title="Analisi partita"
-            message={gameAnalysisError}
-            onRetry={handleGameAnalysis}
-            onDismiss={() => setGameAnalysisError(null)}
-          />
-        )}
       </div>
 
       {(movePersistencePending || movePersistenceError) && (
@@ -1264,17 +1233,17 @@ const selectedBoard = useMemo(
       )}
 
       {lesson.mode === "analysis" && selectedBoard ? (
-        <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-[12rem_minmax(32.5rem,44.5rem)_20rem] 2xl:grid-cols-[13rem_minmax(36.5rem,48.5rem)_22rem] xl:justify-center">
+        <div className="grid grid-cols-1 gap-4 items-start xl:min-h-0 xl:flex-1 xl:overflow-hidden xl:grid-cols-[12rem_minmax(32.5rem,44.5rem)_20rem] 2xl:grid-cols-[13rem_minmax(36.5rem,48.5rem)_22rem] xl:justify-center">
           <div><PgnHeadersSidebar headers={selectedBoard.headers ?? {}} /></div>
 
           <section className="flex min-w-0 flex-col gap-4 items-center">
             <div className="w-full">
-              <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-2">
+              <div className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-stretch gap-2">
                 <div className="pointer-events-none flex">
                   <EvalBar cp={currentEvalCp} mate={currentEvalMate} />
                 </div>
                 <ChessBoardView
-                fen={chess.fen}
+                fen={mateLinePreviewFen ?? chess.fen}
                 arrows={chess.currentArrows}
                 highlights={chess.currentHighlights}
                 extraArrows={analysisArrow}
@@ -1298,8 +1267,6 @@ const selectedBoard = useMemo(
                 canAnalyze={chess.moves.length > 0 || !!selectedBoard}
                 onCancelAnalysis={handleCancelAnalysis}
                 lessonMode={lesson.mode}
-                onGameAnalysis={handleGameAnalysis}
-                gameAnalysisLoading={gameAnalysisLoading}
                 autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
                 onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
                 converting={converting}
@@ -1318,13 +1285,39 @@ const selectedBoard = useMemo(
             )}
           </section>
 
-          <aside className="flex min-h-0 min-w-0 flex-col gap-3">
+          <aside className="flex min-h-0 min-w-0 flex-col gap-3 xl:h-full">
             <MoveCommentPreview
               currentMove={chess.currentMove}
               historyIndex={chess.historyIndex}
               text={chess.currentMove?.stockfishComment ?? ""}
               stockfishLabel
+              onMateLineClick={handleMateLineClick}
             />
+            {chess.currentMove?.analysisComment?.trim() ? (
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Spunto didattico
+                </p>
+                <MoveCommentPreview
+                  currentMove={chess.currentMove}
+                  historyIndex={chess.historyIndex}
+                  text={chess.currentMove.analysisComment}
+                  onMateLineClick={handleMateLineClick}
+                />
+              </div>
+            ) : null}
+            {mateLineStatus ? (
+              <div className="flex items-center justify-between gap-2 border-b bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                <span>{mateLineStatus}</span>
+                <button
+                  type="button"
+                  className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-800"
+                  onClick={clearMateLinePreview}
+                >
+                  Chiudi
+                </button>
+              </div>
+            ) : null}
             <MoveNotation
               moves={chess.moves}
               currentMoveIndex={chess.historyIndex}
@@ -1361,12 +1354,12 @@ const selectedBoard = useMemo(
             {selectedBoard ? (
               <>
                 <div className="w-full">
-                  <div className="grid w-full grid-cols-[2rem_minmax(0,1fr)] items-stretch gap-2">
+                  <div className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-stretch gap-2">
                 <div className="pointer-events-none flex">
                   <EvalBar cp={currentEvalCp} mate={currentEvalMate} />
                 </div>
                 <ChessBoardView
-                    fen={chess.fen}
+                    fen={mateLinePreviewFen ?? chess.fen}
                     arrows={chess.currentArrows}
                     highlights={chess.currentHighlights}
                     extraArrows={analysisArrow}
@@ -1390,8 +1383,6 @@ const selectedBoard = useMemo(
                     canAnalyze={chess.moves.length > 0 || !!selectedBoard}
                     onCancelAnalysis={handleCancelAnalysis}
                     lessonMode={lesson.mode}
-                    onGameAnalysis={handleGameAnalysis}
-                    gameAnalysisLoading={gameAnalysisLoading}
                     autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
                     onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
                     converting={converting}
@@ -1411,16 +1402,24 @@ const selectedBoard = useMemo(
                 <div className="w-full flex flex-col gap-3">
                   {lesson.mode === "analysis" ? (
                     <>
-                      {gameAnalysisText && (
-                        <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-3 text-sm leading-relaxed game-analysis-content">
-                          <AnalysisMarkdown text={gameAnalysisText} />
-                        </div>
-                      )}
                       <MoveCommentPreview
                         currentMove={chess.currentMove}
                         historyIndex={chess.historyIndex}
                         text={chess.currentMove?.stockfishComment ?? moveCommentDraft}
                       />
+                      {chess.currentMove?.analysisComment?.trim() ? (
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Spunto didattico
+                          </p>
+                          <MoveCommentPreview
+                            currentMove={chess.currentMove}
+                            historyIndex={chess.historyIndex}
+                            text={chess.currentMove.analysisComment}
+                            onMateLineClick={handleMateLineClick}
+                          />
+                        </div>
+                      ) : null}
                               </>
                   ) : (
                     <>

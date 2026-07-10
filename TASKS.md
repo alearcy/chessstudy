@@ -2,7 +2,26 @@
 
 ## In Progress
 
+- UI-001 Coordinate scacchiera esterne di default
+  - Spec: `docs/specs/coordinate-scacchiera.md`
+  - [x] Mostrare le coordinate esterne all'apertura in studio e analisi
+  - [x] Portare le coordinate dentro le case tramite il pulsante esistente
+  - [x] Aggiungere test di regressione e verificare build
+
+- FEAT-005B Rendere affidabili e separati i commenti educativi tattici
+  - Spec: `docs/specs/commenti-educativi-tattici.md`
+  - [x] Correggere detection tattica, prospettiva e classificazione del matto
+  - [x] Diagnosticare tutte le mosse critiche, incluse le imprecisioni
+  - [x] Salvare e mostrare il commento educativo separato da Stockfish e note utente
+  - [x] Aggiungere test di regressione e verificare build
+
 ## Completed
+
+- FEAT-007 Importare le partite di un giocatore da Lichess e Chess.com
+  - Spec: `docs/specs/import-lichess-player-games.md`
+
+- Allargare la barra di valutazione e rimuovere il comando Analisi partita
+  - Spec: `docs/specs/rimozione-analisi-partita-toolbar.md`
 
 - [x] Aggiungere test minimi
   - Coperti parsing/eval, hook scacchiera e persistenza core con Vitest.
@@ -84,6 +103,7 @@
 - [x] Togliere dai commenti riferimenti a centipawn o ripetizioni tipo "per stockfish la mossa migliore era". Lasciamo solo la classificazione come buona mossa o cattiva mossa, quale sarebbe stata la mossa migliore senza dire "secondo stockfish" e lasciamo l'individuazione dei pattern tattici. Per quanto riguarda i punteggi come +1.5. -1 ecc...creiamo una barra verticale animata che mostra come è messo il bianco e il nero, come fanno gli altri siti di scacchi come chess.com o lichess.org.
 - [x] Eliminare qualsiasi traccia di LLM e AI, non ne ho più bisogno. Cancella anche modello locale.
 
+- Mi piacerebbe che quando viene trovato un matto (ad esempio il commento "matto in 5" o "matto in 1"), cliccando sulla frase "matto in 5" o "matto in 1" la scacchiera cambia mostrandomi la sequenza di mosse per quel matto. E posso ovviamente navigare tra quelle mosse. Solo quelle mosse, non quelle di tutta la partita, ma solo quelle relative al matto trovato. Un pulsante poi mi permette di tornare alla sequenza di mosse di tutta la partita. Il colore della scacchiera potrebbe essere più opaco quando si visualizza una sequenza di mosse di un matto specifico rispetto alla sequenza di mosse di tutta la partita. Fammi una proposta di come lo faresti.
 ## Todo
 - [x] Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
 - [ ] Ridurre bundle iniziale

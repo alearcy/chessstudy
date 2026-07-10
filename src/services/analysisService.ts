@@ -320,10 +320,11 @@ async function analyzePositionsWasm(
 
 // --- Helpers di formatting / classificazione (POV Bianco) ---
 
-/** Converte eval in un numero confrontabile (mate → ±100000 - n). */
+/** Converte eval in un numero confrontabile dando peso sostanziale alla distanza dal matto. */
 export function evalScore(evalCp: number | null, evalMate: number | null): number {
   if (evalMate != null) {
-    return evalMate > 0 ? 100000 - evalMate : -100000 - evalMate;
+    const mateScore = Math.max(1000, 100000 - Math.abs(evalMate) * 1000);
+    return evalMate > 0 ? mateScore : -mateScore;
   }
   if (evalCp != null) return evalCp;
   return 0;

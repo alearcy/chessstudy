@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cpu, Gauge, Loader2, Save } from "lucide-react";
+import { Cpu, Gamepad2, Gauge, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,6 +10,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { resetStockfishSettingsCache } from "@/services/analysisService";
+import { Input } from "@/components/ui/input";
+import {
+  getAppSettings,
+  setAppSettings,
+  type AppSettingsInfo,
+} from "@/services/settingsService";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -27,15 +33,12 @@ const DEPTH_OPTIONS = [
   { value: 25, label: "Molto profonda", hint: "molto lenta" },
 ];
 
-interface SettingsInfo {
-  stockfish_depth: number;
-  stockfish_threads: number;
-}
-
 export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }: SettingsDialogProps) {
   const [stockfishDepth, setStockfishDepth] = useState(DEFAULT_STOCKFISH_DEPTH);
   const [stockfishThreads, setStockfishThreads] = useState(DEFAULT_STOCKFISH_THREADS);
-  const [savingStockfish, setSavingStockfish] = useState(false);
+  const [lichessUsername, setLichessUsername] = useState("");
+  const [chesscomUsername, setChesscomUsername] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isTauri, setIsTauri] = useState<boolean | null>(null);
   const detectedThreads =
@@ -47,8 +50,7 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
   useEffect(() => {
     async function check() {
       try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        await invoke("get_settings");
+        await getAppSettings();
         setIsTauri(true);
       } catch {
         setIsTauri(false);
@@ -60,10 +62,11 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
   const loadSettings = useCallback(async () => {
     if (!isTauri) return;
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const info = await invoke<SettingsInfo>("get_settings");
+      const info: AppSettingsInfo = await getAppSettings();
       setStockfishDepth(normalizeDepthOption(info.stockfish_depth));
       setStockfishThreads(normalizeCpuOption(info.stockfish_threads, buildCpuOptions(detectedThreads)));
+      setLichessUsername(info.lichess_username);
+      setChesscomUsername(info.chesscom_username);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -76,28 +79,29 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
     }
   }, [open, isTauri, loadSettings]);
 
-  const handleSaveStockfish = async () => {
+  const handleSaveSettings = async () => {
     if (!isTauri) return;
-    setSavingStockfish(true);
+    setSavingSettings(true);
     setError(null);
     try {
       const depth = normalizeDepthOption(stockfishDepth);
       const threads = normalizeCpuOption(stockfishThreads, cpuOptions);
-      const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("set_settings", {
-        args: {
-          stockfish_depth: depth,
-          stockfish_threads: threads,
-        },
+      const saved = await setAppSettings({
+        stockfish_depth: depth,
+        stockfish_threads: threads,
+        lichess_username: lichessUsername.trim(),
+        chesscom_username: chesscomUsername.trim(),
       });
       resetStockfishSettingsCache();
       setStockfishDepth(depth);
       setStockfishThreads(threads);
+      setLichessUsername(saved.lichess_username);
+      setChesscomUsername(saved.chesscom_username);
       onSettingsChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setSavingStockfish(false);
+      setSavingSettings(false);
     }
   };
 
@@ -106,7 +110,7 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>Impostazioni</DialogTitle>
-          <DialogDescription>Configura la profondita e le risorse usate da Stockfish.</DialogDescription>
+          <DialogDescription>Configura motore e account usati per importare le partite.</DialogDescription>
         </DialogHeader>
 
         {!isTauri ? (
@@ -120,6 +124,41 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
                 {error}
               </div>
             )}
+
+            <section className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Gamepad2 className="size-4" />
+                Account di gioco
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label htmlFor="lichess-username" className="text-sm font-medium">
+                    Username Lichess
+                  </label>
+                  <Input
+                    id="lichess-username"
+                    value={lichessUsername}
+                    onChange={(event) => setLichessUsername(event.target.value)}
+                    placeholder="es. DrNykterstein"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="chesscom-username" className="text-sm font-medium">
+                    Username Chess.com
+                  </label>
+                  <Input
+                    id="chesscom-username"
+                    value={chesscomUsername}
+                    onChange={(event) => setChesscomUsername(event.target.value)}
+                    placeholder="es. Hikaru"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <div className="border-t" />
 
             <section className="space-y-4">
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -175,9 +214,9 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
 
         <DialogFooter>
           {isTauri && (
-            <Button variant="outline" onClick={handleSaveStockfish} disabled={savingStockfish}>
-              {savingStockfish ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              <span className="ml-1">Salva Stockfish</span>
+            <Button onClick={handleSaveSettings} disabled={savingSettings}>
+              {savingSettings ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              <span className="ml-1">Salva impostazioni</span>
             </Button>
           )}
         </DialogFooter>

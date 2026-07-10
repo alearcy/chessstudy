@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Plus, Pencil, Trash2, Upload, Microscope } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, Microscope, Settings, Swords } from "lucide-react";
 import {
   getAllLessons,
   createLesson,
@@ -28,6 +28,9 @@ import {
 } from "@/components/ui/card";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 import ErrorNotice from "@/components/ErrorNotice";
+import ImportLichessDialog from "@/components/board/ImportLichessDialog";
+import ImportChessComDialog from "@/components/board/ImportChessComDialog";
+import { getAppSettings } from "@/services/settingsService";
 
 const emptyForm: LessonFormData = { title: "", description: "" };
 
@@ -184,7 +187,7 @@ function DeleteConfirmDialog({
   );
 }
 
-export default function LessonsPage() {
+export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const navigate = useNavigate();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -192,6 +195,13 @@ export default function LessonsPage() {
   const [deletingLesson, setDeletingLesson] = useState<Lesson | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [lichessImportOpen, setLichessImportOpen] = useState(false);
+  const [lichessUsername, setLichessUsername] = useState("");
+  const [platformError, setPlatformError] = useState<string | null>(null);
+  const [checkingPlatformSettings, setCheckingPlatformSettings] = useState(false);
+  const [chessComImportOpen, setChessComImportOpen] = useState(false);
+  const [chessComUsername, setChessComUsername] = useState("");
+  const [checkingChessComSettings, setCheckingChessComSettings] = useState(false);
 
   const loadLessons = useCallback(async () => {
     try {
@@ -230,6 +240,44 @@ export default function LessonsPage() {
   const handlePgnImported = (lessonId: number, _boardId: number) => {
     // Ogni PGN è ora una lezione analysis autonoma: naviga direttamente.
     navigate(`/lesson/${lessonId}`);
+  };
+
+  const handleOpenLichess = async () => {
+    setCheckingPlatformSettings(true);
+    setPlatformError(null);
+    try {
+      const settings = await getAppSettings();
+      const username = settings.lichess_username.trim();
+      if (!username) {
+        setPlatformError("Configura lo username Lichess nelle impostazioni prima di importare.");
+        return;
+      }
+      setLichessUsername(username);
+      setLichessImportOpen(true);
+    } catch {
+      setPlatformError("Le impostazioni degli account sono disponibili nell'app desktop.");
+    } finally {
+      setCheckingPlatformSettings(false);
+    }
+  };
+
+  const handleOpenChessCom = async () => {
+    setCheckingChessComSettings(true);
+    setPlatformError(null);
+    try {
+      const settings = await getAppSettings();
+      const username = settings.chesscom_username.trim();
+      if (!username) {
+        setPlatformError("Configura lo username Chess.com nelle impostazioni prima di importare.");
+        return;
+      }
+      setChessComUsername(username);
+      setChessComImportOpen(true);
+    } catch {
+      setPlatformError("Le impostazioni degli account sono disponibili nell'app desktop.");
+    } finally {
+      setCheckingChessComSettings(false);
+    }
   };
 
   return (
@@ -283,6 +331,68 @@ export default function LessonsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Swords className="size-4" />
+            Importa da piattaforma
+          </CardTitle>
+          <CardDescription>
+            Scegli una partita recente usando gli username salvati nelle impostazioni.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {platformError && (
+            <div className="space-y-2">
+              <ErrorNotice
+                message={platformError}
+                onDismiss={() => setPlatformError(null)}
+              />
+              {onOpenSettings && (
+                <Button variant="outline" size="sm" onClick={onOpenSettings}>
+                  <Settings className="size-4" />
+                  Apri impostazioni
+                </Button>
+              )}
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button
+              variant="outline"
+              className="h-auto justify-start gap-3 px-4 py-4"
+              onClick={() => void handleOpenLichess()}
+              disabled={checkingPlatformSettings}
+            >
+              <span className="flex size-9 items-center justify-center rounded-full bg-[#b3b3b3] font-bold text-black">
+                Li
+              </span>
+              <span className="text-left">
+                <span className="block font-semibold">Lichess.org</span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {checkingPlatformSettings ? "Lettura impostazioni..." : "Scegli tra le ultime 30 partite"}
+                </span>
+              </span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto justify-start gap-3 px-4 py-4"
+              onClick={() => void handleOpenChessCom()}
+              disabled={checkingChessComSettings}
+            >
+              <span className="flex size-9 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">
+                C
+              </span>
+              <span className="text-left">
+                <span className="block font-semibold">Chess.com</span>
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {checkingChessComSettings ? "Lettura impostazioni..." : "Scegli mese e partita"}
+                </span>
+              </span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {lessons.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
@@ -383,6 +493,20 @@ export default function LessonsPage() {
       <ImportPgnDialog
         open={importOpen}
         onOpenChange={setImportOpen}
+        onImportedLesson={handlePgnImported}
+      />
+
+      <ImportLichessDialog
+        open={lichessImportOpen}
+        username={lichessUsername}
+        onOpenChange={setLichessImportOpen}
+        onImportedLesson={handlePgnImported}
+      />
+
+      <ImportChessComDialog
+        open={chessComImportOpen}
+        username={chessComUsername}
+        onOpenChange={setChessComImportOpen}
         onImportedLesson={handlePgnImported}
       />
     </div>

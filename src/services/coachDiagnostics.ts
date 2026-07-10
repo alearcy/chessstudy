@@ -85,6 +85,10 @@ const PIECE_VALUE: Record<string, number> = {
 };
 
 export function buildCriticalMoveDiagnostics(moves: CoachMoveInput[]): CoachCriticalMove[] {
+  return pickCriticalMovesForLlm(diagnoseCriticalMoves(moves));
+}
+
+export function diagnoseCriticalMoves(moves: CoachMoveInput[]): CoachCriticalMove[] {
   const replay = new Chess();
   const history: VerboseMove[] = [];
   const enriched: CoachCriticalMove[] = [];
@@ -109,7 +113,7 @@ export function buildCriticalMoveDiagnostics(moves: CoachMoveInput[]): CoachCrit
         bestMoveLan: move.bestMoveLan ?? undefined,
       });
 
-      if (isCriticalClassification(move.classification)) {
+      if (isEducationalClassification(move.classification)) {
         enriched.push({
           ...move,
           fenBefore,
@@ -119,11 +123,16 @@ export function buildCriticalMoveDiagnostics(moves: CoachMoveInput[]): CoachCrit
       }
 
       history.push(playedMove);
-      replay.move({ from: playedMove.from, to: playedMove.to, promotion: playedMove.promotion });
+      try {
+        replay.load(move.fenAfter);
+      } catch {
+        replay.load(fenBefore);
+        replay.move({ from: playedMove.from, to: playedMove.to, promotion: playedMove.promotion });
+      }
     }
   }
 
-  return pickCriticalMovesForLlm(enriched);
+  return enriched.sort((a, b) => a.index - b.index);
 }
 
 function pickCriticalMovesForLlm(moves: CoachCriticalMove[]): CoachCriticalMove[] {
@@ -202,13 +211,11 @@ function detectAllowedMateInOne(input: DiagnosticInput): Diagnosis | null {
 
 function detectMissedHighValueCapture(input: DiagnosticInput): Diagnosis | null {
   if (!input.bestMoveLan || input.evalDropCp < 100) return null;
-  const captures = legalCaptures(input.fenBefore)
-    .filter((m) => m.captured)
-    .sort((a, b) => PIECE_VALUE[b.captured ?? "p"] - PIECE_VALUE[a.captured ?? "p"]);
-  const bestCapture = captures[0];
+  const bestCapture = legalCaptures(input.fenBefore).find(
+    (move) => moveToUci(move) === input.bestMoveLan
+  );
   if (!bestCapture || !bestCapture.captured) return null;
   if (PIECE_VALUE[bestCapture.captured] < 300) return null;
-  if (moveToUci(bestCapture) !== input.bestMoveLan) return null;
 
   const capturedName = PIECE_IT[bestCapture.captured] ?? bestCapture.captured;
 
@@ -234,7 +241,9 @@ function detectQueenTempoLoss(input: DiagnosticInput): Diagnosis | null {
 
   const previousQueenMoves = input.historyBeforeMove.filter((m) => m.color === move.color && m.piece === "q").length;
   const undeveloped = undevelopedMinorPieces(input.fenBefore, move.color);
-  if (previousQueenMoves < 1 && undeveloped.length < 2) return null;
+  const bestMove = resolveLanMove(input.fenBefore, input.bestMoveLan);
+  if (previousQueenMoves < 1 || undeveloped.length < 1) return null;
+  if (!bestMove || (!isDevelopingMinorPieceMove(bestMove) && !isCastling(bestMove))) return null;
 
   const facts = [
     `La mossa giocata muove la Donna da ${move.from} a ${move.to}.`,
@@ -261,6 +270,8 @@ function detectKingSafety(input: DiagnosticInput): Diagnosis | null {
   const kingSq = kingSquare(input.fenBefore, move.color);
   if (!isKingStillCentral(input.fenBefore, move.color)) return null;
   if (isCastling(move)) return null;
+  const bestMove = resolveLanMove(input.fenBefore, input.bestMoveLan);
+  if (!bestMove || !isCastling(bestMove)) return null;
 
   const facts = [
     `Prima della mossa, il Re e' ancora in ${kingSq ?? "centro"}.`,
@@ -284,6 +295,8 @@ function detectDevelopmentProblem(input: DiagnosticInput): Diagnosis | null {
   const undeveloped = undevelopedMinorPieces(input.fenBefore, move.color);
   if (undeveloped.length < 2) return null;
   if (isMinorPieceMove(move) || isCastling(move)) return null;
+  const bestMove = resolveLanMove(input.fenBefore, input.bestMoveLan);
+  if (!bestMove || (!isDevelopingMinorPieceMove(bestMove) && !isCastling(bestMove))) return null;
 
   const facts = [
     `La mossa giocata e' ${move.san}.`,
@@ -336,10 +349,12 @@ function resolvePlayedMove(fen: string, san: string): VerboseMove | null {
 function mateInOneMoves(fen: string): VerboseMove[] {
   try {
     const chess = new Chess(fen);
-    return (chess.moves({ verbose: true }) as unknown as VerboseMove[]).filter((move) => {
-      const copy = new Chess(fen);
-      copy.move({ from: move.from, to: move.to, promotion: move.promotion });
-      return copy.isCheckmate();
+    const legalMoves = chess.moves({ verbose: true }) as unknown as VerboseMove[];
+    return legalMoves.filter((move) => {
+      chess.move({ from: move.from, to: move.to, promotion: move.promotion });
+      const isMate = chess.isCheckmate();
+      chess.undo();
+      return isMate;
     });
   } catch {
     return [];
@@ -352,6 +367,17 @@ function legalCaptures(fen: string): VerboseMove[] {
     return (chess.moves({ verbose: true }) as unknown as VerboseMove[]).filter((move) => move.captured);
   } catch {
     return [];
+  }
+}
+
+function resolveLanMove(fen: string, lan?: string): VerboseMove | null {
+  if (!lan) return null;
+  try {
+    const chess = new Chess(fen);
+    const legalMoves = chess.moves({ verbose: true }) as unknown as VerboseMove[];
+    return legalMoves.find((move) => moveToUci(move) === lan) ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -430,12 +456,20 @@ function isMinorPieceMove(move: VerboseMove): boolean {
   return move.piece === "n" || move.piece === "b";
 }
 
+function isDevelopingMinorPieceMove(move: VerboseMove): boolean {
+  const startingSquares = move.color === "w"
+    ? new Set(["b1", "g1", "c1", "f1"])
+    : new Set(["b8", "g8", "c8", "f8"]);
+  return isMinorPieceMove(move) && startingSquares.has(move.from);
+}
+
 function isCastling(move: VerboseMove): boolean {
   return move.flags?.includes("k") || move.flags?.includes("q") || move.san === "O-O" || move.san === "O-O-O";
 }
 
-function isCriticalClassification(classification: string): boolean {
-  return classification.trim() === "ERRORE" || classification.trim() === "ERRORE GRAVE";
+function isEducationalClassification(classification: string): boolean {
+  const normalized = classification.trim();
+  return normalized === "IMPRECISIONE" || normalized === "ERRORE" || normalized === "ERRORE GRAVE";
 }
 
 function cleanSan(san: string): string {

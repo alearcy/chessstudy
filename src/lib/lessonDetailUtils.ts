@@ -1,14 +1,5 @@
 import { Chess } from "chess.js";
 import type { PieceSymbol, Square } from "chess.js";
-import { evalScore, moveClassification } from "@/services/analysisService";
-import type { Move } from "@/types";
-
-export function cleanGameAnalysisText(text: string): string {
-  return text.replace(/\[([^\]]*?)\]\(#move-\d+\)/g, (_full, content) => {
-    const words = content.trim().split(/\s+/);
-    return words[0] ?? "";
-  });
-}
 
 export function sanToSquare(san: string, byBlack: boolean): string | null {
   if (san === "O-O") return byBlack ? "g8" : "g1";
@@ -73,39 +64,4 @@ export function uciToSan(fen: string, uci: string): string | null {
   } catch {
     return null;
   }
-}
-
-export function computeKeySwings(
-  moveList: Move[],
-  startCp: number | null,
-  startMate: number | null,
-  whiteName: string,
-  blackName: string
-): string[] {
-  const swings: Array<{ desc: string; absLoss: number }> = [];
-  for (let i = 0; i < moveList.length; i++) {
-    const move = moveList[i];
-    const beforeCp = i === 0 ? startCp : (moveList[i - 1]?.evalCp ?? null);
-    const beforeMate = i === 0 ? startMate : (moveList[i - 1]?.evalMate ?? null);
-    const afterCp = move.evalCp ?? null;
-    const afterMate = move.evalMate ?? null;
-    const beforeScore = evalScore(beforeCp, beforeMate);
-    const afterScore = evalScore(afterCp, afterMate);
-    const isWhiteMove = i % 2 === 0;
-    const cpLoss = isWhiteMove ? beforeScore - afterScore : afterScore - beforeScore;
-
-    const cls = moveClassification(cpLoss);
-    if (cls?.label === "!!" || cls?.label === "!" || !cls) continue;
-    const playerName = i % 2 === 0 ? whiteName : blackName;
-    const clsLabel =
-      cls.label === "??" ? "ERRORE GRAVE" :
-      cls.label === "?" ? "ERRORE" :
-      cls.label === "?!" ? "IMPRECISIONE" : "BUONA";
-    swings.push({
-      desc: `Mossa ${Math.floor(i / 2) + 1}. ${move.moveNotation} di ${playerName} (${clsLabel})`,
-      absLoss: Math.abs(cpLoss),
-    });
-  }
-  swings.sort((a, b) => b.absLoss - a.absLoss);
-  return swings.slice(0, 5).map((s) => s.desc);
 }

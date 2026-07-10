@@ -1,5 +1,5 @@
 use crate::settings::{
-    normalize_stockfish_depth, normalize_stockfish_threads, AppSettings,
+    normalize_stockfish_depth, normalize_stockfish_threads, normalize_username, AppSettings,
 };
 use crate::stockfish::{AnalysisResult, Engine as SfEngine};
 use std::sync::Mutex;
@@ -56,6 +56,8 @@ pub fn stockfish_path(state: State<'_, AppState>) -> String {
 pub struct SetSettingsArgs {
     pub stockfish_depth: Option<u32>,
     pub stockfish_threads: Option<u32>,
+    pub lichess_username: Option<String>,
+    pub chesscom_username: Option<String>,
 }
 
 /// Stato restituito da `get_settings` (non espone la key raw).
@@ -63,6 +65,8 @@ pub struct SetSettingsArgs {
 pub struct SettingsInfo {
     pub stockfish_depth: u32,
     pub stockfish_threads: u32,
+    pub lichess_username: String,
+    pub chesscom_username: String,
 }
 
 /// Salva le impostazioni dell'app.
@@ -85,6 +89,12 @@ pub fn set_settings(
         stockfish_threads: Some(normalize_stockfish_threads(
             args.stockfish_threads.or(previous.stockfish_threads),
         )),
+        lichess_username: Some(normalize_username(
+            args.lichess_username.or(previous.lichess_username),
+        )),
+        chesscom_username: Some(normalize_username(
+            args.chesscom_username.or(previous.chesscom_username),
+        )),
     };
 
     crate::settings::save_settings(&app, &new_settings)
@@ -99,6 +109,8 @@ pub fn set_settings(
     Ok(SettingsInfo {
         stockfish_depth: normalize_stockfish_depth(new_settings.stockfish_depth),
         stockfish_threads: normalize_stockfish_threads(new_settings.stockfish_threads),
+        lichess_username: normalize_username(new_settings.lichess_username),
+        chesscom_username: normalize_username(new_settings.chesscom_username),
     })
 }
 
@@ -109,9 +121,13 @@ pub fn get_settings(state: State<'_, AppState>) -> SettingsInfo {
     let settings = guard.as_ref();
     let stockfish_depth = normalize_stockfish_depth(settings.and_then(|s| s.stockfish_depth));
     let stockfish_threads = normalize_stockfish_threads(settings.and_then(|s| s.stockfish_threads));
+    let lichess_username = normalize_username(settings.and_then(|s| s.lichess_username.clone()));
+    let chesscom_username = normalize_username(settings.and_then(|s| s.chesscom_username.clone()));
 
     SettingsInfo {
         stockfish_depth,
         stockfish_threads,
+        lichess_username,
+        chesscom_username,
     }
 }
