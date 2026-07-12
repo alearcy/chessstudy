@@ -29,7 +29,9 @@ Frontend (React)                        Backend (Rust/Tauri)
 - **Spawn**: `std::process::Command::new(binary_path)` con `stdin(Stdio::piped())`,
   `stdout(Stdio::piped())`.
 - **Init UCI**: invia `uci`, attende `uciok`, invia `isready`, attende `readyok`.
-  Imposta `setoption name MultiPV value 3`.
+In origine impostava `setoption name MultiPV value 3`. Da FEAT-008 il valore e
+configurato per singola ricerca e l'analisi della partita usa `MultiPV 1` per
+ridurre il carico.
 - **Analisi**: `analyze(fen: &str, depth: u32) -> Result<AnalysisResult>`:
   - Invia `position fen <fen>` + `go depth <depth>`.
   - Legge stdout riga per riga. Parsa `info depth <d> score cp <n>` / `score mate <n>`.

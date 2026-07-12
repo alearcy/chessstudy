@@ -56,7 +56,9 @@ Il file settings esistente viene esteso:
 }
 ```
 
-I campi mancanti restano retrocompatibili e usano default 15/1.
+I campi mancanti restano retrocompatibili e usano default 15/2. Da FEAT-008,
+l'analisi completa usa questi valori come profilo base e approfondisce solo le
+posizioni critiche.
 
 ### Frontend
 `SettingsDialog` mostra controlli guidati:

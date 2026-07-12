@@ -76,10 +76,10 @@ class StockfishEngine {
   }
 
   /** Analizza una singola posizione a profondità fissa. */
-  analyze(fen: string, depth: number): Promise<PositionEval> {
+  analyze(fen: string, depth: number, multipv = 1): Promise<PositionEval> {
     const run = this.analysisTail
       .then(() => this.readyPromise)
-      .then(() => this.analyzeNow(fen, depth));
+      .then(() => this.analyzeNow(fen, depth, multipv));
     this.analysisTail = run.then(
       () => undefined,
       () => undefined
@@ -87,7 +87,7 @@ class StockfishEngine {
     return run;
   }
 
-  private analyzeNow(fen: string, depth: number): Promise<PositionEval> {
+  private analyzeNow(fen: string, depth: number, multipv: number): Promise<PositionEval> {
     return new Promise<PositionEval>((resolve) => {
       let bestCp: number | null = null;
       let bestMate: number | null = null;
@@ -130,6 +130,7 @@ class StockfishEngine {
         }
       };
       this.listener = onLine;
+      this.send("setoption name MultiPV value " + Math.max(1, Math.min(multipv, 3)));
       this.send("position fen " + fen);
       this.send("go depth " + depth);
     });
@@ -150,6 +151,7 @@ export function getEngine(): StockfishEngine {
 export interface AnalyzeOptions {
   depth?: number;
   threads?: number;
+  multipv?: number;
   onProgress?: (done: number, total: number) => void;
   /** Oggetto mutabile: settare `cancelled = true` per interrompere. */
   signal?: { cancelled: boolean };
@@ -178,6 +180,85 @@ export async function analyzePositions(
   options: AnalyzeOptions = {}
 ): Promise<PositionEval[]> {
   return enqueueAnalysis(fens, options);
+}
+
+type AnalyzeBatch = (
+  fens: string[],
+  options?: AnalyzeOptions,
+) => Promise<PositionEval[]>;
+
+const ADAPTIVE_DEPTH_INCREMENT = 5;
+const CRITICAL_CP_LOSS = 50;
+
+/** Indici delle posizioni prima/dopo le mosse critiche, ordinati e deduplicati. */
+export function findCriticalPositionIndexes(evals: PositionEval[]): number[] {
+  const indexes = new Set<number>();
+
+  for (let moveIndex = 0; moveIndex < evals.length - 1; moveIndex++) {
+    const beforeScore = evalScore(evals[moveIndex].scoreCp, evals[moveIndex].scoreMate);
+    const afterScore = evalScore(evals[moveIndex + 1].scoreCp, evals[moveIndex + 1].scoreMate);
+    const sideToMove = evals[moveIndex].fen.split(" ")[1];
+    const moverIsWhite = sideToMove === "w" || (sideToMove !== "b" && moveIndex % 2 === 0);
+    const cpLoss = moverIsWhite ? beforeScore - afterScore : afterScore - beforeScore;
+
+    if (cpLoss >= CRITICAL_CP_LOSS) {
+      indexes.add(moveIndex);
+      indexes.add(moveIndex + 1);
+    }
+  }
+
+  return [...indexes].sort((a, b) => a - b);
+}
+
+/** Orchestratore iniettabile per testare le due passate senza avviare Stockfish. */
+export async function runAdaptiveAnalysis(
+  fens: string[],
+  settings: StockfishSettings,
+  options: AnalyzeOptions = {},
+  analyzeBatch: AnalyzeBatch = analyzePositions,
+): Promise<PositionEval[]> {
+  const depth = options.depth ?? settings.stockfish_depth;
+  const threads = options.threads ?? settings.stockfish_threads;
+  const shallow = await analyzeBatch(fens, {
+    ...options,
+    depth,
+    threads,
+    multipv: 1,
+    onProgress: (done) => options.onProgress?.(done, fens.length),
+  });
+
+  if (options.signal?.cancelled || shallow.length !== fens.length) return shallow;
+
+  const criticalIndexes = findCriticalPositionIndexes(shallow);
+  if (criticalIndexes.length === 0) return shallow;
+
+  const total = fens.length + criticalIndexes.length;
+  options.onProgress?.(fens.length, total);
+  const refined = await analyzeBatch(
+    criticalIndexes.map((index) => fens[index]),
+    {
+      ...options,
+      depth: Math.min(30, depth + ADAPTIVE_DEPTH_INCREMENT),
+      threads,
+      multipv: 1,
+      onProgress: (done) => options.onProgress?.(fens.length + done, total),
+    },
+  );
+
+  const merged = [...shallow];
+  refined.forEach((evaluation, refinedIndex) => {
+    const positionIndex = criticalIndexes[refinedIndex];
+    if (positionIndex != null) merged[positionIndex] = evaluation;
+  });
+  return merged;
+}
+
+export async function analyzePositionsAdaptive(
+  fens: string[],
+  options: AnalyzeOptions = {},
+): Promise<PositionEval[]> {
+  const settings = await getStockfishSettings();
+  return runAdaptiveAnalysis(fens, settings, options);
 }
 
 function enqueueAnalysis(
@@ -250,14 +331,14 @@ export function resetStockfishSettingsCache(): void {
 
 export async function getStockfishSettings(): Promise<StockfishSettings> {
   if (!isTauri()) {
-    return { stockfish_depth: 15, stockfish_threads: 1 };
+    return { stockfish_depth: 15, stockfish_threads: 2 };
   }
   if (!stockfishSettingsPromise) {
     stockfishSettingsPromise = import("@tauri-apps/api/core")
       .then(({ invoke }) =>
         invoke<StockfishSettings>("get_settings")
       )
-      .catch(() => ({ stockfish_depth: 15, stockfish_threads: 1 }));
+      .catch(() => ({ stockfish_depth: 15, stockfish_threads: 2 }));
   }
   return stockfishSettingsPromise;
 }
@@ -280,6 +361,7 @@ async function analyzePositionsNative(
   const settings = await getStockfishSettings();
   const depth = options.depth ?? settings.stockfish_depth;
   const threads = options.threads ?? settings.stockfish_threads;
+  const multipv = options.multipv ?? 1;
   // Lazy import: @tauri-apps/api non esiste in contesto browser.
   const { invoke } = await import("@tauri-apps/api/core");
   const results: PositionEval[] = [];
@@ -290,6 +372,7 @@ async function analyzePositionsNative(
       fen: fens[i],
       depth,
       threads,
+      multipv,
     });
     results.push(toPositionEval(raw));
     options.onProgress?.(i + 1, fens.length);
@@ -306,12 +389,13 @@ async function analyzePositionsWasm(
 ): Promise<PositionEval[]> {
   const settings = await getStockfishSettings();
   const depth = options.depth ?? settings.stockfish_depth;
+  const multipv = options.multipv ?? 1;
   const engine = getEngine();
   await engine.whenReady();
   const results: PositionEval[] = [];
   for (let i = 0; i < fens.length; i++) {
     if (options.signal?.cancelled) break;
-    const ev = await engine.analyze(fens[i], depth);
+    const ev = await engine.analyze(fens[i], depth, multipv);
     results.push(ev);
     options.onProgress?.(i + 1, fens.length);
   }

@@ -38,6 +38,7 @@ import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
 import ErrorNotice from "@/components/ErrorNotice";
 import {
   analyzePositions,
+  analyzePositionsAdaptive,
   getStockfishSettings,
   uciToArrow,
   toEvalFields,
@@ -708,7 +709,7 @@ const selectedBoard = useMemo(
     setAnalysisError(null);
     setAnalysisProgress({ done: 0, total: fens.length });
     try {
-      const evals: PositionEval[] = await analyzePositions(fens, {
+      const evals: PositionEval[] = await analyzePositionsAdaptive(fens, {
         signal,
         onProgress: (done, total) => setAnalysisProgress({ done, total }),
       });

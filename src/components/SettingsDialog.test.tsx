@@ -10,9 +10,27 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
 afterEach(() => {
   cleanup();
   invokeMock.mockReset();
+  vi.restoreAllMocks();
 });
 
 describe("SettingsDialog", () => {
+  it("offers the conservative 2-thread profile on an 8-thread device", async () => {
+    vi.spyOn(window.navigator, "hardwareConcurrency", "get").mockReturnValue(8);
+    invokeMock.mockResolvedValue({
+      stockfish_depth: 15,
+      stockfish_threads: 4,
+      lichess_username: "",
+      chesscom_username: "",
+    });
+
+    const view = render(<SettingsDialog open onOpenChange={vi.fn()} />);
+    await view.findByText("Rilevati 8 thread logici.");
+    const cpuSelect = document.querySelectorAll("select")[1];
+    const values = Array.from(cpuSelect.options, (option) => Number(option.value));
+
+    expect(values).toContain(2);
+  });
+
   it("loads, edits and saves the platform usernames with Stockfish settings", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "get_settings") {

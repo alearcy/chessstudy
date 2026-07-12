@@ -2,20 +2,17 @@
 
 ## In Progress
 
+## Completed
+
 - UI-001 Coordinate scacchiera esterne di default
   - Spec: `docs/specs/coordinate-scacchiera.md`
-  - [x] Mostrare le coordinate esterne all'apertura in studio e analisi
-  - [x] Portare le coordinate dentro le case tramite il pulsante esistente
-  - [x] Aggiungere test di regressione e verificare build
 
 - FEAT-005B Rendere affidabili e separati i commenti educativi tattici
   - Spec: `docs/specs/commenti-educativi-tattici.md`
-  - [x] Correggere detection tattica, prospettiva e classificazione del matto
-  - [x] Diagnosticare tutte le mosse critiche, incluse le imprecisioni
-  - [x] Salvare e mostrare il commento educativo separato da Stockfish e note utente
-  - [x] Aggiungere test di regressione e verificare build
 
-## Completed
+- FEAT-008 Analisi Stockfish adattiva
+  - Spec: `docs/specs/stockfish-adaptive-analysis.md`
+  - ADR: `docs/adr/0005-analisi-stockfish-adattiva.md`
 
 - FEAT-007 Importare le partite di un giocatore da Lichess e Chess.com
   - Spec: `docs/specs/import-lichess-player-games.md`

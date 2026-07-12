@@ -24,7 +24,7 @@ interface SettingsDialogProps {
 }
 
 const DEFAULT_STOCKFISH_DEPTH = 15;
-const DEFAULT_STOCKFISH_THREADS = 1;
+const DEFAULT_STOCKFISH_THREADS = 2;
 
 const DEPTH_OPTIONS = [
   { value: 10, label: "Veloce", hint: "analisi rapida" },
@@ -246,6 +246,7 @@ function buildCpuOptions(detectedThreads: number | null) {
   const fast = Math.max(balanced, Math.min(max, 32));
   const options = [
     { value: 1, label: "1 thread" },
+    { value: DEFAULT_STOCKFISH_THREADS, label: `${DEFAULT_STOCKFISH_THREADS} thread (consigliato)` },
     { value: balanced, label: `${balanced} thread` },
     { value: fast, label: `${fast} thread` },
   ];

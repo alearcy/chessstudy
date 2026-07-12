@@ -17,7 +17,7 @@ pub struct AppSettings {
 }
 
 pub const DEFAULT_STOCKFISH_DEPTH: u32 = 15;
-pub const DEFAULT_STOCKFISH_THREADS: u32 = 1;
+pub const DEFAULT_STOCKFISH_THREADS: u32 = 2;
 
 pub fn normalize_stockfish_depth(depth: Option<u32>) -> u32 {
     depth.unwrap_or(DEFAULT_STOCKFISH_DEPTH).clamp(1, 30)
@@ -27,13 +27,25 @@ pub fn normalize_stockfish_threads(threads: Option<u32>) -> u32 {
     threads.unwrap_or(DEFAULT_STOCKFISH_THREADS).clamp(1, 32)
 }
 
+pub fn normalize_stockfish_multipv(multipv: Option<u32>) -> u32 {
+    multipv.unwrap_or(1).clamp(1, 3)
+}
+
 pub fn normalize_username(username: Option<String>) -> String {
     username.unwrap_or_default().trim().to_string()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_username;
+    use super::{normalize_stockfish_multipv, normalize_username};
+
+    #[test]
+    fn stockfish_multipv_is_clamped_to_supported_range() {
+        assert_eq!(normalize_stockfish_multipv(None), 1);
+        assert_eq!(normalize_stockfish_multipv(Some(0)), 1);
+        assert_eq!(normalize_stockfish_multipv(Some(2)), 2);
+        assert_eq!(normalize_stockfish_multipv(Some(8)), 3);
+    }
 
     #[test]
     fn username_settings_are_trimmed_and_default_to_empty() {

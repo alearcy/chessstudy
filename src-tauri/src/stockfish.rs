@@ -52,7 +52,7 @@ impl Engine {
         send_command(&mut proc, "uci")?;
         wait_for_line(&mut proc, "uciok")?;
 
-        send_command(&mut proc, "setoption name MultiPV value 3")?;
+        send_command(&mut proc, "setoption name MultiPV value 1")?;
         send_command(&mut proc, "isready")?;
         wait_for_line(&mut proc, "readyok")?;
 
@@ -65,10 +65,17 @@ impl Engine {
     }
 
     /// Analizza una posizione FEN a profondità e thread configurabili.
-    pub fn analyze(&self, fen: &str, depth: u32, threads: u32) -> Result<AnalysisResult> {
+    pub fn analyze(
+        &self,
+        fen: &str,
+        depth: u32,
+        threads: u32,
+        multipv: u32,
+    ) -> Result<AnalysisResult> {
         let mut proc = self.child.blocking_lock();
         let depth = depth.clamp(1, 30);
         let threads = threads.clamp(1, 32);
+        let multipv = multipv.clamp(1, 3);
 
         // Determina lato al tratto dal FEN per normalizzazione.
         let side_to_move = fen.split_whitespace().nth(1).unwrap_or("w");
@@ -77,6 +84,10 @@ impl Engine {
         send_command(
             &mut *proc,
             &format!("setoption name Threads value {}", threads),
+        )?;
+        send_command(
+            &mut *proc,
+            &format!("setoption name MultiPV value {}", multipv),
         )?;
         send_command(&mut *proc, &format!("position fen {}", fen))?;
         send_command(&mut *proc, &format!("go depth {}", depth))?;

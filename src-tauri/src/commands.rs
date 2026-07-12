@@ -1,5 +1,6 @@
 use crate::settings::{
-    normalize_stockfish_depth, normalize_stockfish_threads, normalize_username, AppSettings,
+    normalize_stockfish_depth, normalize_stockfish_multipv, normalize_stockfish_threads,
+    normalize_username, AppSettings,
 };
 use crate::stockfish::{AnalysisResult, Engine as SfEngine};
 use std::sync::Mutex;
@@ -18,6 +19,7 @@ pub fn analyze_position(
     fen: String,
     depth: u32,
     threads: Option<u32>,
+    multipv: Option<u32>,
 ) -> Result<AnalysisResult, String> {
     let engine = state
         .engine
@@ -31,6 +33,7 @@ pub fn analyze_position(
             &fen,
             normalize_stockfish_depth(Some(depth)),
             normalize_stockfish_threads(threads),
+            normalize_stockfish_multipv(multipv),
         )
         .map_err(|e| format!("analysis error: {}", e))
 }
