@@ -4,6 +4,8 @@
 
 ## Completed
 
+- Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
+
 - FEAT-009 Preferiti per le partite importate
   - Spec: `docs/specs/preferiti-partite-importate.md`
 
@@ -105,6 +107,5 @@
 
 - Mi piacerebbe che quando viene trovato un matto (ad esempio il commento "matto in 5" o "matto in 1"), cliccando sulla frase "matto in 5" o "matto in 1" la scacchiera cambia mostrandomi la sequenza di mosse per quel matto. E posso ovviamente navigare tra quelle mosse. Solo quelle mosse, non quelle di tutta la partita, ma solo quelle relative al matto trovato. Un pulsante poi mi permette di tornare alla sequenza di mosse di tutta la partita. Il colore della scacchiera potrebbe essere più opaco quando si visualizza una sequenza di mosse di un matto specifico rispetto alla sequenza di mosse di tutta la partita. Fammi una proposta di come lo faresti.
 ## Todo
-- [x] Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
 - [ ] Ridurre bundle iniziale
   - Introdurre lazy loading/code splitting per moduli pesanti: chessboard, markdown, PGN, AI/Stockfish.
