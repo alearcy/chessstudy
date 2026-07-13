@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Plus, Pencil, Trash2, Upload, Microscope, Settings, Swords } from "lucide-react";
+import { BookOpen, Plus, Pencil, Trash2, Upload, Microscope, Settings, Swords, Heart } from "lucide-react";
 import {
   getAllLessons,
   createLesson,
   updateLesson,
   deleteLesson,
+  setLessonFavorite,
 } from "@/services/lessonService";
 import type { Lesson, LessonFormData } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 import ErrorNotice from "@/components/ErrorNotice";
 import ImportLichessDialog from "@/components/board/ImportLichessDialog";
 import ImportChessComDialog from "@/components/board/ImportChessComDialog";
+import LessonFavoriteButton from "@/components/lesson/LessonFavoriteButton";
 import { getAppSettings } from "@/services/settingsService";
 
 const emptyForm: LessonFormData = { title: "", description: "" };
@@ -202,6 +204,8 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
   const [chessComImportOpen, setChessComImportOpen] = useState(false);
   const [chessComUsername, setChessComUsername] = useState("");
   const [checkingChessComSettings, setCheckingChessComSettings] = useState(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [updatingFavoriteId, setUpdatingFavoriteId] = useState<number | null>(null);
 
   const loadLessons = useCallback(async () => {
     try {
@@ -235,6 +239,21 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
     await deleteLesson(deletingLesson.id);
     await loadLessons();
     setDeletingLesson(null);
+  };
+
+  const handleToggleFavorite = async (lesson: Lesson) => {
+    if (lesson.id == null || lesson.mode !== "analysis") return;
+    setUpdatingFavoriteId(lesson.id);
+    setPageError(null);
+    try {
+      await setLessonFavorite(lesson.id, !lesson.isFavorite);
+      await loadLessons();
+    } catch (e) {
+      console.error("[lesson-favorite] errore", e);
+      setPageError("Impossibile aggiornare i preferiti. Riprova.");
+    } finally {
+      setUpdatingFavoriteId(null);
+    }
   };
 
   const handlePgnImported = (lessonId: number, _boardId: number) => {
@@ -280,10 +299,26 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
     }
   };
 
+  const visibleLessons = showFavoritesOnly
+    ? lessons.filter((lesson) => lesson.mode === "analysis" && lesson.isFavorite)
+    : lessons;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Lezioni</h1>
+        <Button
+          variant={showFavoritesOnly ? "default" : "outline"}
+          size="sm"
+          aria-pressed={showFavoritesOnly}
+          onClick={() => setShowFavoritesOnly((current) => !current)}
+        >
+          <Heart
+            className="size-4"
+            fill={showFavoritesOnly ? "currentColor" : "none"}
+          />
+          Solo preferite
+        </Button>
       </div>
 
       {pageError && (
@@ -402,9 +437,17 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
             Importa un PGN per iniziare.
           </p>
         </div>
+      ) : visibleLessons.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <Heart className="size-12 mx-auto mb-4 opacity-30" />
+          <p className="text-lg">Nessuna partita preferita</p>
+          <p className="text-sm mt-1">
+            Usa il cuore su una partita importata per aggiungerla ai preferiti.
+          </p>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {lessons.map((lesson) => (
+          {visibleLessons.map((lesson) => (
             <Card
               key={lesson.id}
               className="cursor-pointer hover:bg-accent/50 transition-colors"
@@ -436,6 +479,14 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
                   })}
                 </span>
                 <div className="ml-auto flex gap-1">
+                  {lesson.mode === "analysis" && (
+                    <LessonFavoriteButton
+                      lessonTitle={lesson.title}
+                      isFavorite={Boolean(lesson.isFavorite)}
+                      onToggle={() => void handleToggleFavorite(lesson)}
+                      disabled={updatingFavoriteId === lesson.id}
+                    />
+                  )}
                   <Button
                     variant="ghost"
                     size="icon-xs"

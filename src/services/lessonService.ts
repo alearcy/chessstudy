@@ -16,6 +16,7 @@ export async function createLesson(
   const id = await db.lessons.add({
     ...data,
     mode,
+    isFavorite: false,
     createdAt: new Date(),
   } as Lesson);
   return id as number;
@@ -26,6 +27,13 @@ export async function updateLesson(
   data: LessonFormData
 ): Promise<void> {
   await db.lessons.update(id, data);
+}
+
+export async function setLessonFavorite(
+  id: number,
+  isFavorite: boolean,
+): Promise<void> {
+  await db.lessons.update(id, { isFavorite });
 }
 
 export async function deleteLesson(id: number): Promise<void> {

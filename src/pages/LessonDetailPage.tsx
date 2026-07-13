@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Pencil, Trash2, NotebookPen } from "lucide-react";
-import { getLesson, updateLesson, deleteLesson, convertAnalysisToStudy } from "@/services/lessonService";
+import {
+  getLesson,
+  updateLesson,
+  deleteLesson,
+  convertAnalysisToStudy,
+  setLessonFavorite,
+} from "@/services/lessonService";
 import {
   getBoard,
   getBoardsByLesson,
@@ -51,6 +57,7 @@ import { diagnoseCriticalMoves, type Diagnosis } from "@/services/coachDiagnosti
 import { Chess } from "chess.js";
 import MoveCommentPreview from "@/components/lesson/MoveCommentPreview";
 import StudyBoardSidebar from "@/components/lesson/StudyBoardSidebar";
+import LessonFavoriteButton from "@/components/lesson/LessonFavoriteButton";
 import {
   formatEvalForPrompt,
   getKingStatus,
@@ -118,6 +125,7 @@ export default function LessonDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [form, setForm] = useState<LessonFormData>({ title: "", description: "" });
   const [saving, setSaving] = useState(false);
+  const [savingFavorite, setSavingFavorite] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [editBoardOpen, setEditBoardOpen] = useState(false);
   const [editBoardId, setEditBoardId] = useState<number | null>(null);
@@ -594,6 +602,24 @@ const selectedBoard = useMemo(
     } catch (e) {
       console.error("[lesson-delete] errore", e);
       setActionError("Eliminazione lezione fallita.");
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!lesson || lesson.mode !== "analysis") return;
+    const nextFavorite = !lesson.isFavorite;
+    setSavingFavorite(true);
+    setActionError(null);
+    try {
+      await setLessonFavorite(lessonId, nextFavorite);
+      setLesson((current) =>
+        current ? { ...current, isFavorite: nextFavorite } : current,
+      );
+    } catch (e) {
+      console.error("[lesson-favorite] errore", e);
+      setActionError("Impossibile aggiornare i preferiti. Riprova.");
+    } finally {
+      setSavingFavorite(false);
     }
   };
 
@@ -1170,6 +1196,14 @@ const selectedBoard = useMemo(
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             <h1 className="text-2xl font-bold truncate">{lesson.title}</h1>
+            {lesson.mode === "analysis" && (
+              <LessonFavoriteButton
+                lessonTitle={lesson.title}
+                isFavorite={Boolean(lesson.isFavorite)}
+                onToggle={() => void handleToggleFavorite()}
+                disabled={savingFavorite}
+              />
+            )}
             <Button
               variant="ghost"
               size="icon-xs"

@@ -157,4 +157,16 @@ db.version(11).stores({
   });
 });
 
+// v12: aggiunto campo non indicizzato `isFavorite` su Lesson.
+// Le lezioni esistenti vengono normalizzate senza modificare board o mosse.
+db.version(12).stores({
+  lessons: "++id, title, mode, createdAt",
+  boards: "++id, lessonId, createdAt",
+  moves: "++id, boardId, parentId, order, createdAt",
+}).upgrade((tx) => {
+  return tx.table("lessons").toCollection().modify((lesson) => {
+    if (lesson.isFavorite == null) lesson.isFavorite = false;
+  });
+});
+
 export default db;

@@ -3,6 +3,7 @@ export interface Lesson {
   title: string;
   description: string;
   mode: "study" | "analysis";
+  isFavorite?: boolean;
   createdAt: Date;
 }
 

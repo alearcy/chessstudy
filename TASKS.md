@@ -4,6 +4,9 @@
 
 ## Completed
 
+- FEAT-009 Preferiti per le partite importate
+  - Spec: `docs/specs/preferiti-partite-importate.md`
+
 - UI-001 Coordinate scacchiera esterne di default
   - Spec: `docs/specs/coordinate-scacchiera.md`
 
