@@ -484,6 +484,49 @@ export function moveClassification(
   return { label: "??", color: "rgb(220,38,38)" };
 }
 
+/** Confronta due SAN ignorando solo i suffissi di scacco, matto e annotazione. */
+export function sanMovesMatch(playedSan: string, candidateSan: string | null): boolean {
+  if (!candidateSan) return false;
+  const normalize = (san: string) => san.replace(/[+#?!]+$/, "");
+  return normalize(playedSan) === normalize(candidateSan);
+}
+
+export function stockfishCommentForMove(args: {
+  moveNotation: string;
+  cpLoss: number;
+  bestSan: string | null;
+  isBestMove: boolean;
+}): string {
+  const cls = moveClassification(args.cpLoss, args.isBestMove);
+
+  if (cls?.label === "!!") {
+    return `Analisi: ${args.moveNotation} - mossa migliore. La mossa giocata coincide con la scelta principale.`;
+  }
+
+  const classification =
+    cls?.label === "??" ? "errore grave" :
+    cls?.label === "?" ? "errore" :
+    cls?.label === "?!" ? "imprecisione" :
+    args.cpLoss <= -50 ? "buona risorsa" :
+    "mossa solida";
+  const swing =
+    args.cpLoss <= -50
+      ? "la posizione migliora"
+      : Math.abs(args.cpLoss) >= 250
+      ? "la posizione peggiora molto"
+      : Math.abs(args.cpLoss) >= 120
+        ? "la posizione peggiora in modo importante"
+        : Math.abs(args.cpLoss) >= 25
+          ? "la posizione peggiora leggermente"
+          : "posizione quasi invariata";
+  const best =
+    args.bestSan && !sanMovesMatch(args.moveNotation, args.bestSan)
+      ? `La continuazione piu precisa era ${args.bestSan}.`
+      : "La mossa resta pienamente giocabile.";
+
+  return `Analisi: ${args.moveNotation} - ${classification}, ${swing}. ${best}`;
+}
+
 /** Converte UCI "e2e4" / "e7e8q" in [from, to] per BoardArrow. */
 export function uciToArrow(uci: string): [string, string] | null {
   if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci)) return null;

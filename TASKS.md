@@ -2,6 +2,20 @@
 
 ## In Progress
 
+- BUG-001 Coerenza fra badge e commenti Stockfish
+  - [x] Riprodurre la contraddizione sulle mosse migliori
+  - [x] Usare la stessa classificazione per badge e commento
+  - [x] Verificare test e build
+
+- FEAT-010 Riconoscimento aperture e creazione studi
+  - [x] Riconoscere aperture giocate e suggerite per entrambi i colori
+  - [x] Creare uno studio con la sequenza completa dell'apertura
+  - [x] Aggiungere una variante come nuova scacchiera a uno studio esistente
+  - [x] Gestire conflitti di nome e sovrascrittura esplicita
+  - [x] Spostare le aperture nel tab dedicato della sidebar destra
+  - [x] Verificare test e build
+  - Spec: `docs/specs/analisi-aperture.md`
+
 ## Completed
 
 - Quando viene importata una partita la mossa si posiziona sull'ultima, invece voglio che parta dall'inizio.
@@ -106,6 +120,8 @@
 - [x] Eliminare qualsiasi traccia di LLM e AI, non ne ho più bisogno. Cancella anche modello locale.
 
 - Mi piacerebbe che quando viene trovato un matto (ad esempio il commento "matto in 5" o "matto in 1"), cliccando sulla frase "matto in 5" o "matto in 1" la scacchiera cambia mostrandomi la sequenza di mosse per quel matto. E posso ovviamente navigare tra quelle mosse. Solo quelle mosse, non quelle di tutta la partita, ma solo quelle relative al matto trovato. Un pulsante poi mi permette di tornare alla sequenza di mosse di tutta la partita. Il colore della scacchiera potrebbe essere più opaco quando si visualizza una sequenza di mosse di un matto specifico rispetto alla sequenza di mosse di tutta la partita. Fammi una proposta di come lo faresti.
+
 ## Todo
-- [ ] Ridurre bundle iniziale
+- Vorrei che le dimensione del layout siano pensate per dispotivi desktop. Quindi sia il formato minimo che massimo devono essere compatibili e non devono creare inutili stretch negli elementi in pagina. 
+- Ridurre bundle iniziale
   - Introdurre lazy loading/code splitting per moduli pesanti: chessboard, markdown, PGN, AI/Stockfish.

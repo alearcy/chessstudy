@@ -7,6 +7,20 @@ export interface Lesson {
   createdAt: Date;
 }
 
+export interface OpeningReference {
+  eco: string;
+  name: string;
+  family: string;
+  pgn: string;
+}
+
+export interface OpeningReport {
+  whitePlayed: OpeningReference | null;
+  blackPlayed: OpeningReference | null;
+  whiteSuggested: OpeningReference | null;
+  blackSuggested: OpeningReference | null;
+}
+
 /** Freccia disegnata sulla scacchiera: [da, a, colore?]. */
 export type BoardArrow = [string, string, string?];
 
@@ -47,6 +61,12 @@ export interface Board {
   headers?: Record<string, string | null>;
   /** Analisi testuale dell'intera partita. */
   gameAnalysis?: string;
+  /** Aperture riconosciute durante l'analisi della partita. */
+  openingReport?: OpeningReport;
+  /** Metadati presenti sulle scacchiere create dal libro aperture. */
+  openingEco?: string;
+  openingName?: string;
+  openingFamily?: string;
 }
 
 export interface Move {

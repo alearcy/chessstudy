@@ -6,6 +6,7 @@ import {
   formatEval,
   moveClassification,
   runAdaptiveAnalysis,
+  stockfishCommentForMove,
   type AnalyzeOptions,
   type PositionEval,
 } from "@/services/analysisService";
@@ -34,6 +35,25 @@ describe("analysisService eval helpers", () => {
     expect(moveClassification(180)).toMatchObject({ label: "?" });
     expect(moveClassification(350)).toMatchObject({ label: "??" });
   });
+
+  it.each([
+    { moveNotation: "Rf5+", cpLoss: 350 },
+    { moveNotation: "e2", cpLoss: 80 },
+  ])(
+    "keeps the Stockfish comment consistent with the best-move badge for $moveNotation",
+    ({ moveNotation, cpLoss }) => {
+      const comment = stockfishCommentForMove({
+        moveNotation,
+        cpLoss,
+        bestSan: moveNotation,
+        isBestMove: true,
+      });
+
+      expect(comment).toContain("mossa migliore");
+      expect(comment).toContain("coincide con la scelta principale");
+      expect(comment).not.toMatch(/imprecisione|errore|peggiora/i);
+    },
+  );
 
   it("makes a shorter forced mate substantially better than a longer one", () => {
     expect(evalScore(null, 1) - evalScore(null, 5)).toBeGreaterThanOrEqual(300);

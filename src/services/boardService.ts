@@ -71,7 +71,7 @@ export async function createBoardWithFen(
 
 export async function updateBoard(
   id: number,
-  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci" | "whiteName" | "blackName" | "headers" | "gameAnalysis">>
+  data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci" | "whiteName" | "blackName" | "headers" | "gameAnalysis" | "openingReport" | "openingEco" | "openingName" | "openingFamily">>
 ): Promise<void> {
   await db.boards.update(id, data);
 }

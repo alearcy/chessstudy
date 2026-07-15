@@ -9,6 +9,9 @@ sovrascrivere il commento utente o il commento Stockfish.
 ## Decisioni
 
 - Stockfish resta la fonte della classificazione e della migliore alternativa.
+- Il badge e il commento Stockfish condividono la stessa classificazione: se la
+  mossa coincide con la scelta principale, il commento la descrive come mossa
+  migliore e non riporta contemporaneamente un peggioramento o un errore.
 - `explainService.ts` rileva pattern geometrici con le API di attacco di
   `chess.js`, esplicitando sempre quale colore crea o subisce la tattica.
 - Le spiegazioni confrontano la posizione dopo la mossa giocata con quella dopo
@@ -55,6 +58,8 @@ Fixture FEN per:
 - matto in una concesso e peggioramento della distanza dal matto;
 - inclusione delle imprecisioni e assenza del limite di cinque nella nuova API;
 - separazione fra commento educativo, Stockfish e nota utente.
+- coerenza fra badge di mossa migliore e testo del commento Stockfish anche
+  quando la variazione numerica fra due analisi suggerirebbe una perdita.
 
 ## Verifica
 

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, ReactNode } from "react";
 import { CircleCheck, Eye, EyeOff, MessageSquare, Star } from "lucide-react";
 import { Chess } from "chess.js";
 import type { Move } from "@/types";
-import { evalScore, moveClassification } from "@/services/analysisService";
+import { evalScore, moveClassification, sanMovesMatch } from "@/services/analysisService";
 
 interface MoveNotationProps {
   moves: Move[];
@@ -100,8 +100,7 @@ export default function MoveNotation({
     try {
       const chess = new Chess(fenBefore);
       const result = chess.move(bestUciBefore);
-      const cleanSan = (s: string) => s.replace(/[+#]$/, "");
-      return cleanSan(result.san) === cleanSan(moves[moveIndex].moveNotation);
+      return sanMovesMatch(moves[moveIndex].moveNotation, result.san);
     } catch {
       return false;
     }

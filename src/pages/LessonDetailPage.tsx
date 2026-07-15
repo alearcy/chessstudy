@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Pencil, Trash2, NotebookPen } from "lucide-react";
 import {
   getLesson,
@@ -22,7 +22,14 @@ import {
   deleteMovesFromOrder,
   deleteMovesByBoard,
 } from "@/services/moveService";
-import type { Lesson, LessonFormData, Board, BoardArrow, Move } from "@/types";
+import type {
+  Lesson,
+  LessonFormData,
+  Board,
+  BoardArrow,
+  Move,
+  OpeningReference,
+} from "@/types";
 import type { Square } from "chess.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +48,9 @@ import EvalBar from "@/components/analysis/EvalBar";
 import MoveNotation from "@/components/board/MoveNotation";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
+import OpeningInsightsPanel from "@/components/analysis/OpeningInsightsPanel";
+import OpeningStudyDialog from "@/components/analysis/OpeningStudyDialog";
+import AnalysisSidebarTabs from "@/components/analysis/AnalysisSidebarTabs";
 import ErrorNotice from "@/components/ErrorNotice";
 import {
   analyzePositions,
@@ -50,6 +60,8 @@ import {
   toEvalFields,
   evalScore,
   moveClassification,
+  sanMovesMatch,
+  stockfishCommentForMove,
   type PositionEval,
 } from "@/services/analysisService";
 import { explainMoveRuleBased, formatDiagnosisHint } from "@/services/explainService";
@@ -65,35 +77,65 @@ import {
   uciToSan,
 } from "@/lib/lessonDetailUtils";
 import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
+import { analyzeGameOpenings } from "@/services/openingBookService";
 
 const SAVE_DEBOUNCE_MS = 800;
 
-function stockfishCommentForMove(args: {
-  move: Move;
-  cpLoss: number;
-  bestSan: string | null;
-}): string {
-  const cls = moveClassification(args.cpLoss);
-  const classification =
-    cls?.label === "??" ? "errore grave" :
-    cls?.label === "?" ? "errore" :
-    cls?.label === "?!" ? "imprecisione" :
-    args.cpLoss <= -50 ? "buona risorsa" :
-    "mossa solida";
-  const swing =
-    Math.abs(args.cpLoss) >= 250
-      ? ", la posizione peggiora molto"
-      : Math.abs(args.cpLoss) >= 120
-        ? ", la posizione peggiora in modo importante"
-        : Math.abs(args.cpLoss) >= 25
-          ? ", la posizione peggiora leggermente"
-      : ", posizione quasi invariata";
-  const best =
-    args.bestSan && args.bestSan !== args.move.moveNotation
-      ? ` La continuazione piu precisa era ${args.bestSan}.`
-      : " La mossa giocata coincide con la scelta principale o resta pienamente giocabile.";
+function stockfishCommentFromStoredAnalysis(
+  board: Board,
+  moves: Move[],
+  moveIndex: number,
+): string | null {
+  const move = moves[moveIndex];
+  const before = moveIndex === 0 ? board : moves[moveIndex - 1];
+  const beforeCp = before.evalCp ?? null;
+  const beforeMate = before.evalMate ?? null;
+  const afterCp = move.evalCp ?? null;
+  const afterMate = move.evalMate ?? null;
 
-  return `Analisi: ${args.move.moveNotation} - ${classification}.${swing}.${best}`;
+  if (
+    (beforeCp == null && beforeMate == null) ||
+    (afterCp == null && afterMate == null)
+  ) {
+    return null;
+  }
+
+  const beforeFen = moveIndex === 0 ? board.fen : moves[moveIndex - 1].fen;
+  const bestUci = before.evalBestMoveUci ?? null;
+  const bestSan = bestUci ? uciToSan(beforeFen, bestUci) : null;
+  const beforeScore = evalScore(beforeCp, beforeMate);
+  const afterScore = evalScore(afterCp, afterMate);
+  const cpLoss = moveIndex % 2 === 0
+    ? beforeScore - afterScore
+    : afterScore - beforeScore;
+
+  return stockfishCommentForMove({
+    moveNotation: move.moveNotation,
+    cpLoss,
+    bestSan,
+    isBestMove: sanMovesMatch(move.moveNotation, bestSan),
+  });
+}
+
+async function normalizeStoredStockfishComments(
+  board: Board,
+  moves: Move[],
+): Promise<Move[]> {
+  return Promise.all(moves.map(async (move, moveIndex) => {
+    const stockfishComment = stockfishCommentFromStoredAnalysis(board, moves, moveIndex);
+    if (!stockfishComment || stockfishComment === move.stockfishComment) return move;
+
+    if (move.id != null) {
+      try {
+        await updateMove(move.id, { stockfishComment });
+      } catch (error) {
+        console.error("[stockfish-comment-normalize] errore", error);
+        return move;
+      }
+    }
+
+    return { ...move, stockfishComment };
+  }));
 }
 
 function evalPositionLabel(cp: number | null, mate: number | null) {
@@ -115,7 +157,13 @@ function uciToChessMove(uci: string) {
 export default function LessonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const lessonId = Number(id);
+  const requestedBoardId = useMemo(() => {
+    const value = new URLSearchParams(location.search).get("board");
+    const parsed = value == null ? Number.NaN : Number(value);
+    return Number.isInteger(parsed) ? parsed : null;
+  }, [location.search]);
 
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [boards, setBoards] = useState<Board[]>([]);
@@ -146,8 +194,12 @@ export default function LessonDetailPage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [openingLoading, setOpeningLoading] = useState(false);
+  const [openingError, setOpeningError] = useState<string | null>(null);
+  const [selectedOpening, setSelectedOpening] = useState<OpeningReference | null>(null);
   const [stockfishDepth, setStockfishDepth] = useState<number | null>(null);
   const analysisSignalRef = useRef<{ cancelled: boolean } | null>(null);
+  const openingRequestBoardRef = useRef<number | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
 
@@ -179,6 +231,7 @@ const selectedBoard = useMemo(
     if (initializedRef.current === null || initializedRef.current !== selectedBoard.id) {
       initializedRef.current = selectedBoard.id ?? null;
       getMovesByBoard(selectedBoard.id!)
+        .then((loadedMoves) => normalizeStoredStockfishComments(selectedBoard, loadedMoves))
         .then((loadedMoves) => {
           persistedMoveIdsByOrderRef.current = new Map(
             loadedMoves.flatMap((m) => (m.id == null ? [] : [[m.order, m.id]]))
@@ -264,6 +317,12 @@ const selectedBoard = useMemo(
       // Mantiene la selezione se valida, altrimenti seleziona la prima.
       setSelectedBoardId((prev) => {
         if (prev != null && loadedBoards.some((b) => b.id === prev)) return prev;
+        if (
+          requestedBoardId != null &&
+          loadedBoards.some((board) => board.id === requestedBoardId)
+        ) {
+          return requestedBoardId;
+        }
         return loadedBoards[0]?.id ?? null;
       });
     } catch (e) {
@@ -272,7 +331,7 @@ const selectedBoard = useMemo(
     } finally {
       setLoading(false);
     }
-  }, [lessonId, navigate]);
+  }, [lessonId, navigate, requestedBoardId]);
 
   useEffect(() => {
     loadData();
@@ -483,6 +542,79 @@ const selectedBoard = useMemo(
     },
     []
   );
+
+  const analyzeOpeningsForBoard = useCallback(
+    async (
+      board: Board,
+      moves: Move[],
+      bestMovesUci: Array<string | null>,
+    ) => {
+      if (board.id == null || openingRequestBoardRef.current === board.id) return;
+      openingRequestBoardRef.current = board.id;
+      setOpeningLoading(true);
+      setOpeningError(null);
+      try {
+        const openingReport = await analyzeGameOpenings({
+          startFen: board.fen,
+          movesSan: moves.map((move) => move.moveNotation),
+          bestMovesUci,
+        });
+        await updateBoard(board.id, { openingReport });
+        syncBoardInList(board.id, { openingReport });
+      } catch (error) {
+        console.error("[opening-analysis] errore", error);
+        setOpeningError("Database aperture non disponibile.");
+      } finally {
+        if (openingRequestBoardRef.current === board.id) {
+          openingRequestBoardRef.current = null;
+        }
+        setOpeningLoading(false);
+      }
+    },
+    [syncBoardInList],
+  );
+
+  const storedBestMoves = useCallback(
+    (board: Board, moves: Move[]): Array<string | null> =>
+      moves.map((_, moveIndex) =>
+        moveIndex === 0
+          ? board.evalBestMoveUci ?? null
+          : moves[moveIndex - 1]?.evalBestMoveUci ?? null,
+      ),
+    [],
+  );
+
+  useEffect(() => {
+    if (
+      lesson?.mode !== "analysis" ||
+      !selectedBoard ||
+      selectedBoard.openingReport ||
+      analyzing ||
+      chess.moves.length === 0
+    ) {
+      return;
+    }
+
+    const boardHasEval =
+      selectedBoard.evalCp != null || selectedBoard.evalMate != null;
+    const allMovesHaveEval = chess.moves.every(
+      (move) => move.evalCp != null || move.evalMate != null,
+    );
+    if (!boardHasEval || !allMovesHaveEval) return;
+
+    void analyzeOpeningsForBoard(
+      selectedBoard,
+      chess.moves,
+      storedBestMoves(selectedBoard, chess.moves),
+    );
+  }, [
+    analyzeOpeningsForBoard,
+    analyzing,
+    chess.moves,
+    lesson?.mode,
+    selectedBoard,
+    storedBestMoves,
+  ]);
 
   const reloadBoardFromDb = useCallback(
     async (boardId: number) => {
@@ -756,9 +888,10 @@ const selectedBoard = useMemo(
         const beforeScore = evalScore(beforeCp, beforeMate);
         const afterScore = evalScore(afterCp, afterMate);
         const cpLoss = isWhite ? beforeScore - afterScore : afterScore - beforeScore;
-        const cls = moveClassification(cpLoss);
         const beforeFen = moveIndex === 0 ? startFen : moveList[moveIndex - 1]?.fen ?? startFen;
         const bestSan = beforeEval.bestMoveUci ? uciToSan(beforeFen, beforeEval.bestMoveUci) : null;
+        const isBestMove = sanMovesMatch(m.moveNotation, bestSan);
+        const cls = moveClassification(cpLoss, isBestMove);
 
         return {
           moveNumber: Math.floor(moveIndex / 2) + 1,
@@ -798,14 +931,16 @@ const selectedBoard = useMemo(
         const bestSan = beforeEval.bestMoveUci && beforeFen
           ? uciToSan(beforeFen, beforeEval.bestMoveUci)
           : null;
+        const isBestMove = sanMovesMatch(move.moveNotation, bestSan);
 
         await updateMove(move.id, {
           ...toEvalFields(afterEval),
           analysisComment: null,
           stockfishComment: stockfishCommentForMove({
-            move,
+            moveNotation: move.moveNotation,
             cpLoss,
             bestSan,
+            isBestMove,
           }),
         });
       }
@@ -816,6 +951,14 @@ const selectedBoard = useMemo(
           ...selectedBoard,
           ...toEvalFields(evals[0]),
         }, diagnosticsByIndex);
+      }
+
+      if (!signal.cancelled) {
+        await analyzeOpeningsForBoard(
+          { ...selectedBoard, ...toEvalFields(evals[0]) },
+          moveList,
+          evals.slice(0, moveList.length).map((position) => position.bestMoveUci),
+        );
       }
 
       // Ricarica board + mosse dal DB in un colpo solo: questo è l'esatto
@@ -831,6 +974,7 @@ const selectedBoard = useMemo(
             evalMate: freshBoard.evalMate,
             evalDepth: freshBoard.evalDepth,
             evalBestMoveUci: freshBoard.evalBestMoveUci,
+            openingReport: freshBoard.openingReport,
           });
           chess.loadSequence(
             freshBoard.fen,
@@ -852,6 +996,20 @@ const selectedBoard = useMemo(
 
   const handleCancelAnalysis = () => {
     if (analysisSignalRef.current) analysisSignalRef.current.cancelled = true;
+  };
+
+  const handleRetryOpeningAnalysis = () => {
+    if (!selectedBoard) return;
+    void analyzeOpeningsForBoard(
+      selectedBoard,
+      chess.moves,
+      storedBestMoves(selectedBoard, chess.moves),
+    );
+  };
+
+  const handleOpeningStudyCreated = (createdLessonId: number, boardId: number) => {
+    setSelectedOpening(null);
+    navigate(`/lesson/${createdLessonId}?board=${boardId}`);
   };
 
   // Eval della posizione corrente + freccia miglior mossa (overlay).
@@ -973,8 +1131,7 @@ const selectedBoard = useMemo(
       try {
         const c = new Chess(fenBefore);
         const result = c.move(bestUciBefore);
-        const cleanSan = (s: string) => s.replace(/[+#]$/, "");
-        isBestMove = cleanSan(result.san) === cleanSan(move.moveNotation);
+        isBestMove = sanMovesMatch(move.moveNotation, result.san);
       } catch {
         isBestMove = false;
       }
@@ -1320,50 +1477,64 @@ const selectedBoard = useMemo(
             )}
           </section>
 
-          <aside className="flex min-h-0 min-w-0 flex-col gap-3 xl:h-full">
-            <MoveCommentPreview
-              currentMove={chess.currentMove}
-              historyIndex={chess.historyIndex}
-              text={chess.currentMove?.stockfishComment ?? ""}
-              stockfishLabel
-              onMateLineClick={handleMateLineClick}
-            />
-            {chess.currentMove?.analysisComment?.trim() ? (
-              <div className="space-y-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Spunto didattico
-                </p>
+          <AnalysisSidebarTabs
+            openingAvailable={Boolean(selectedBoard.openingReport)}
+            movesContent={
+              <>
                 <MoveCommentPreview
                   currentMove={chess.currentMove}
                   historyIndex={chess.historyIndex}
-                  text={chess.currentMove.analysisComment}
+                  text={chess.currentMove?.stockfishComment ?? ""}
+                  stockfishLabel
                   onMateLineClick={handleMateLineClick}
                 />
-              </div>
-            ) : null}
-            {mateLineStatus ? (
-              <div className="flex items-center justify-between gap-2 border-b bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                <span>{mateLineStatus}</span>
-                <button
-                  type="button"
-                  className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-800"
-                  onClick={clearMateLinePreview}
-                >
-                  Chiudi
-                </button>
-              </div>
-            ) : null}
-            <MoveNotation
-              moves={chess.moves}
-              currentMoveIndex={chess.historyIndex}
-              onGoToMove={chess.goToMove}
-              startEvalCp={selectedBoard?.evalCp ?? null}
-              startEvalMate={selectedBoard?.evalMate ?? null}
-              startFen={selectedBoard.fen}
-              startEvalBestMoveUci={selectedBoard?.evalBestMoveUci ?? null}
-              fullHeight
-            />
-          </aside>
+                {chess.currentMove?.analysisComment?.trim() ? (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Spunto didattico
+                    </p>
+                    <MoveCommentPreview
+                      currentMove={chess.currentMove}
+                      historyIndex={chess.historyIndex}
+                      text={chess.currentMove.analysisComment}
+                      onMateLineClick={handleMateLineClick}
+                    />
+                  </div>
+                ) : null}
+                {mateLineStatus ? (
+                  <div className="flex items-center justify-between gap-2 border-b bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                    <span>{mateLineStatus}</span>
+                    <button
+                      type="button"
+                      className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-800"
+                      onClick={clearMateLinePreview}
+                    >
+                      Chiudi
+                    </button>
+                  </div>
+                ) : null}
+                <MoveNotation
+                  moves={chess.moves}
+                  currentMoveIndex={chess.historyIndex}
+                  onGoToMove={chess.goToMove}
+                  startEvalCp={selectedBoard?.evalCp ?? null}
+                  startEvalMate={selectedBoard?.evalMate ?? null}
+                  startFen={selectedBoard.fen}
+                  startEvalBestMoveUci={selectedBoard?.evalBestMoveUci ?? null}
+                  fullHeight
+                />
+              </>
+            }
+            openingsContent={
+              <OpeningInsightsPanel
+                report={selectedBoard.openingReport}
+                loading={openingLoading}
+                error={openingError}
+                onRetry={handleRetryOpeningAnalysis}
+                onSelect={setSelectedOpening}
+              />
+            }
+          />
         </div>
       ) : (
         <div
@@ -1558,6 +1729,15 @@ const selectedBoard = useMemo(
         onOpenChange={setImportOpen}
         lessonId={lessonId}
         onImported={handleImportPgn}
+      />
+
+      <OpeningStudyDialog
+        opening={selectedOpening}
+        open={selectedOpening != null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedOpening(null);
+        }}
+        onCreated={handleOpeningStudyCreated}
       />
 
       <Dialog open={resetOpen} onOpenChange={setResetOpen}>

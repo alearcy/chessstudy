@@ -1,5 +1,6 @@
 import { Chess, Square, PieceSymbol, Color } from "chess.js";
 import type { Diagnosis } from "@/services/coachDiagnostics";
+import { sanMovesMatch } from "@/services/analysisService";
 import type { MoveExplanationInput, MoveExplanation, TacticalPattern, Severity } from "@/types";
 // ============================================================================
 // Costanti
@@ -367,8 +368,7 @@ function uciToSan(fen: string, uci: string): string {
 function checkIsBestMove(fenBefore: string, bestUci: string | null, playedSan: string): boolean {
   if (!bestUci) return false;
   const bestSan = uciToSan(fenBefore, bestUci);
-  const clean = (s: string) => s.replace(/[+#]$/, "");
-  return clean(bestSan) === clean(playedSan);
+  return sanMovesMatch(playedSan, bestSan);
 }
 
 function severityLabel(s: Severity): string {
@@ -495,7 +495,7 @@ details.push(`Piccola imprecisione di ${player}: la posizione peggiora leggermen
       break;
     case "good": {
       const bestSan = beforeEval.bestMoveUci ? uciToSan(_beforeFen, beforeEval.bestMoveUci) : null;
-      if (bestSan && bestSan === playedSan) {
+      if (bestSan && sanMovesMatch(playedSan, bestSan)) {
         details.push(`${player} ha trovato la continuazione piu precisa.`);
       } else {
         details.push(`Mossa solida di ${player}, vicina alla continuazione piu precisa.`);
