@@ -1478,7 +1478,6 @@ const selectedBoard = useMemo(
           </section>
 
           <AnalysisSidebarTabs
-            openingAvailable={Boolean(selectedBoard.openingReport)}
             movesContent={
               <>
                 <MoveCommentPreview
@@ -1711,6 +1710,7 @@ const selectedBoard = useMemo(
                 startEvalMate={selectedBoard?.evalMate ?? null}
                 startFen={selectedBoard.fen}
                 startEvalBestMoveUci={selectedBoard?.evalBestMoveUci ?? null}
+                showUserCommentIndicators
               />
             ) : (
               <div className="text-sm text-muted-foreground">

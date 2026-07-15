@@ -15,6 +15,8 @@ interface MoveNotationProps {
   /** Se true, il componente si estende in altezza riempiendo il contenitore
    *  (scroll interno fluido invece del cap fisso a 520px). */
   fullHeight?: boolean;
+  /** Mostra l'indicatore soltanto per le note utente (`Move.comment`). */
+  showUserCommentIndicators?: boolean;
 }
 
 const WHITE_PIECES: Record<string, string> = {
@@ -72,6 +74,7 @@ export default function MoveNotation({
   startFen,
   startEvalBestMoveUci = null,
   fullHeight = false,
+  showUserCommentIndicators = false,
 }: MoveNotationProps) {
   const [useIcons, setUseIcons] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -106,7 +109,7 @@ export default function MoveNotation({
     }
   };
 
-  const pairs: { moveNumber: number; white: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null; isBestMove: boolean } | null; black: { san: ReactNode; index: number; hasComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null; isBestMove: boolean } | null }[] = [];
+  const pairs: { moveNumber: number; white: { san: ReactNode; index: number; hasUserComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null; isBestMove: boolean } | null; black: { san: ReactNode; index: number; hasUserComment: boolean; evalCp: number | null; evalMate: number | null; cpLoss: number | null; isBestMove: boolean } | null }[] = [];
 
   for (let i = 0; i < moves.length; i += 2) {
     const moveNumber = Math.floor(i / 2) + 1;
@@ -120,11 +123,7 @@ export default function MoveNotation({
     const white = {
       san: formatSan(moves[i].moveNotation, true, useIcons),
       index: i + 1,
-      hasComment: !!(
-        moves[i].stockfishComment?.trim() ||
-        moves[i].analysisComment?.trim() ||
-        moves[i].comment?.trim()
-      ),
+      hasUserComment: Boolean(moves[i].comment?.trim()),
       evalCp: moves[i].evalCp ?? null,
       evalMate: moves[i].evalMate ?? null,
       isBestMove: i === 0
@@ -152,11 +151,7 @@ export default function MoveNotation({
       black = {
         san: formatSan(moves[i + 1].moveNotation, false, useIcons),
         index: i + 2,
-        hasComment: !!(
-          moves[i + 1].stockfishComment?.trim() ||
-          moves[i + 1].analysisComment?.trim() ||
-          moves[i + 1].comment?.trim()
-        ),
+        hasUserComment: Boolean(moves[i + 1].comment?.trim()),
         evalCp: moves[i + 1].evalCp ?? null,
         evalMate: moves[i + 1].evalMate ?? null,
         isBestMove: isMoveBest(i + 1, moves[i].fen, moves[i].evalBestMoveUci),
@@ -219,8 +214,10 @@ export default function MoveNotation({
                         cpLoss={white.cpLoss}
                         isBestMove={white.isBestMove}
                       />
-                      {white.hasComment && (
-                        <MessageSquare className="size-3 shrink-0 opacity-70" />
+                      {showUserCommentIndicators && white.hasUserComment && (
+                        <span role="img" aria-label="Nota utente presente">
+                          <MessageSquare className="size-3 shrink-0 opacity-70" aria-hidden="true" />
+                        </span>
                       )}
                     </button>
                   )}
@@ -244,8 +241,10 @@ export default function MoveNotation({
                         cpLoss={black.cpLoss}
                         isBestMove={black.isBestMove}
                       />
-                      {black.hasComment && (
-                        <MessageSquare className="size-3 shrink-0 opacity-70" />
+                      {showUserCommentIndicators && black.hasUserComment && (
+                        <span role="img" aria-label="Nota utente presente">
+                          <MessageSquare className="size-3 shrink-0 opacity-70" aria-hidden="true" />
+                        </span>
                       )}
                     </button>
                   )}

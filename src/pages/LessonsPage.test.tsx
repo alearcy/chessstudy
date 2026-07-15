@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -58,6 +58,39 @@ function pageResult(items: unknown[]) {
 }
 
 describe("LessonsPage database queries", () => {
+  it("renders compact two-row cards without the page title", async () => {
+    getLessonsPageMock.mockResolvedValue(pageResult([{
+      id: 1,
+      title: "Partita importata",
+      description: "Descrizione non mostrata nella lista",
+      mode: "analysis",
+      createdAt: new Date(2026, 6, 13),
+      sourceLabel: "Lichess",
+    }]));
+
+    const view = render(
+      <MemoryRouter>
+        <LessonsPage />
+      </MemoryRouter>,
+    );
+
+    const title = await view.findByText("Partita importata");
+    expect(view.queryByRole("heading", { name: "Lezioni" })).toBeNull();
+    expect(view.queryByText("Descrizione non mostrata nella lista")).toBeNull();
+
+    const card = title.closest('[data-slot="card"]');
+    const header = title.closest('[data-slot="card-header"]');
+    const content = card?.querySelector('[data-slot="card-content"]');
+    expect(card?.className).toContain("gap-0");
+    expect(card?.className).toContain("py-3");
+    expect(header).toBeTruthy();
+    expect(content).toBeTruthy();
+    expect(within(header as HTMLElement).getByTitle("Modifica")).toBeTruthy();
+    expect(within(header as HTMLElement).getByTitle("Elimina")).toBeTruthy();
+    expect(within(content as HTMLElement).getByText("13 luglio 2026")).toBeTruthy();
+    expect(within(content as HTMLElement).getByText("Lichess")).toBeTruthy();
+  });
+
   it("reloads the restored profile after the global backup event", async () => {
     getLessonsPageMock.mockResolvedValue(pageResult([]));
     render(

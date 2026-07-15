@@ -115,6 +115,62 @@ describe("lesson repository", () => {
     expect(missing.total).toBe(0);
   });
 
+  it("derives the imported game source from persisted PGN headers", async () => {
+    const profile = await ensureDefaultProfile();
+    const lichessId = await createLesson(
+      { title: "Partita Lichess", description: "" },
+      "analysis",
+      { profileId: profile.id },
+    );
+    const chessComId = await createLesson(
+      { title: "Partita Chess.com", description: "" },
+      "analysis",
+      { profileId: profile.id },
+    );
+    const otherSiteId = await createLesson(
+      { title: "Partita altro sito", description: "" },
+      "analysis",
+      { profileId: profile.id },
+    );
+    const withoutSourceId = await createLesson(
+      { title: "Partita senza fonte", description: "" },
+      "analysis",
+      { profileId: profile.id },
+    );
+    await createBoardWithFen(lichessId, {
+      title: "Lichess",
+      fen: "start",
+      headers: { Site: "https://lichess.org/abc123" },
+    });
+    await createBoardWithFen(chessComId, {
+      title: "Chess.com",
+      fen: "start",
+      headers: { Site: "?", Link: "https://www.chess.com/game/live/123" },
+    });
+    await createBoardWithFen(otherSiteId, {
+      title: "Altro sito",
+      fen: "start",
+      headers: { Site: "https://www.example.org/games/123" },
+    });
+    await createBoardWithFen(withoutSourceId, {
+      title: "Senza fonte",
+      fen: "start",
+      headers: { Site: "?" },
+    });
+
+    const result = await getLessonsPage({
+      profileId: profile.id,
+      page: 1,
+      pageSize: 10,
+    });
+    const byId = new Map(result.items.map((lesson) => [lesson.id, lesson.sourceLabel]));
+
+    expect(byId.get(lichessId)).toBe("Lichess");
+    expect(byId.get(chessComId)).toBe("Chess.com");
+    expect(byId.get(otherSiteId)).toBe("example.org");
+    expect(byId.get(withoutSourceId)).toBeNull();
+  });
+
   it("combines mode, favorites and creation-date filters", async () => {
     const profile = await ensureDefaultProfile();
     await createLesson(

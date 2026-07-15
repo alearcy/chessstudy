@@ -1,6 +1,35 @@
 # TASKS
 
+## In Progress
+
+- UI-004 Rimuovere l'indicatore dal tab Aperture
+  - [x] Rimuovere il pallino e la prop inutilizzata
+  - [x] Verificare test e build
+  - Spec: `docs/specs/analisi-aperture.md`
+
 ## Completed
+
+- UI-003 Indicatori commenti contestuali nella notazione mosse
+  - [x] Nascondere le icone nella modalità Analisi
+  - [x] Mostrare l'icona nello Studio solo per note utente
+  - [x] Verificare test e build
+  - [x] Confermato il comportamento delle icone messaggio
+  - Spec: `docs/specs/indicatori-commenti-mosse.md`
+
+- UI-002 Card compatte delle lezioni in homepage
+  - [x] Rimuovere il titolo della pagina
+  - [x] Allineare titolo e azioni sulla prima riga
+  - [x] Mostrare data e fonte PGN sulla seconda riga
+  - [x] Verificare test e build
+  - Spec: `docs/specs/card-lezioni-homepage.md`
+
+- BUG-002 Altezza stabile della sidebar analisi al cambio tab
+  - [x] Riprodurre la regressione Aperture → Mosse con un test
+  - [x] Vincolare l'altezza allo spazio disponibile nel viewport
+  - [x] Conservare lo scroll interno delle mosse
+  - [x] Verificare test e build
+  - [x] Confermato il comportamento nella finestra ridimensionabile
+  - Spec: `docs/specs/analisi-aperture.md`
 
 - DB-001 Database locale stabile, ricerca paginata e backup
   - [x] Scegliere il database locale e definire la strategia evolutiva

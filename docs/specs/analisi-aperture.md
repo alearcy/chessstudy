@@ -81,11 +81,18 @@ La sidebar destra dell'analisi usa due tab:
 - **Aperture**: contiene il pannello con i quattro risultati e le azioni di
   creazione del materiale di studio.
 
-Quando il report è disponibile, il tab Aperture mostra un indicatore visivo ma
-non viene selezionato automaticamente, così l'analisi non interrompe la
-navigazione delle mosse. Ogni tab usa lo spazio verticale della sidebar e il
-proprio contenuto può scorrere senza nascondersi sotto la colonna delle
-informazioni PGN.
+Il tab Aperture non mostra indicatori di disponibilità e non viene selezionato
+automaticamente, così l'analisi non interrompe la navigazione delle mosse. Ogni
+tab usa lo spazio verticale della sidebar e il proprio contenuto può scorrere
+senza nascondersi sotto la colonna delle informazioni PGN.
+
+Su desktop l'altezza della sidebar segue il viewport con
+`calc(100dvh - 13rem)`, sottraendo lo spazio occupato da header, navigazione,
+titolo e padding della pagina. Il passaggio `Aperture` → `Mosse` non deve
+rimuovere questo vincolo né attivare lo scroll dell'intera finestra. Il wrapper
+nasconde l'overflow esterno, mentre ciascun tab gestisce lo scroll del proprio
+contenuto. Ridimensionando verticalmente la finestra, la sidebar si adatta e le
+liste più lunghe continuano a scorrere al suo interno.
 
 Il pannello Aperture mostra:
 

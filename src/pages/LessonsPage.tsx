@@ -37,7 +37,6 @@ import {
   Card,
   CardHeader,
   CardTitle,
-  CardDescription,
   CardContent,
 } from "@/components/ui/card";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
@@ -47,6 +46,7 @@ import ImportChessComDialog from "@/components/board/ImportChessComDialog";
 import LessonFavoriteButton from "@/components/lesson/LessonFavoriteButton";
 import { getAppSettings } from "@/services/settingsService";
 import { DATABASE_BACKUP_RESTORED_EVENT } from "@/services/databaseBackupService";
+import type { LessonListItem } from "@/services/lessonService";
 
 const emptyForm: LessonFormData = { title: "", description: "" };
 
@@ -205,7 +205,7 @@ function DeleteConfirmDialog({
 
 export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const navigate = useNavigate();
-  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessons, setLessons] = useState<LessonListItem[]>([]);
   const [profileId, setProfileId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
@@ -371,10 +371,6 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Lezioni</h1>
-      </div>
-
       {pageError && (
         <div className="mb-4">
           <ErrorNotice
@@ -564,35 +560,21 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
           {lessons.map((lesson) => (
             <Card
               key={lesson.id}
-              className="border-border/70 transition-colors hover:border-primary/40 hover:bg-muted/40"
+              className="gap-0 border-border/70 py-3 transition-colors hover:border-primary/40 hover:bg-muted/40"
               onClick={() => navigate(`/lesson/${lesson.id}`)}
             >
-              <CardHeader className="flex flex-row items-start justify-between pb-2">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
+              <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 pb-1">
+                <div className="min-w-0">
+                  <CardTitle className="flex min-w-0 items-center gap-2">
                     {lesson.mode === "study" ? (
                       <BookOpen className="size-4 text-blue-500 shrink-0" />
                     ) : (
                       <Microscope className="size-4 text-orange-500 shrink-0" />
                     )}
-                    {lesson.title}
+                    <span className="truncate">{lesson.title}</span>
                   </CardTitle>
-                  {lesson.description && (
-                    <CardDescription className="mt-1 line-clamp-2">
-                      {lesson.description}
-                    </CardDescription>
-                  )}
                 </div>
-              </CardHeader>
-              <CardContent className="flex items-center gap-1 text-xs text-muted-foreground pb-4">
-                <span>
-                  {lesson.createdAt.toLocaleDateString("it-IT", {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  })}
-                </span>
-                <div className="ml-auto flex gap-1">
+                <div className="flex shrink-0 gap-1">
                   {lesson.mode === "analysis" && (
                     <LessonFavoriteButton
                       lessonTitle={lesson.title}
@@ -626,6 +608,21 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
                     <Trash2 className="size-3" />
                   </Button>
                 </div>
+              </CardHeader>
+              <CardContent className="flex items-center gap-2 px-4 pb-0 text-xs text-muted-foreground">
+                <span>
+                  {lesson.createdAt.toLocaleDateString("it-IT", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                {lesson.sourceLabel ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{lesson.sourceLabel}</span>
+                  </>
+                ) : null}
               </CardContent>
             </Card>
           ))}

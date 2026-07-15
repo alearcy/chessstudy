@@ -15,11 +15,15 @@ export interface LessonPageQuery {
 }
 
 export interface LessonPage {
-  items: Lesson[];
+  items: LessonListItem[];
   total: number;
   page: number;
   pageSize: number;
   pageCount: number;
+}
+
+export interface LessonListItem extends Lesson {
+  sourceLabel?: string | null;
 }
 
 export interface CreateLessonOptions {
@@ -30,6 +34,44 @@ export interface CreateLessonOptions {
 
 function intersectIds(left: Set<number>, right: Set<number>): Set<number> {
   return new Set(Array.from(left).filter((id) => right.has(id)));
+}
+
+function sourceLabel(value: string | null | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw || raw === "?") return null;
+
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("lichess.org")) return "Lichess";
+  if (normalized.includes("chess.com")) return "Chess.com";
+
+  if (/^(?:https?:\/\/)?(?:www\.)?[^\s/]+\.[^\s/]+/i.test(raw)) {
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      return url.hostname.replace(/^www\./i, "");
+    } catch {
+      // Conserva il valore PGN originale se non è una URL valida.
+    }
+  }
+
+  return raw;
+}
+
+async function withLessonSources(items: Lesson[]): Promise<LessonListItem[]> {
+  const lessonIds = items.flatMap((lesson) => lesson.id == null ? [] : [lesson.id]);
+  if (lessonIds.length === 0) return items;
+
+  const boards = await db.boards.where("lessonId").anyOf(lessonIds).toArray();
+  const sources = new Map<number, string>();
+  for (const board of boards) {
+    if (sources.has(board.lessonId)) continue;
+    const label = sourceLabel(board.headers?.Site) ?? sourceLabel(board.headers?.Link);
+    if (label) sources.set(board.lessonId, label);
+  }
+
+  return items.map((lesson) => ({
+    ...lesson,
+    sourceLabel: lesson.id == null ? null : sources.get(lesson.id) ?? null,
+  }));
 }
 
 export async function getAllLessons(): Promise<Lesson[]> {
@@ -86,7 +128,8 @@ export async function getLessonsPage(options: LessonPageQuery): Promise<LessonPa
   const total = await filtered.count();
   const pageCount = total === 0 ? 0 : Math.ceil(total / pageSize);
   const page = pageCount === 0 ? 1 : Math.min(requestedPage, pageCount);
-  const items = await filtered.offset((page - 1) * pageSize).limit(pageSize).toArray();
+  const pageItems = await filtered.offset((page - 1) * pageSize).limit(pageSize).toArray();
+  const items = await withLessonSources(pageItems);
 
   return { items, total, page, pageSize, pageCount };
 }

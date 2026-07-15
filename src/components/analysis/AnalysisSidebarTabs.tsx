@@ -2,7 +2,6 @@ import { useId, useState, type ReactNode } from "react";
 import { BookOpen, ListOrdered } from "lucide-react";
 
 interface AnalysisSidebarTabsProps {
-  openingAvailable: boolean;
   movesContent: ReactNode;
   openingsContent: ReactNode;
 }
@@ -10,7 +9,6 @@ interface AnalysisSidebarTabsProps {
 type AnalysisSidebarTab = "moves" | "openings";
 
 export default function AnalysisSidebarTabs({
-  openingAvailable,
   movesContent,
   openingsContent,
 }: AnalysisSidebarTabsProps) {
@@ -21,7 +19,7 @@ export default function AnalysisSidebarTabs({
   const panelId = `${tabsId}-panel`;
 
   return (
-    <aside className="flex min-h-0 min-w-0 flex-col gap-3 xl:h-full">
+    <aside className="flex min-h-0 min-w-0 flex-col gap-3 xl:h-[calc(100dvh-13rem)] xl:overflow-hidden">
       <div
         role="tablist"
         aria-label="Contenuti dell'analisi"
@@ -51,7 +49,7 @@ export default function AnalysisSidebarTabs({
           aria-selected={activeTab === "openings"}
           aria-controls={panelId}
           aria-label="Aperture"
-          className={`relative flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             activeTab === "openings"
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
@@ -60,13 +58,6 @@ export default function AnalysisSidebarTabs({
         >
           <BookOpen className="size-4" aria-hidden="true" />
           Aperture
-          {openingAvailable ? (
-            <span
-              role="status"
-              aria-label="Aperture disponibili"
-              className="absolute right-2 top-1.5 size-1.5 rounded-full bg-primary"
-            />
-          ) : null}
         </button>
       </div>
 
