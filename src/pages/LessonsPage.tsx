@@ -1,13 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Plus, Pencil, Trash2, Upload, Microscope, Settings, Swords, Heart } from "lucide-react";
 import {
-  getAllLessons,
+  BookOpen,
+  Plus,
+  Pencil,
+  Trash2,
+  Upload,
+  Microscope,
+  Cloud,
+  Swords,
+  Heart,
+  Search,
+  CalendarDays,
+} from "lucide-react";
+import {
+  getLessonsPage,
   createLesson,
   updateLesson,
   deleteLesson,
   setLessonFavorite,
 } from "@/services/lessonService";
+import { ensureDefaultProfile } from "@/services/profileService";
 import type { Lesson, LessonFormData } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +46,7 @@ import ImportLichessDialog from "@/components/board/ImportLichessDialog";
 import ImportChessComDialog from "@/components/board/ImportChessComDialog";
 import LessonFavoriteButton from "@/components/lesson/LessonFavoriteButton";
 import { getAppSettings } from "@/services/settingsService";
+import { DATABASE_BACKUP_RESTORED_EVENT } from "@/services/databaseBackupService";
 
 const emptyForm: LessonFormData = { title: "", description: "" };
 
@@ -192,6 +206,10 @@ function DeleteConfirmDialog({
 export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const navigate = useNavigate();
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [profileId, setProfileId] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(0);
+  const [totalLessons, setTotalLessons] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null);
   const [deletingLesson, setDeletingLesson] = useState<Lesson | null>(null);
@@ -204,17 +222,52 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
   const [chessComImportOpen, setChessComImportOpen] = useState(false);
   const [chessComUsername, setChessComUsername] = useState("");
   const [checkingChessComSettings, setCheckingChessComSettings] = useState(false);
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState<
+    "favorites" | "analysis" | "study" | null
+  >(null);
   const [updatingFavoriteId, setUpdatingFavoriteId] = useState<number | null>(null);
 
-  const loadLessons = useCallback(async () => {
+  const loadLessons = useCallback(async (
+    override: { profileId?: number; page?: number } = {},
+  ) => {
+    const targetProfileId = override.profileId ?? profileId;
+    const targetPage = override.page ?? page;
+    if (targetProfileId == null) return;
     try {
       setPageError(null);
-      setLessons(await getAllLessons());
+      const result = await getLessonsPage({
+        profileId: targetProfileId,
+        query: searchQuery,
+        createdOn: dateFilter || undefined,
+        kind: kindFilter,
+        page: targetPage,
+        pageSize: 20,
+      });
+      setLessons(result.items);
+      setTotalLessons(result.total);
+      setPageCount(result.pageCount);
+      if (result.page !== targetPage) setPage(result.page);
     } catch (e) {
       console.error("[lessons-load] errore", e);
       setPageError("Impossibile caricare le lezioni.");
     }
+  }, [dateFilter, kindFilter, page, profileId, searchQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+    ensureDefaultProfile()
+      .then((profile) => {
+        if (!cancelled) setProfileId(profile.id);
+      })
+      .catch((error: unknown) => {
+        console.error("[profile-load] errore", error);
+        if (!cancelled) setPageError("Impossibile inizializzare il profilo locale.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -299,137 +352,190 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
     }
   };
 
-  const visibleLessons = showFavoritesOnly
-    ? lessons.filter((lesson) => lesson.mode === "analysis" && lesson.isFavorite)
-    : lessons;
+  const hasActiveFilters = Boolean(searchQuery || dateFilter || kindFilter);
+
+  const handleBackupRestored = useCallback(async () => {
+    const profile = await ensureDefaultProfile();
+    setProfileId(profile.id);
+    setPage(1);
+    await loadLessons({ profileId: profile.id, page: 1 });
+  }, [loadLessons]);
+
+  useEffect(() => {
+    const handleRestoreEvent = () => void handleBackupRestored();
+    window.addEventListener(DATABASE_BACKUP_RESTORED_EVENT, handleRestoreEvent);
+    return () => {
+      window.removeEventListener(DATABASE_BACKUP_RESTORED_EVENT, handleRestoreEvent);
+    };
+  }, [handleBackupRestored]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Lezioni</h1>
-        <Button
-          variant={showFavoritesOnly ? "default" : "outline"}
-          size="sm"
-          aria-pressed={showFavoritesOnly}
-          onClick={() => setShowFavoritesOnly((current) => !current)}
-        >
-          <Heart
-            className="size-4"
-            fill={showFavoritesOnly ? "currentColor" : "none"}
-          />
-          Solo preferite
-        </Button>
       </div>
 
       {pageError && (
         <div className="mb-4">
           <ErrorNotice
             message={pageError}
-            onRetry={loadLessons}
+            onRetry={() => loadLessons()}
             onDismiss={() => setPageError(null)}
           />
         </div>
       )}
 
       {/* Azioni principali */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
-        <Card
-          className="cursor-pointer hover:bg-accent/50 transition-colors border-2 border-dashed"
-          onClick={() => setImportOpen(true)}
-        >
-          <CardContent className="flex flex-col items-center gap-3 py-8">
-            <Upload className="size-10 text-primary" />
-            <div className="text-center">
-              <p className="font-semibold">Importa un PGN</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Carica una partita e analizzala
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <section className="mb-8 border-b pb-6">
+        <div className="flex flex-nowrap items-center gap-3">
+          <Button
+            type="button"
+            className="h-16 flex-1 justify-start gap-3 px-4 text-left"
+            onClick={() => {
+              setEditingLesson(null);
+              setDialogOpen(true);
+            }}
+          >
+            <Plus className="size-4 shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-medium leading-tight">Nuovo studio</span>
+              <span className="block text-xs font-normal leading-snug text-primary-foreground/80">
+                crea tutte le scacchiere di studio che vuoi
+              </span>
+            </span>
+          </Button>
 
-        <Card
-          className="cursor-pointer hover:bg-accent/50 transition-colors border-2 border-dashed"
-          onClick={() => {
-            setEditingLesson(null);
-            setDialogOpen(true);
-          }}
-        >
-          <CardContent className="flex flex-col items-center gap-3 py-8">
-            <Plus className="size-10 text-primary" />
-            <div className="text-center">
-              <p className="font-semibold">Nuova lezione</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Crea una lezione vuota per studiare
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-16 flex-1 justify-start gap-3 px-4 text-left"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="size-4 shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-medium leading-tight">Importa PGN</span>
+              <span className="block text-xs font-normal leading-snug text-muted-foreground">
+                carica o incolla un PGN per analizzare la partita
+              </span>
+            </span>
+          </Button>
 
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Swords className="size-4" />
-            Importa da piattaforma
-          </CardTitle>
-          <CardDescription>
-            Scegli una partita recente usando gli username salvati nelle impostazioni.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {platformError && (
-            <div className="space-y-2">
-              <ErrorNotice
-                message={platformError}
-                onDismiss={() => setPlatformError(null)}
-              />
-              {onOpenSettings && (
-                <Button variant="outline" size="sm" onClick={onOpenSettings}>
-                  <Settings className="size-4" />
-                  Apri impostazioni
-                </Button>
-              )}
-            </div>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Button
-              variant="outline"
-              className="h-auto justify-start gap-3 px-4 py-4"
-              onClick={() => void handleOpenLichess()}
-              disabled={checkingPlatformSettings}
-            >
-              <span className="flex size-9 items-center justify-center rounded-full bg-[#b3b3b3] font-bold text-black">
-                Li
+          <Button
+            type="button"
+            variant="outline"
+            className="h-16 flex-1 justify-start gap-3 px-4 text-left"
+            disabled={checkingChessComSettings}
+            onClick={handleOpenChessCom}
+          >
+            <Swords className="size-4 shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-medium leading-tight">Chess.com</span>
+              <span className="block text-xs font-normal leading-snug text-muted-foreground">
+                importa partite da chess.com
               </span>
-              <span className="text-left">
-                <span className="block font-semibold">Lichess.org</span>
-                <span className="block text-xs font-normal text-muted-foreground">
-                  {checkingPlatformSettings ? "Lettura impostazioni..." : "Scegli tra le ultime 30 partite"}
-                </span>
+            </span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-16 flex-1 justify-start gap-3 px-4 text-left"
+            disabled={checkingPlatformSettings}
+            onClick={handleOpenLichess}
+          >
+            <Cloud className="size-4 shrink-0" />
+            <span className="min-w-0">
+              <span className="block font-medium leading-tight">Lichess</span>
+              <span className="block text-xs font-normal leading-snug text-muted-foreground">
+                importa partite da lichess
               </span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto justify-start gap-3 px-4 py-4"
-              onClick={() => void handleOpenChessCom()}
-              disabled={checkingChessComSettings}
-            >
-              <span className="flex size-9 items-center justify-center rounded-full bg-emerald-700 font-bold text-white">
-                C
-              </span>
-              <span className="text-left">
-                <span className="block font-semibold">Chess.com</span>
-                <span className="block text-xs font-normal text-muted-foreground">
-                  {checkingChessComSettings ? "Lettura impostazioni..." : "Scegli mese e partita"}
-                </span>
-              </span>
-            </Button>
+            </span>
+          </Button>
+        </div>
+
+        {platformError ? (
+          <div className="mt-3">
+            <ErrorNotice
+              message={platformError}
+              onDismiss={() => setPlatformError(null)}
+              retryLabel="Apri impostazioni"
+              onRetry={onOpenSettings}
+            />
           </div>
-        </CardContent>
-      </Card>
+        ) : null}
+      </section>
 
-      {lessons.length === 0 ? (
+      <section
+        className="mb-6 grid gap-3 pt-6 md:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_auto_auto]"
+        aria-label="Filtri lezioni"
+      >
+        <label className="relative block">
+          <span className="sr-only">Cerca per titolo</span>
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setPage(1);
+            }}
+            placeholder="Cerca titolo, giocatore, evento o ECO"
+            className="pl-9"
+          />
+        </label>
+
+        <label className="relative block md:w-56">
+          <span className="sr-only">Filtra per data</span>
+          <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="date"
+            value={dateFilter}
+            onChange={(event) => {
+              setDateFilter(event.target.value);
+              setPage(1);
+            }}
+            className="pl-9"
+            aria-label="Filtra per data"
+          />
+        </label>
+
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          {[
+            { value: "favorites", label: "Preferite" },
+            { value: "analysis", label: "Solo analisi" },
+            { value: "study", label: "Solo studi" },
+          ].map((filter) => (
+            <Button
+              key={filter.value}
+              type="button"
+              variant={kindFilter === filter.value ? "default" : "outline"}
+              size="sm"
+              aria-pressed={kindFilter === filter.value}
+              onClick={() =>
+                {
+                  setKindFilter((current) =>
+                    current === filter.value
+                      ? null
+                      : (filter.value as "favorites" | "analysis" | "study"),
+                  );
+                  setPage(1);
+                }
+              }
+            >
+              {filter.value === "favorites" && (
+                <Heart
+                  className="size-4"
+                  fill={
+                    kindFilter === "favorites" ? "currentColor" : "none"
+                  }
+                />
+              )}
+              {filter.label}
+            </Button>
+          ))}
+        </div>
+      </section>
+
+      {totalLessons === 0 && !hasActiveFilters ? (
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen className="size-12 mx-auto mb-4 opacity-30" />
           <p className="text-lg">Nessuna lezione</p>
@@ -437,20 +543,28 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
             Importa un PGN per iniziare.
           </p>
         </div>
-      ) : visibleLessons.length === 0 ? (
+      ) : lessons.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
-          <Heart className="size-12 mx-auto mb-4 opacity-30" />
-          <p className="text-lg">Nessuna partita preferita</p>
+          {kindFilter === "favorites" ? (
+            <Heart className="size-12 mx-auto mb-4 opacity-30" />
+          ) : (
+            <Search className="size-12 mx-auto mb-4 opacity-30" />
+          )}
+          <p className="text-lg">
+            {kindFilter === "favorites" ? "Nessuna partita preferita" : "Nessun risultato"}
+          </p>
           <p className="text-sm mt-1">
-            Usa il cuore su una partita importata per aggiungerla ai preferiti.
+            {kindFilter === "favorites"
+              ? "Usa il cuore su una partita importata per aggiungerla ai preferiti."
+              : "Modifica i termini di ricerca o i filtri selezionati."}
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {visibleLessons.map((lesson) => (
+          {lessons.map((lesson) => (
             <Card
               key={lesson.id}
-              className="cursor-pointer hover:bg-accent/50 transition-colors"
+              className="border-border/70 transition-colors hover:border-primary/40 hover:bg-muted/40"
               onClick={() => navigate(`/lesson/${lesson.id}`)}
             >
               <CardHeader className="flex flex-row items-start justify-between pb-2">
@@ -518,6 +632,32 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
         </div>
       )}
 
+      {pageCount > 1 && (
+        <nav className="mt-6 flex items-center justify-center gap-3" aria-label="Paginazione lezioni">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            Precedente
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Pagina {page} di {pageCount}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={page >= pageCount}
+            onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+          >
+            Successiva
+          </Button>
+        </nav>
+      )}
+
       <LessonFormDialog
         open={dialogOpen}
         onOpenChange={(open) => {
@@ -560,6 +700,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
         onOpenChange={setChessComImportOpen}
         onImportedLesson={handlePgnImported}
       />
+
     </div>
   );
 }

@@ -1335,7 +1335,7 @@ const selectedBoard = useMemo(
     <div
       className={
         lesson.mode === "analysis"
-          ? "w-full xl:flex xl:h-[calc(100dvh-6rem)] xl:min-h-0 xl:flex-col xl:overflow-hidden"
+          ? "w-full xl:flex xl:flex-col"
           : "w-full"
       }
     >
@@ -1425,7 +1425,7 @@ const selectedBoard = useMemo(
       )}
 
       {lesson.mode === "analysis" && selectedBoard ? (
-        <div className="grid grid-cols-1 gap-4 items-start xl:min-h-0 xl:flex-1 xl:overflow-hidden xl:grid-cols-[12rem_minmax(32.5rem,44.5rem)_20rem] 2xl:grid-cols-[13rem_minmax(36.5rem,48.5rem)_22rem] xl:justify-center">
+        <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-[12rem_minmax(32.5rem,44.5rem)_20rem] 2xl:grid-cols-[13rem_minmax(36.5rem,48.5rem)_22rem] xl:justify-center">
           <div><PgnHeadersSidebar headers={selectedBoard.headers ?? {}} /></div>
 
           <section className="flex min-w-0 flex-col gap-4 items-center">

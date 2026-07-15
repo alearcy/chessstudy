@@ -1,6 +1,9 @@
 import { Chess } from "chess.js";
 
 import db from "@/db/database";
+import { buildLessonSearchTerms, createStableId } from "@/db/recordMetadata";
+import { refreshLessonSearchIndex } from "@/services/lessonSearchService";
+import { ensureDefaultProfile } from "@/services/profileService";
 import type { Board, Lesson, Move, OpeningReference } from "@/types";
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -58,6 +61,7 @@ function openingBoardData(
   order: number,
 ): Omit<Board, "id"> {
   return {
+    uid: createStableId(),
     lessonId,
     title,
     fen: DEFAULT_FEN,
@@ -66,6 +70,7 @@ function openingBoardData(
     highlights: [],
     order,
     createdAt: new Date(),
+    updatedAt: new Date(),
     openingEco: opening.eco,
     openingName: opening.name,
     openingFamily: opening.family,
@@ -91,6 +96,7 @@ async function persistOpeningMoves(
   for (let order = 0; order < moves.length; order += 1) {
     const move = moves[order];
     const moveId = (await db.moves.add({
+      uid: createStableId(),
       boardId,
       moveNotation: move.san,
       fen: move.fenAfter,
@@ -100,6 +106,7 @@ async function persistOpeningMoves(
       arrows: [],
       highlights: [],
       createdAt: new Date(),
+      updatedAt: new Date(),
     } as Move)) as number;
     parentId = moveId;
   }
@@ -123,9 +130,14 @@ export async function createOpeningStudy(
   options: { title?: string; conflict: OpeningConflictStrategy },
 ): Promise<{ lessonId: number; boardId: number }> {
   const title = options.title?.trim() || opening.name;
+  const profile = await ensureDefaultProfile();
 
-  return db.transaction("rw", db.lessons, db.boards, db.moves, async () => {
-    const studies = await db.lessons.where("mode").equals("study").toArray();
+  const result = await db.transaction("rw", db.lessons, db.boards, db.moves, async () => {
+    const studies = await db.lessons
+      .where("mode")
+      .equals("study")
+      .filter((lesson) => lesson.profileId === profile.id)
+      .toArray();
     const existing = studies.find(
       (lesson) => lesson.id != null && normalizeName(lesson.title) === normalizeName(title),
     );
@@ -146,20 +158,31 @@ export async function createOpeningStudy(
         if (board.id != null) await db.moves.where("boardId").equals(board.id).delete();
       }
       await db.boards.where("lessonId").equals(lessonId).delete();
-      await db.lessons.update(lessonId, { title });
+      await db.lessons.update(lessonId, {
+        title,
+        searchTerms: buildLessonSearchTerms({ title, description: existing.description }),
+        updatedAt: new Date(),
+      });
     } else {
+      const now = new Date();
       lessonId = (await db.lessons.add({
+        uid: createStableId(),
+        profileId: profile.id,
         title,
         description: "",
         mode: "study",
         isFavorite: false,
-        createdAt: new Date(),
+        searchTerms: buildLessonSearchTerms({ title, description: "" }),
+        createdAt: now,
+        updatedAt: now,
       } as Lesson)) as number;
     }
 
     const boardId = await createOpeningBoard(lessonId, opening, opening.name, 0);
     return { lessonId, boardId };
   });
+  await refreshLessonSearchIndex(result.lessonId);
+  return result;
 }
 
 export async function addOpeningToStudy(
@@ -172,7 +195,7 @@ export async function addOpeningToStudy(
 ): Promise<{ lessonId: number; boardId: number }> {
   const boardTitle = options.boardTitle?.trim() || opening.name;
 
-  return db.transaction("rw", db.lessons, db.boards, db.moves, async () => {
+  const result = await db.transaction("rw", db.lessons, db.boards, db.moves, async () => {
     const lesson = await db.lessons.get(options.lessonId);
     if (!lesson || lesson.mode !== "study") {
       throw new Error("Lo studio selezionato non è disponibile.");
@@ -195,9 +218,16 @@ export async function addOpeningToStudy(
     if (existing?.id != null) {
       boardId = existing.id;
       await db.moves.where("boardId").equals(boardId).delete();
+      const replacement = openingBoardData(
+        options.lessonId,
+        opening,
+        boardTitle,
+        existing.order,
+      );
+      replacement.uid = existing.uid ?? replacement.uid;
       await db.boards.update(
         boardId,
-        openingBoardData(options.lessonId, opening, boardTitle, existing.order),
+        replacement,
       );
       await persistOpeningMoves(boardId, opening);
     } else {
@@ -211,12 +241,19 @@ export async function addOpeningToStudy(
 
     return { lessonId: options.lessonId, boardId };
   });
+  await refreshLessonSearchIndex(result.lessonId);
+  return result;
 }
 
 export async function getOpeningStudyDestinations(
   opening: OpeningReference,
 ): Promise<OpeningStudyDestination[]> {
-  const studies = await db.lessons.where("mode").equals("study").toArray();
+  const profile = await ensureDefaultProfile();
+  const studies = await db.lessons
+    .where("mode")
+    .equals("study")
+    .filter((lesson) => lesson.profileId === profile.id)
+    .toArray();
   const destinations = await Promise.all(studies.flatMap(async (lesson) => {
     if (lesson.id == null) return [];
     const boards = await db.boards.where("lessonId").equals(lesson.id).toArray();

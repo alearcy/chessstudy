@@ -1,4 +1,6 @@
 import db from "@/db/database";
+import { createStableId } from "@/db/recordMetadata";
+import { refreshLessonSearchIndex } from "@/services/lessonSearchService";
 import type { Board } from "@/types";
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -35,6 +37,7 @@ export async function createBoard(
 ): Promise<number> {
   const count = await db.boards.where("lessonId").equals(lessonId).count();
   const id = await db.boards.add({
+    uid: createStableId(),
     lessonId,
     title: title || `Scacchiera ${count + 1}`,
     fen: DEFAULT_FEN,
@@ -43,7 +46,9 @@ export async function createBoard(
     highlights: [],
     order: count,
     createdAt: new Date(),
+    updatedAt: new Date(),
   } as Board);
+  await refreshLessonSearchIndex(lessonId);
   return id as number;
 }
 
@@ -54,6 +59,7 @@ export async function createBoardWithFen(
 ): Promise<number> {
   const count = await db.boards.where("lessonId").equals(lessonId).count();
   const id = await db.boards.add({
+    uid: createStableId(),
     lessonId,
     title: data.title,
     fen: data.fen,
@@ -62,10 +68,12 @@ export async function createBoardWithFen(
     highlights: [],
     order: count,
     createdAt: new Date(),
+    updatedAt: new Date(),
     whiteName: data.whiteName ?? null,
     blackName: data.blackName ?? null,
     headers: data.headers ?? {},
   } as Board);
+  await refreshLessonSearchIndex(lessonId);
   return id as number;
 }
 
@@ -73,10 +81,25 @@ export async function updateBoard(
   id: number,
   data: Partial<Pick<Board, "title" | "fen" | "notes" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci" | "whiteName" | "blackName" | "headers" | "gameAnalysis" | "openingReport" | "openingEco" | "openingName" | "openingFamily">>
 ): Promise<void> {
-  await db.boards.update(id, data);
+  const board = await db.boards.get(id);
+  await db.boards.update(id, { ...data, updatedAt: new Date() });
+  const changesSearchMetadata = [
+    "title",
+    "whiteName",
+    "blackName",
+    "headers",
+    "openingEco",
+    "openingName",
+    "openingFamily",
+  ].some((key) => key in data);
+  if (board && changesSearchMetadata) {
+    await refreshLessonSearchIndex(board.lessonId);
+  }
 }
 
 export async function deleteBoard(id: number): Promise<void> {
+  const board = await db.boards.get(id);
   await db.moves.where("boardId").equals(id).delete();
   await db.boards.delete(id);
+  if (board) await refreshLessonSearchIndex(board.lessonId);
 }

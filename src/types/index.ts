@@ -1,10 +1,22 @@
+export interface LocalProfile {
+  id?: number;
+  uid: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Lesson {
   id?: number;
+  uid?: string;
+  profileId?: number;
   title: string;
   description: string;
   mode: "study" | "analysis";
   isFavorite?: boolean;
+  searchTerms?: string[];
   createdAt: Date;
+  updatedAt?: Date;
 }
 
 export interface OpeningReference {
@@ -38,6 +50,7 @@ export interface EvalFields {
 
 export interface Board {
   id?: number;
+  uid?: string;
   lessonId: number;
   title: string;
   fen: string;
@@ -48,6 +61,7 @@ export interface Board {
   highlights: string[];
   order: number;
   createdAt: Date;
+  updatedAt?: Date;
   /** Valutazione Stockfish della posizione di partenza (null se non analizzata). */
   evalCp?: number | null;
   evalMate?: number | null;
@@ -71,6 +85,7 @@ export interface Board {
 
 export interface Move {
   id?: number;
+  uid?: string;
   boardId: number;
   moveNotation: string;
   fen: string;
@@ -86,6 +101,7 @@ export interface Move {
   /** Case evidenziate su questa posizione. */
   highlights: string[];
   createdAt: Date;
+  updatedAt?: Date;
   /** Valutazione Stockfish della posizione DOPO questa mossa (POV Bianco). */
   evalCp?: number | null;
   evalMate?: number | null;

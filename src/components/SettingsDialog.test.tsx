@@ -50,8 +50,10 @@ describe("SettingsDialog", () => {
 
     const lichessInput = await view.findByLabelText("Username Lichess");
     const chesscomInput = view.getByLabelText("Username Chess.com");
-    expect((lichessInput as HTMLInputElement).value).toBe("old-lichess");
-    expect((chesscomInput as HTMLInputElement).value).toBe("old-chesscom");
+    await waitFor(() => {
+      expect((lichessInput as HTMLInputElement).value).toBe("old-lichess");
+      expect((chesscomInput as HTMLInputElement).value).toBe("old-chesscom");
+    });
 
     fireEvent.change(lichessInput, { target: { value: "new-lichess" } });
     fireEvent.change(chesscomInput, { target: { value: "new-chesscom" } });

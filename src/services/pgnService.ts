@@ -1,5 +1,6 @@
 import { Chess, DEFAULT_POSITION } from "chess.js";
 import db from "@/db/database";
+import { createStableId } from "@/db/recordMetadata";
 import { createBoardWithFen } from "@/services/boardService";
 import { createLesson } from "@/services/lessonService";
 import type { Move } from "@/types";
@@ -157,6 +158,7 @@ export async function importPgnToLesson(
   // Costruisce i record Move con parentId placeholder (aggiornato dopo bulkAdd).
   const now = new Date();
   const records: Omit<Move, "id">[] = parsed.moves.map((m, i) => ({
+    uid: createStableId(),
     boardId,
     parentId: null,
     order: i,
@@ -167,6 +169,7 @@ export async function importPgnToLesson(
     arrows: [],
     highlights: [],
     createdAt: now,
+    updatedAt: now,
   }));
 
   const ids = (await db.moves.bulkAdd(records, { allKeys: true })) as number[];

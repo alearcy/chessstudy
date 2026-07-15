@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable, type Transaction } from "dexie";
-import type { Lesson, Board, Move } from "@/types";
+import { buildLessonSearchTerms, createStableId } from "@/db/recordMetadata";
+import type { Lesson, Board, Move, LocalProfile } from "@/types";
 
 type MigrationLesson = Partial<Lesson> & { id?: number };
 type MigrationBoard = Partial<Board> & { id?: number; lessonId?: number };
@@ -51,10 +52,39 @@ async function splitCumulativeAnalysisLessons(tx: Transaction): Promise<void> {
   }
 }
 
+async function normalizeLinearMoveParents(tx: Transaction): Promise<void> {
+  const movesTable = tx.table("moves");
+  const moves = (await movesTable.toArray()) as MigrationMove[];
+  const movesByBoard = new Map<number, MigrationMove[]>();
+
+  for (const move of moves) {
+    if (move.id == null || move.boardId == null) continue;
+    const boardMoves = movesByBoard.get(move.boardId) ?? [];
+    boardMoves.push(move);
+    movesByBoard.set(move.boardId, boardMoves);
+  }
+
+  for (const boardMoves of movesByBoard.values()) {
+    boardMoves.sort((left, right) =>
+      (left.order ?? 0) - (right.order ?? 0) ||
+      (left.id ?? 0) - (right.id ?? 0),
+    );
+    let parentId: number | null = null;
+    for (const move of boardMoves) {
+      if (move.id == null) continue;
+      if (move.parentId !== parentId) {
+        await movesTable.update(move.id, { parentId });
+      }
+      parentId = move.id;
+    }
+  }
+}
+
 const db = new Dexie("ChessStudyDB") as Dexie & {
   lessons: EntityTable<Lesson, "id">;
   boards: EntityTable<Board, "id">;
   moves: EntityTable<Move, "id">;
+  profiles: EntityTable<LocalProfile, "id">;
 };
 
 db.version(1).stores({
@@ -168,5 +198,69 @@ db.version(12).stores({
     if (lesson.isFavorite == null) lesson.isFavorite = false;
   });
 });
+
+// v13: profili locali, identificatori portabili e indici per query paginate.
+// La migrazione è additiva: assegna tutti i dati esistenti al profilo
+// predefinito senza ricreare o cancellare record.
+db.version(13).stores({
+  profiles: "++id, &uid, &name, createdAt",
+  lessons: "++id, &uid, profileId, title, mode, createdAt, [profileId+createdAt], [profileId+mode+createdAt], *searchTerms",
+  boards: "++id, &uid, lessonId, createdAt",
+  moves: "++id, &uid, boardId, parentId, order, createdAt, [boardId+order]",
+}).upgrade(async (tx) => {
+  const profiles = tx.table("profiles");
+  const lessons = tx.table("lessons");
+  const boards = tx.table("boards");
+  const moves = tx.table("moves");
+  const now = new Date();
+
+  let profile = await profiles.orderBy("createdAt").first();
+  if (!profile) {
+    const profileId = (await profiles.add({
+      uid: createStableId(),
+      name: "Principale",
+      createdAt: now,
+      updatedAt: now,
+    })) as number;
+    profile = await profiles.get(profileId);
+  }
+  if (!profile?.id) {
+    throw new Error("Impossibile creare il profilo predefinito durante la migrazione.");
+  }
+
+  const existingLessons = (await lessons.toArray()) as Lesson[];
+  for (const lesson of existingLessons) {
+    if (lesson.id == null) continue;
+    const lessonBoards = (await boards
+      .where("lessonId")
+      .equals(lesson.id)
+      .toArray()) as Board[];
+    await lessons.update(lesson.id, {
+      uid: lesson.uid ?? createStableId(),
+      profileId: lesson.profileId ?? profile.id,
+      searchTerms: buildLessonSearchTerms(lesson, lessonBoards),
+      updatedAt: lesson.updatedAt ?? lesson.createdAt ?? now,
+    });
+  }
+
+  await boards.toCollection().modify((board: Board) => {
+    board.uid ??= createStableId();
+    board.updatedAt ??= board.createdAt ?? now;
+  });
+  await moves.toCollection().modify((move: Move) => {
+    move.uid ??= createStableId();
+    move.updatedAt ??= move.createdAt ?? now;
+  });
+});
+
+// v14: ripara riferimenti parentId storici copiati tra scacchiere. La UI
+// supporta una storia lineare, quindi la catena è ricostruita da `order`
+// all'interno di ogni board senza modificare o cancellare mosse.
+db.version(14).stores({
+  profiles: "++id, &uid, &name, createdAt",
+  lessons: "++id, &uid, profileId, title, mode, createdAt, [profileId+createdAt], [profileId+mode+createdAt], *searchTerms",
+  boards: "++id, &uid, lessonId, createdAt",
+  moves: "++id, &uid, boardId, parentId, order, createdAt, [boardId+order]",
+}).upgrade(normalizeLinearMoveParents);
 
 export default db;

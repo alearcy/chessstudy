@@ -1,4 +1,5 @@
 import db from "@/db/database";
+import { createStableId } from "@/db/recordMetadata";
 import type { Move } from "@/types";
 
 /** Normalizza una mossa letta dal DB garantendo i campi arrows/highlights/eval. */
@@ -34,7 +35,9 @@ export async function getMove(id: number): Promise<Move | undefined> {
 export async function createMove(move: Omit<Move, "id" | "createdAt">): Promise<number> {
   const id = await db.moves.add({
     ...move,
+    uid: move.uid ?? createStableId(),
     createdAt: new Date(),
+    updatedAt: new Date(),
   } as Move);
   return id as number;
 }
@@ -43,7 +46,7 @@ export async function updateMove(
   id: number,
   data: Partial<Pick<Move, "comment" | "analysisComment" | "stockfishComment" | "fen" | "moveNotation" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
 ): Promise<void> {
-  await db.moves.update(id, data);
+  await db.moves.update(id, { ...data, updatedAt: new Date() });
 }
 
 /** Cancella tutte le mosse di una scacchiera (usato da reset / eliminazione board). */
@@ -69,5 +72,5 @@ export async function updateMoveEval(
   id: number,
   data: Partial<Pick<Move, "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>
 ): Promise<void> {
-  await db.moves.update(id, data);
+  await db.moves.update(id, { ...data, updatedAt: new Date() });
 }

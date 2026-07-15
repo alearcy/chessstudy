@@ -4,18 +4,28 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import LessonsPage from "@/pages/LessonsPage";
 
-const { getAllLessonsMock, getAppSettingsMock, setLessonFavoriteMock } = vi.hoisted(() => ({
-  getAllLessonsMock: vi.fn(),
+const {
+  getLessonsPageMock,
+  ensureDefaultProfileMock,
+  getAppSettingsMock,
+  setLessonFavoriteMock,
+} = vi.hoisted(() => ({
+  getLessonsPageMock: vi.fn(),
+  ensureDefaultProfileMock: vi.fn(() => Promise.resolve({ id: 1 })),
   getAppSettingsMock: vi.fn(),
   setLessonFavoriteMock: vi.fn(),
 }));
 
 vi.mock("@/services/lessonService", () => ({
-  getAllLessons: getAllLessonsMock,
+  getLessonsPage: getLessonsPageMock,
   createLesson: vi.fn(),
   updateLesson: vi.fn(),
   deleteLesson: vi.fn(),
   setLessonFavorite: setLessonFavoriteMock,
+}));
+
+vi.mock("@/services/profileService", () => ({
+  ensureDefaultProfile: ensureDefaultProfileMock,
 }));
 
 vi.mock("@/services/settingsService", () => ({
@@ -31,9 +41,108 @@ vi.mock("@/components/board/ImportChessComDialog", () => ({
 
 afterEach(() => {
   cleanup();
-  getAllLessonsMock.mockReset();
+  getLessonsPageMock.mockReset();
+  ensureDefaultProfileMock.mockClear();
   getAppSettingsMock.mockReset();
   setLessonFavoriteMock.mockReset();
+});
+
+function pageResult(items: unknown[]) {
+  return {
+    items,
+    total: items.length,
+    page: 1,
+    pageSize: 20,
+    pageCount: items.length === 0 ? 0 : 1,
+  };
+}
+
+describe("LessonsPage database queries", () => {
+  it("reloads the restored profile after the global backup event", async () => {
+    getLessonsPageMock.mockResolvedValue(pageResult([]));
+    render(
+      <MemoryRouter>
+        <LessonsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getLessonsPageMock).toHaveBeenCalledOnce());
+    window.dispatchEvent(new Event("chessstudy:database-backup-restored"));
+    await waitFor(() => {
+      expect(ensureDefaultProfileMock).toHaveBeenCalledTimes(2);
+      expect(getLessonsPageMock.mock.calls.length).toBeGreaterThan(1);
+    });
+  });
+
+  it("queries the repository for search and navigates paginated results", async () => {
+    getLessonsPageMock
+      .mockResolvedValueOnce({
+        items: [{
+          id: 1,
+          title: "Prima pagina",
+          description: "",
+          mode: "study",
+          createdAt: new Date("2026-07-15"),
+        }],
+        total: 21,
+        page: 1,
+        pageSize: 20,
+        pageCount: 2,
+      })
+      .mockResolvedValueOnce({
+        items: [{
+          id: 21,
+          title: "Seconda pagina",
+          description: "",
+          mode: "study",
+          createdAt: new Date("2026-07-01"),
+        }],
+        total: 21,
+        page: 2,
+        pageSize: 20,
+        pageCount: 2,
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        pageCount: 1,
+      });
+
+    const view = render(
+      <MemoryRouter>
+        <LessonsPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(getLessonsPageMock).toHaveBeenCalledWith(expect.objectContaining({
+        profileId: 1,
+        page: 1,
+        pageSize: 20,
+      }));
+    });
+
+    await view.findByText("Pagina 1 di 2");
+    fireEvent.click(view.getByRole("button", { name: "Successiva" }));
+    await waitFor(() => {
+      expect(getLessonsPageMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        page: 2,
+      }));
+    });
+
+    fireEvent.change(view.getByPlaceholderText("Cerca titolo, giocatore, evento o ECO"), {
+      target: { value: "Kasparov" },
+    });
+
+    await waitFor(() => {
+      expect(getLessonsPageMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        query: "Kasparov",
+        page: 1,
+      }));
+    });
+  });
 });
 
 function LocationProbe() {
@@ -43,7 +152,7 @@ function LocationProbe() {
 
 describe("LessonsPage platform imports", () => {
   it("opens Chess.com with the username currently saved in settings", async () => {
-    getAllLessonsMock.mockResolvedValue([]);
+    getLessonsPageMock.mockResolvedValue(pageResult([]));
     getAppSettingsMock.mockResolvedValue({
       stockfish_depth: 15,
       stockfish_threads: 1,
@@ -64,7 +173,7 @@ describe("LessonsPage platform imports", () => {
   });
 
   it("offers settings when the Chess.com username is missing", async () => {
-    getAllLessonsMock.mockResolvedValue([]);
+    getLessonsPageMock.mockResolvedValue(pageResult([]));
     getAppSettingsMock.mockResolvedValue({
       stockfish_depth: 15,
       stockfish_threads: 1,
@@ -105,9 +214,9 @@ describe("LessonsPage imported game favorites", () => {
       mode: "study" as const,
       createdAt: new Date("2026-07-12"),
     };
-    getAllLessonsMock
-      .mockResolvedValueOnce([importedGame, studyLesson])
-      .mockResolvedValueOnce([{ ...importedGame, isFavorite: true }, studyLesson]);
+    getLessonsPageMock
+      .mockResolvedValueOnce(pageResult([importedGame, studyLesson]))
+      .mockResolvedValueOnce(pageResult([{ ...importedGame, isFavorite: true }, studyLesson]));
     setLessonFavoriteMock.mockResolvedValue(undefined);
 
     const view = render(
@@ -138,7 +247,7 @@ describe("LessonsPage imported game favorites", () => {
   });
 
   it("filters the list to favorite imported games", async () => {
-    getAllLessonsMock.mockResolvedValue([
+    const allLessons = [
       {
         id: 1,
         title: "Partita preferita",
@@ -163,7 +272,11 @@ describe("LessonsPage imported game favorites", () => {
         createdAt: new Date("2026-07-11"),
         isFavorite: true,
       },
-    ]);
+    ];
+    getLessonsPageMock
+      .mockResolvedValueOnce(pageResult(allLessons))
+      .mockResolvedValueOnce(pageResult([allLessons[0]]))
+      .mockResolvedValueOnce(pageResult(allLessons));
 
     const view = render(
       <MemoryRouter>
@@ -172,15 +285,25 @@ describe("LessonsPage imported game favorites", () => {
     );
 
     await view.findByText("Partita non preferita");
-    fireEvent.click(view.getByRole("button", { name: "Solo preferite" }));
+    fireEvent.click(view.getByRole("button", { name: "Preferite" }));
 
-    expect(view.getByText("Partita preferita")).toBeTruthy();
-    expect(view.queryByText("Partita non preferita")).toBeNull();
-    expect(view.queryByText("Lezione di studio")).toBeNull();
+    await waitFor(() => {
+      expect(view.getByText("Partita preferita")).toBeTruthy();
+      expect(view.queryByText("Partita non preferita")).toBeNull();
+      expect(view.queryByText("Lezione di studio")).toBeNull();
+    });
+
+    fireEvent.click(view.getByRole("button", { name: "Preferite" }));
+
+    await waitFor(() => {
+      expect(view.getByText("Partita non preferita")).toBeTruthy();
+      expect(view.getByText("Lezione di studio")).toBeTruthy();
+    });
   });
 
   it("shows a dedicated empty state when there are no favorite games", async () => {
-    getAllLessonsMock.mockResolvedValue([
+    getLessonsPageMock
+      .mockResolvedValueOnce(pageResult([
       {
         id: 1,
         title: "Partita non preferita",
@@ -189,7 +312,8 @@ describe("LessonsPage imported game favorites", () => {
         createdAt: new Date("2026-07-13"),
         isFavorite: false,
       },
-    ]);
+      ]))
+      .mockResolvedValueOnce(pageResult([]));
 
     const view = render(
       <MemoryRouter>
@@ -198,8 +322,8 @@ describe("LessonsPage imported game favorites", () => {
     );
 
     await view.findByText("Partita non preferita");
-    fireEvent.click(view.getByRole("button", { name: "Solo preferite" }));
+    fireEvent.click(view.getByRole("button", { name: "Preferite" }));
 
-    expect(view.getByText("Nessuna partita preferita")).toBeTruthy();
+    expect(await view.findByText("Nessuna partita preferita")).toBeTruthy();
   });
 });
