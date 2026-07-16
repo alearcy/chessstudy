@@ -414,6 +414,17 @@ export function evalScore(evalCp: number | null, evalMate: number | null): numbe
   return 0;
 }
 
+/** Converte la valutazione nella percentuale visuale occupata dal Bianco. */
+export function evalToWhiteShare(
+  evalCp: number | null,
+  evalMate: number | null,
+): number {
+  if (evalMate != null) return evalMate > 0 ? 100 : 0;
+  if (evalCp == null) return 50;
+  const boundedCp = Math.min(600, Math.max(-600, evalCp));
+  return Math.min(100, Math.max(0, 50 + boundedCp / 12));
+}
+
 /** Formatta un eval per display: "+1.2", "M3", "‑M5", "—". */
 export function formatEval(
   evalCp: number | null,

@@ -1,16 +1,8 @@
+import { evalToWhiteShare } from "@/services/analysisService";
+
 interface EvalBarProps {
   cp: number | null;
   mate: number | null;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function whiteShare(cp: number | null, mate: number | null) {
-  if (mate !== null) return mate > 0 ? 100 : 0;
-  if (cp === null) return 50;
-  return clamp(50 + clamp(cp, -600, 600) / 12, 0, 100);
 }
 
 function evalLabel(cp: number | null, mate: number | null) {
@@ -21,7 +13,7 @@ function evalLabel(cp: number | null, mate: number | null) {
 }
 
 export default function EvalBar({ cp, mate }: EvalBarProps) {
-  const white = whiteShare(cp, mate);
+  const white = evalToWhiteShare(cp, mate);
   const black = 100 - white;
   const label = evalLabel(cp, mate);
 

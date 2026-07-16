@@ -46,6 +46,7 @@ import { useChessBoard } from "@/hooks/useChessBoard";
 import ChessBoardView from "@/components/board/ChessBoard";
 import EvalBar from "@/components/analysis/EvalBar";
 import AnalysisPlayerLabel from "@/components/analysis/AnalysisPlayerLabel";
+import GameEvaluationChart from "@/components/analysis/GameEvaluationChart";
 import MoveNotation from "@/components/board/MoveNotation";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
@@ -79,6 +80,7 @@ import {
 } from "@/lib/lessonDetailUtils";
 import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
 import { analyzeGameOpenings } from "@/services/openingBookService";
+import { classifyMoveAtIndex } from "@/services/moveAnnotationService";
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -1087,61 +1089,9 @@ const selectedBoard = useMemo(
 
   const moveBadge = useMemo(() => {
     const i = chess.historyIndex - 1;
-    if (i < 0) { return null; }
-    const move = chess.currentMove;
-    if (!move) { return null; }
-
-    // Eval prima della mossa
-    let beforeCp: number | null;
-    let beforeMate: number | null;
-    if (i === 0) {
-      beforeCp = selectedBoard?.evalCp ?? null;
-      beforeMate = selectedBoard?.evalMate ?? null;
-    } else {
-      beforeCp = chess.moves[i - 1]?.evalCp ?? null;
-      beforeMate = chess.moves[i - 1]?.evalMate ?? null;
-    }
-
-    // Eval dopo la mossa
-    const afterCp = move.evalCp ?? null;
-    const afterMate = move.evalMate ?? null;
-
-    // Se manca uno dei due eval, non possiamo calcolare il cpLoss
-    if (
-      (beforeCp == null && beforeMate == null) ||
-      (afterCp == null && afterMate == null)
-    ) {
-      return null;
-    }
-
-    const beforeScore = evalScore(beforeCp, beforeMate); // POV Bianco
-    const afterScore = evalScore(afterCp, afterMate); // POV Bianco
-
-    // cpLoss POV del giocatore che ha mosso.
-    // Dopo una mossa nera, il turno è del bianco → chi ha mosso è il nero.
-    const moverIsBlack = chess.turn === "w";
-    const cpLoss = moverIsBlack ? afterScore - beforeScore : beforeScore - afterScore;
-
-    // isBestMove
-    let isBestMove = false;
-    const bestUciBefore = i === 0
-      ? selectedBoard?.evalBestMoveUci ?? null
-      : chess.moves[i - 1]?.evalBestMoveUci ?? null;
-    const fenBefore = i === 0 ? selectedBoard?.fen : chess.moves[i - 1]?.fen;
-    if (bestUciBefore && fenBefore) {
-      try {
-        const c = new Chess(fenBefore);
-        const result = c.move(bestUciBefore);
-        isBestMove = sanMovesMatch(move.moveNotation, result.san);
-      } catch {
-        isBestMove = false;
-      }
-    }
-
-    const cls = moveClassification(cpLoss, isBestMove);
-
-    return cls;
-  }, [chess.historyIndex, chess.currentMove, chess.moves, selectedBoard]);
+    if (i < 0 || !selectedBoard) return null;
+    return classifyMoveAtIndex(selectedBoard, chess.moves, i)?.badge ?? null;
+  }, [chess.historyIndex, chess.moves, selectedBoard]);
 
   const handleEditBoardClick = (board: Board, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1431,11 +1381,11 @@ const selectedBoard = useMemo(
 
           <section className="flex min-w-0 flex-col gap-4 items-center">
             <div className="w-full">
-              <div className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-stretch gap-2">
-                <div className="pointer-events-none flex">
+              <div className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-stretch gap-x-2 gap-y-3">
+                <div className="pointer-events-none col-start-1 row-start-1 flex">
                   <EvalBar cp={currentEvalCp} mate={currentEvalMate} />
                 </div>
-                <div className="min-w-0">
+                <div className="col-start-2 row-start-1 min-w-0">
                   <ChessBoardView
                     fen={mateLinePreviewFen ?? chess.fen}
                     arrows={chess.currentArrows}
@@ -1488,6 +1438,14 @@ const selectedBoard = useMemo(
                         blackElo={selectedBoard.headers?.BlackElo}
                       />
                     }
+                  />
+                </div>
+                <div className="col-start-2 row-start-2 min-w-0">
+                  <GameEvaluationChart
+                    start={selectedBoard}
+                    moves={chess.moves}
+                    currentMoveIndex={chess.historyIndex}
+                    onGoToMove={chess.goToMove}
                   />
                 </div>
               </div>

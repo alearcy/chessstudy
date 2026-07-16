@@ -24,6 +24,15 @@
 
 ## Completed
 
+- UI-007 Grafico andamento partita
+  - [x] Condividere scala di valutazione e classificazione mosse
+  - [x] Disegnare grafico e marker per migliori mosse ed errori gravi
+  - [x] Navigare le posizioni con cursore trascinabile e tastiera
+  - [x] Integrare il grafico soltanto nella modalita Analisi
+  - [x] Verificare test, lint e build
+  - [x] Confermato il comportamento nell'app
+  - Spec: `docs/specs/grafico-andamento-partita.md`
+
 - UI-003 Indicatori commenti contestuali nella notazione mosse
   - [x] Nascondere le icone nella modalità Analisi
   - [x] Mostrare l'icona nello Studio solo per note utente

@@ -7,6 +7,7 @@ import {
   moveClassification,
   runAdaptiveAnalysis,
   stockfishCommentForMove,
+  evalToWhiteShare,
   type AnalyzeOptions,
   type PositionEval,
 } from "@/services/analysisService";
@@ -58,6 +59,16 @@ describe("analysisService eval helpers", () => {
   it("makes a shorter forced mate substantially better than a longer one", () => {
     expect(evalScore(null, 1) - evalScore(null, 5)).toBeGreaterThanOrEqual(300);
     expect(evalScore(null, -5) - evalScore(null, -1)).toBeGreaterThanOrEqual(300);
+  });
+
+  it("maps evaluations to the same bounded white share used by visual analysis", () => {
+    expect(evalToWhiteShare(null, null)).toBe(50);
+    expect(evalToWhiteShare(0, null)).toBe(50);
+    expect(evalToWhiteShare(300, null)).toBe(75);
+    expect(evalToWhiteShare(600, null)).toBe(100);
+    expect(evalToWhiteShare(-600, null)).toBe(0);
+    expect(evalToWhiteShare(null, 3)).toBe(100);
+    expect(evalToWhiteShare(null, -3)).toBe(0);
   });
 });
 
