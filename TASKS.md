@@ -2,6 +2,21 @@
 
 ## In Progress
 
+- UI-006 Conferma conversione da analisi a studio
+  - [x] Aprire un dialog senza avviare subito la conversione
+  - [x] Gestire annullamento, conferma e stato in corso
+  - [x] Verificare test, lint e build
+  - Spec: `docs/specs/conferma-conversione-analisi-studio.md`
+
+- UI-005 Nomi ed ELO dei giocatori nella scacchiera di analisi
+  - [x] Mostrare i dati disponibili nelle rispettive posizioni
+  - [x] Allineare le posizioni all'orientamento della scacchiera
+  - [x] Rimuovere valutazione testuale e profondita dalla modalita Analisi
+  - [x] Formattare il rating tra parentesi senza etichetta Elo
+  - [x] Posizionare il giocatore superiore sotto la toolbar
+  - [x] Verificare test e build
+  - Spec: `docs/specs/nomi-elo-giocatori-analisi.md`
+
 - UI-004 Rimuovere l'indicatore dal tab Aperture
   - [x] Rimuovere il pallino e la prop inutilizzata
   - [x] Verificare test e build

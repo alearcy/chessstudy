@@ -45,6 +45,7 @@ import {
 import { useChessBoard } from "@/hooks/useChessBoard";
 import ChessBoardView from "@/components/board/ChessBoard";
 import EvalBar from "@/components/analysis/EvalBar";
+import AnalysisPlayerLabel from "@/components/analysis/AnalysisPlayerLabel";
 import MoveNotation from "@/components/board/MoveNotation";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
 import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
@@ -1434,47 +1435,63 @@ const selectedBoard = useMemo(
                 <div className="pointer-events-none flex">
                   <EvalBar cp={currentEvalCp} mate={currentEvalMate} />
                 </div>
-                <ChessBoardView
-                fen={mateLinePreviewFen ?? chess.fen}
-                arrows={chess.currentArrows}
-                highlights={chess.currentHighlights}
-                extraArrows={analysisArrow}
-                lastMoveSquare={lastMoveSquare}
-                lastMoveFromSquare={lastMoveFromSquare}
-                moveBadge={moveBadge}
-                kingStatus={kingStatus}
-                onArrowsChange={handleArrowsChange}
-                onHighlightsChange={handleHighlightsChange}
-                onClearArrows={handleClearArrows}
-                canUndo={chess.canUndo}
-                canRedo={chess.canRedo}
-                onMove={handleMove}
-                onUndo={handleUndo}
-                onRedo={handleRedo}
-                onReset={handleReset}
-                onAnalyze={handleAnalyze}
-                analyzing={analyzing}
-                analysisProgress={analysisProgress}
-                analysisDepth={stockfishDepth ?? undefined}
-                canAnalyze={chess.moves.length > 0 || !!selectedBoard}
-                onCancelAnalysis={handleCancelAnalysis}
-                lessonMode={lesson.mode}
-                autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
-                onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
-                converting={converting}
-                boardOrientation={flipped ? "black" : "white"}
-                onFlip={handleFlip}
-              />
+                <div className="min-w-0">
+                  <ChessBoardView
+                    fen={mateLinePreviewFen ?? chess.fen}
+                    arrows={chess.currentArrows}
+                    highlights={chess.currentHighlights}
+                    extraArrows={analysisArrow}
+                    lastMoveSquare={lastMoveSquare}
+                    lastMoveFromSquare={lastMoveFromSquare}
+                    moveBadge={moveBadge}
+                    kingStatus={kingStatus}
+                    onArrowsChange={handleArrowsChange}
+                    onHighlightsChange={handleHighlightsChange}
+                    onClearArrows={handleClearArrows}
+                    canUndo={chess.canUndo}
+                    canRedo={chess.canRedo}
+                    onMove={handleMove}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    onReset={handleReset}
+                    onAnalyze={handleAnalyze}
+                    analyzing={analyzing}
+                    analysisProgress={analysisProgress}
+                    analysisDepth={stockfishDepth ?? undefined}
+                    canAnalyze={chess.moves.length > 0 || !!selectedBoard}
+                    onCancelAnalysis={handleCancelAnalysis}
+                    lessonMode={lesson.mode}
+                    autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
+                    onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
+                    converting={converting}
+                    boardOrientation={flipped ? "black" : "white"}
+                    onFlip={handleFlip}
+                    topPlayerLabel={
+                      <AnalysisPlayerLabel
+                        className="w-full"
+                        orientation={flipped ? "black" : "white"}
+                        position="top"
+                        whiteName={selectedBoard.whiteName}
+                        blackName={selectedBoard.blackName}
+                        whiteElo={selectedBoard.headers?.WhiteElo}
+                        blackElo={selectedBoard.headers?.BlackElo}
+                      />
+                    }
+                    bottomPlayerLabel={
+                      <AnalysisPlayerLabel
+                        className="w-full"
+                        orientation={flipped ? "black" : "white"}
+                        position="bottom"
+                        whiteName={selectedBoard.whiteName}
+                        blackName={selectedBoard.blackName}
+                        whiteElo={selectedBoard.headers?.WhiteElo}
+                        blackElo={selectedBoard.headers?.BlackElo}
+                      />
+                    }
+                  />
+                </div>
               </div>
             </div>
-            {(currentEvalCp != null || currentEvalMate != null) && (
-              <div className="w-full flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="font-mono tabular-nums">
-                  Valutazione: <span className="text-foreground font-semibold">{evalPositionLabel(currentEvalCp, currentEvalMate)}</span>
-                </span>
-                <span className="text-xs">(profondità {currentEvalDepth})</span>
-              </div>
-            )}
           </section>
 
           <AnalysisSidebarTabs

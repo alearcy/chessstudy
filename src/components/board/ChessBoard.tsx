@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Chessground } from "@lichess-org/chessground";
 import type { Api } from "@lichess-org/chessground/api";
 import type { Config } from "@lichess-org/chessground/config";
@@ -6,6 +13,14 @@ import type { DrawBrushes, DrawShape } from "@lichess-org/chessground/draw";
 import type { Color, Key } from "@lichess-org/chessground/types";
 import type { Square } from "chess.js";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Hand,
   MousePointer2,
@@ -68,6 +83,10 @@ interface ChessBoardViewProps {
   boardOrientation?: "white" | "black";
   /** Callback per toggle orientamento scacchiera. */
   onFlip?: () => void;
+  /** Contenuto mostrato sotto la toolbar e sopra la scacchiera. */
+  topPlayerLabel?: ReactNode;
+  /** Contenuto mostrato sotto la scacchiera. */
+  bottomPlayerLabel?: ReactNode;
 }
 
 const HIGHLIGHT_COLOR = "rgba(250, 204, 21, 0.48)";
@@ -272,9 +291,12 @@ export default function ChessBoardView({
   converting = false,
   boardOrientation = "white",
   onFlip,
+  topPlayerLabel,
+  bottomPlayerLabel,
 }: ChessBoardViewProps) {
   const [mode, setMode] = useState<BoardMode>("move");
   const [coordinatesOnSquares, setCoordinatesOnSquares] = useState(false);
+  const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef<Api | null>(null);
   const onMoveRef = useRef(onMove);
@@ -454,7 +476,7 @@ export default function ChessBoardView({
               variant="ghost"
               size="icon-xs"
               disabled={!onConvertToStudy || converting}
-              onClick={onConvertToStudy}
+              onClick={() => setConvertConfirmOpen(true)}
               title="Converti questa analisi in una lezione di studio"
             >
               {converting ? (
@@ -534,6 +556,8 @@ export default function ChessBoardView({
         </div>
       )}
 
+      {topPlayerLabel}
+
       <div className="flex w-full justify-center">
         <div className="cs-board-shell aspect-square w-full">
           <div ref={boardRef} className="cs-chessground h-full w-full" />
@@ -581,6 +605,8 @@ export default function ChessBoardView({
         </div>
       </div>
 
+      {bottomPlayerLabel}
+
       {lessonMode !== "analysis" && mode === "arrow" && (
         <p className="text-xs text-muted-foreground">
           Tasto destro + trascina per disegnare una freccia
@@ -591,6 +617,41 @@ export default function ChessBoardView({
           Clicca su una casa per evidenziarla o rimuovere l&apos;evidenziazione
         </p>
       )}
+
+      <Dialog
+        open={convertConfirmOpen}
+        onOpenChange={(open) => {
+          if (!converting) setConvertConfirmOpen(open);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Converti in lezione di studio</DialogTitle>
+            <DialogDescription>
+              Verrà creata una nuova lezione di studio copiando questa partita,
+              le mosse e i commenti. L&apos;analisi originale resterà invariata.
+              Vuoi continuare?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={converting}
+              onClick={() => setConvertConfirmOpen(false)}
+            >
+              Annulla
+            </Button>
+            <Button
+              disabled={converting || !onConvertToStudy}
+              onClick={() => {
+                void onConvertToStudy?.();
+              }}
+            >
+              {converting ? "Conversione..." : "Converti"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <style>{`
         .cs-board-shell {

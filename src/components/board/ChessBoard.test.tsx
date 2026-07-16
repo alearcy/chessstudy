@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ChessBoardView from "@/components/board/ChessBoard";
@@ -22,7 +23,15 @@ afterEach(() => {
   chessgroundMock.mockClear();
 });
 
-function renderBoard(lessonMode: "study" | "analysis") {
+function renderBoard(
+  lessonMode: "study" | "analysis",
+  options: {
+    top?: ReactNode;
+    bottom?: ReactNode;
+    onConvertToStudy?: () => void;
+    converting?: boolean;
+  } = {},
+) {
   return render(
     <ChessBoardView
       fen="start"
@@ -38,6 +47,10 @@ function renderBoard(lessonMode: "study" | "analysis") {
       onRedo={vi.fn()}
       onReset={vi.fn()}
       lessonMode={lessonMode}
+      topPlayerLabel={options.top}
+      bottomPlayerLabel={options.bottom}
+      onConvertToStudy={options.onConvertToStudy}
+      converting={options.converting}
     />,
   );
 }
@@ -62,3 +75,60 @@ describe.each(["study", "analysis"] as const)(
     });
   },
 );
+
+describe("ChessBoardView player labels", () => {
+  it("mostra il giocatore superiore dopo la toolbar e prima della scacchiera", () => {
+    const view = renderBoard("analysis", {
+      top: <span data-testid="top-player">Nero</span>,
+    });
+
+    const toolbarButton = view.getByTitle("Inverti orientamento scacchiera");
+    const topPlayer = view.getByTestId("top-player");
+    const board = view.container.querySelector(".cs-board-shell");
+
+    expect(board).not.toBeNull();
+    expect(
+      toolbarButton.compareDocumentPosition(topPlayer) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      topPlayer.compareDocumentPosition(board!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+describe("ChessBoardView conversione in studio", () => {
+  it("apre la conferma senza convertire e permette di annullare", () => {
+    const onConvertToStudy = vi.fn();
+    const view = renderBoard("analysis", { onConvertToStudy });
+
+    fireEvent.click(
+      view.getByTitle("Converti questa analisi in una lezione di studio"),
+    );
+
+    expect(onConvertToStudy).not.toHaveBeenCalled();
+    expect(
+      view.getByRole("heading", { name: "Converti in lezione di studio" }),
+    ).toBeTruthy();
+
+    fireEvent.click(view.getByRole("button", { name: "Annulla" }));
+
+    expect(onConvertToStudy).not.toHaveBeenCalled();
+    expect(
+      view.queryByRole("heading", { name: "Converti in lezione di studio" }),
+    ).toBeNull();
+  });
+
+  it("avvia la conversione soltanto dopo la conferma", () => {
+    const onConvertToStudy = vi.fn();
+    const view = renderBoard("analysis", { onConvertToStudy });
+
+    fireEvent.click(
+      view.getByTitle("Converti questa analisi in una lezione di studio"),
+    );
+    fireEvent.click(view.getByRole("button", { name: "Converti" }));
+
+    expect(onConvertToStudy).toHaveBeenCalledTimes(1);
+  });
+});
