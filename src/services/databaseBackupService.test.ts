@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import db from "@/db/database";
-import { createBoardWithFen } from "@/services/boardService";
+import { createBoardWithFen, updateBoard } from "@/services/boardService";
 import {
   BackupValidationError,
   createDatabaseBackupJson,
@@ -9,7 +9,7 @@ import {
   restoreDatabaseBackupJson,
 } from "@/services/databaseBackupService";
 import { createLesson } from "@/services/lessonService";
-import { createMove } from "@/services/moveService";
+import { createMove, updateMove } from "@/services/moveService";
 import { ensureDefaultProfile } from "@/services/profileService";
 
 async function seedDatabase(title = "Partita originale") {
@@ -122,6 +122,24 @@ describe("database backup service", () => {
     expect(restoredLesson).toMatchObject({ title: "Contenuto backup" });
     expect(restoredLesson?.createdAt).toBeInstanceOf(Date);
     expect(restoredLesson?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("preserves colored board and move highlights across backup restore", async () => {
+    const ids = await seedDatabase();
+    const redHighlight: [string, string] = ["d4", "rgb(239,68,68)"];
+    const greenHighlight: [string, string] = ["c3", "rgb(34,197,94)"];
+    await updateBoard(ids.boardId, { highlights: [redHighlight] });
+    await updateMove(ids.moveId, { highlights: [greenHighlight] });
+
+    const json = await createDatabaseBackupJson();
+    await restoreDatabaseBackupJson(json);
+
+    await expect(db.boards.get(ids.boardId)).resolves.toMatchObject({
+      highlights: [redHighlight],
+    });
+    await expect(db.moves.get(ids.moveId)).resolves.toMatchObject({
+      highlights: [greenHighlight],
+    });
   });
 
   it("rolls back cleared data when a database constraint rejects the backup", async () => {

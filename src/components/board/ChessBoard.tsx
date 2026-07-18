@@ -22,13 +22,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Hand,
-  MousePointer2,
-  Highlighter,
   Undo2,
   Redo2,
   RotateCcw,
-  X,
   Brain,
   Loader2,
   GraduationCap,
@@ -37,20 +33,21 @@ import {
   Skull,
   Star,
   WholeWord,
+  FileDown,
+  ImageDown,
 } from "lucide-react";
-import type { BoardArrow } from "@/types";
-
-type BoardMode = "move" | "arrow" | "highlight";
+import type { BoardArrow, BoardHighlight } from "@/types";
 
 interface ChessBoardViewProps {
   fen: string;
   arrows: BoardArrow[];
-  highlights: string[];
+  highlights: BoardHighlight[];
   /** Frecce read-only aggiuntive (es. miglior mossa Stockfish), non persistite. */
   extraArrows?: BoardArrow[];
-  onArrowsChange: (arrows: BoardArrow[]) => void;
-  onHighlightsChange: (highlights: string[]) => void;
-  onClearArrows: () => void;
+  onAnnotationsChange: (
+    arrows: BoardArrow[],
+    highlights: BoardHighlight[],
+  ) => void;
   canUndo: boolean;
   canRedo: boolean;
   onMove: (from: Square, to: Square) => boolean;
@@ -87,13 +84,17 @@ interface ChessBoardViewProps {
   topPlayerLabel?: ReactNode;
   /** Contenuto mostrato sotto la scacchiera. */
   bottomPlayerLabel?: ReactNode;
+  /** Esporta la linea della scacchiera di studio come PGN. */
+  onExportPgn?: () => void;
+  /** Esporta la posizione corrente annotata come PNG. */
+  onExportImage?: () => void;
 }
 
-const HIGHLIGHT_COLOR = "rgba(250, 204, 21, 0.48)";
 const LAST_MOVE_COLOR = "rgba(56, 189, 248, 0.45)";
 const CHECK_COLOR = "rgba(239, 68, 68, 0.65)";
-const ARROW_COLOR = "rgb(255,170,0)";
-const ANALYSIS_ARROW_COLOR = "rgb(59,130,246)";
+const RED_ANNOTATION_COLOR = "rgb(239,68,68)";
+const GREEN_ANNOTATION_COLOR = "rgb(34,197,94)";
+const YELLOW_ANNOTATION_COLOR = "rgb(250,204,21)";
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 const RANKS = ["1", "2", "3", "4", "5", "6", "7", "8"] as const;
 
@@ -110,20 +111,14 @@ function isKey(value: string): value is Key {
 }
 
 function squareClasses({
-  highlights,
   lastMoveFromSquare,
   kingStatus,
 }: {
-  highlights: string[];
   lastMoveFromSquare: Square | null;
   kingStatus: { square: Square; checkmate: boolean } | null;
 }): Map<Key, string> {
   const classes = new Map<Key, string>();
   if (lastMoveFromSquare) classes.set(lastMoveFromSquare, "cs-last-move-from");
-  for (const square of highlights) {
-    if (!isKey(square)) continue;
-    classes.set(square, `${classes.get(square) ?? ""} cs-user-highlight`.trim());
-  }
   if (kingStatus) {
     classes.set(
       kingStatus.square,
@@ -151,12 +146,39 @@ function arrowsToShapes(arrows: BoardArrow[], prefix: string): DrawShape[] {
   );
 }
 
-function arrowBrushes(arrows: BoardArrow[], extraArrows: BoardArrow[]): DrawBrushes {
+function highlightParts(highlight: BoardHighlight): [string, string | undefined] {
+  return typeof highlight === "string"
+    ? [highlight, undefined]
+    : [highlight[0], highlight[1]];
+}
+
+function highlightsToShapes(highlights: BoardHighlight[]): DrawShape[] {
+  return highlights.flatMap((highlight, index) => {
+    const [square, color] = highlightParts(highlight);
+    if (!isKey(square)) return [];
+    return [
+      {
+        orig: square,
+        brush: color
+          ? colorToBrushKey(color, "highlight", index)
+          : "yellow",
+      },
+    ];
+  });
+}
+
+function annotationBrushes(
+  arrows: BoardArrow[],
+  highlights: BoardHighlight[],
+  extraArrows: BoardArrow[],
+): DrawBrushes {
   const brushes: DrawBrushes = {
-    green: { key: "green", color: ARROW_COLOR, opacity: 1, lineWidth: 10 },
-    red: { key: "red", color: "rgb(239,68,68)", opacity: 1, lineWidth: 10 },
-    blue: { key: "blue", color: ANALYSIS_ARROW_COLOR, opacity: 1, lineWidth: 10 },
-    yellow: { key: "yellow", color: ARROW_COLOR, opacity: 1, lineWidth: 10 },
+    // Chessground usa green senza modificatori, red con Shift/Ctrl e blue
+    // con Alt/Meta. I colori vengono rimappati sulle gesture richieste.
+    green: { key: "green", color: RED_ANNOTATION_COLOR, opacity: 1, lineWidth: 10 },
+    red: { key: "red", color: GREEN_ANNOTATION_COLOR, opacity: 1, lineWidth: 10 },
+    blue: { key: "blue", color: YELLOW_ANNOTATION_COLOR, opacity: 1, lineWidth: 10 },
+    yellow: { key: "yellow", color: YELLOW_ANNOTATION_COLOR, opacity: 1, lineWidth: 10 },
   };
   arrows.forEach(([from, to, color], index) => {
     if (!isKey(from) || !isKey(to) || !color) return;
@@ -168,15 +190,31 @@ function arrowBrushes(arrows: BoardArrow[], extraArrows: BoardArrow[]): DrawBrus
     const key = colorToBrushKey(color, "auto", index);
     brushes[key] = { key, color, opacity: 1, lineWidth: 10 };
   });
+  highlights.forEach((highlight, index) => {
+    const [square, color] = highlightParts(highlight);
+    if (!isKey(square) || !color) return;
+    const key = colorToBrushKey(color, "highlight", index);
+    brushes[key] = { key, color, opacity: 1, lineWidth: 10 };
+  });
   return brushes;
 }
 
-function shapesToArrows(shapes: DrawShape[], brushes: DrawBrushes): BoardArrow[] {
-  return shapes.flatMap((shape) => {
-    if (!shape.dest) return [];
+function shapesToAnnotations(
+  shapes: DrawShape[],
+  brushes: DrawBrushes,
+): [BoardArrow[], BoardHighlight[]] {
+  const arrows: BoardArrow[] = [];
+  const highlights: BoardHighlight[] = [];
+  for (const shape of shapes) {
     const brush = shape.brush ? brushes[shape.brush] : null;
-    return [[shape.orig, shape.dest, brush?.color ?? ARROW_COLOR] as BoardArrow];
-  });
+    const color = brush?.color ?? RED_ANNOTATION_COLOR;
+    if (shape.dest) {
+      arrows.push([shape.orig, shape.dest, color]);
+    } else {
+      highlights.push([shape.orig, color]);
+    }
+  }
+  return [arrows, highlights];
 }
 
 function visibleSquares(orientation: "white" | "black"): Square[] {
@@ -187,7 +225,6 @@ function visibleSquares(orientation: "white" | "black"): Square[] {
 
 function chessgroundConfig({
   fen,
-  mode,
   lessonMode,
   boardOrientation,
   squareClassMap,
@@ -196,12 +233,10 @@ function chessgroundConfig({
   brushes,
   onMove,
   onInvalidMove,
-  onHighlight,
   onShapesChange,
   coordinatesOnSquares,
 }: {
   fen: string;
-  mode: BoardMode;
   lessonMode?: "study" | "analysis";
   boardOrientation: "white" | "black";
   squareClassMap: Map<Key, string>;
@@ -210,12 +245,10 @@ function chessgroundConfig({
   brushes: DrawBrushes;
   onMove: (from: Square, to: Square) => boolean;
   onInvalidMove: () => void;
-  onHighlight: (square: Square) => void;
   onShapesChange: (shapes: DrawShape[]) => void;
   coordinatesOnSquares: boolean;
 }): Config {
-  const canMove = lessonMode !== "analysis" && mode === "move";
-  const canHighlight = lessonMode !== "analysis" && mode === "highlight";
+  const canEdit = lessonMode !== "analysis";
   return {
     fen: boardFen(fen),
     orientation: boardOrientation,
@@ -231,7 +264,7 @@ function chessgroundConfig({
     },
     movable: {
       free: true,
-      color: canMove ? "both" : undefined,
+      color: canEdit ? "both" : undefined,
       showDests: false,
       events: {
         after: (orig, dest) => {
@@ -241,17 +274,12 @@ function chessgroundConfig({
         },
       },
     },
-    selectable: { enabled: canMove || canHighlight },
-    draggable: { enabled: canMove, showGhost: true },
-    events: {
-      select: (key) => {
-        if (canHighlight) onHighlight(key as Square);
-      },
-    },
+    selectable: { enabled: canEdit },
+    draggable: { enabled: canEdit, showGhost: true },
     drawable: {
-      enabled: lessonMode !== "analysis" && mode === "arrow",
+      enabled: canEdit,
       visible: true,
-      eraseOnMovablePieceClick: true,
+      eraseOnMovablePieceClick: false,
       defaultSnapToValidMove: false,
       shapes: userShapes,
       autoShapes,
@@ -270,9 +298,7 @@ export default function ChessBoardView({
   lastMoveFromSquare = null,
   moveBadge = null,
   kingStatus = null,
-  onArrowsChange,
-  onHighlightsChange,
-  onClearArrows,
+  onAnnotationsChange,
   canUndo,
   canRedo,
   onMove,
@@ -293,8 +319,9 @@ export default function ChessBoardView({
   onFlip,
   topPlayerLabel,
   bottomPlayerLabel,
+  onExportPgn,
+  onExportImage,
 }: ChessBoardViewProps) {
-  const [mode, setMode] = useState<BoardMode>("move");
   const [coordinatesOnSquares, setCoordinatesOnSquares] = useState(false);
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -303,10 +330,16 @@ export default function ChessBoardView({
   onMoveRef.current = onMove;
 
   const brushes = useMemo(
-    () => arrowBrushes(arrows, extraArrows),
-    [arrows, extraArrows],
+    () => annotationBrushes(arrows, highlights, extraArrows),
+    [arrows, highlights, extraArrows],
   );
-  const userShapes = useMemo(() => arrowsToShapes(arrows, "user"), [arrows]);
+  const userShapes = useMemo(
+    () => [
+      ...arrowsToShapes(arrows, "user"),
+      ...highlightsToShapes(highlights),
+    ],
+    [arrows, highlights],
+  );
   const autoShapes = useMemo(
     () => arrowsToShapes(extraArrows, "auto"),
     [extraArrows],
@@ -314,41 +347,28 @@ export default function ChessBoardView({
   const squareClassMap = useMemo(
     () =>
       squareClasses({
-        highlights,
         lastMoveFromSquare,
         kingStatus,
       }),
-    [highlights, lastMoveFromSquare, kingStatus],
+    [lastMoveFromSquare, kingStatus],
   );
   const overlaySquares = useMemo(
     () => visibleSquares(boardOrientation),
     [boardOrientation],
   );
 
-  const handleHighlight = useCallback(
-    (square: Square) => {
-      onHighlightsChange(
-        highlights.includes(square)
-          ? highlights.filter((s) => s !== square)
-          : [...highlights, square],
-      );
-      apiRef.current?.selectSquare(null);
-    },
-    [highlights, onHighlightsChange],
-  );
-
   const handleShapesChange = useCallback(
     (shapes: DrawShape[]) => {
-      onArrowsChange(shapesToArrows(shapes, brushes));
+      const [nextArrows, nextHighlights] = shapesToAnnotations(shapes, brushes);
+      onAnnotationsChange(nextArrows, nextHighlights);
     },
-    [brushes, onArrowsChange],
+    [brushes, onAnnotationsChange],
   );
 
   const config = useMemo(
     () =>
       chessgroundConfig({
         fen,
-        mode,
         lessonMode,
         boardOrientation,
         squareClassMap,
@@ -357,20 +377,17 @@ export default function ChessBoardView({
         brushes,
         onMove: (from, to) => onMoveRef.current(from, to),
         onInvalidMove: () => apiRef.current?.set({ fen: boardFen(fen) }),
-        onHighlight: handleHighlight,
         onShapesChange: handleShapesChange,
         coordinatesOnSquares,
       }),
     [
       fen,
-      mode,
       lessonMode,
       boardOrientation,
       squareClassMap,
       userShapes,
       autoShapes,
       brushes,
-      handleHighlight,
       handleShapesChange,
       coordinatesOnSquares,
     ],
@@ -399,53 +416,6 @@ export default function ChessBoardView({
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="flex items-center gap-1 flex-wrap justify-center">
-        {lessonMode !== "analysis" && (
-          <>
-            <Button
-              variant={mode === "move" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("move")}
-              title="Modalità spostamento pezzi"
-            >
-              <Hand className="size-4" />
-              <span className="hidden sm:inline ml-1">Muovi</span>
-            </Button>
-            <Button
-              variant={mode === "arrow" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("arrow")}
-              title="Modalità disegno frecce (tasto destro)"
-            >
-              <MousePointer2 className="size-4" />
-              <span className="hidden sm:inline ml-1">Frecce</span>
-            </Button>
-            <Button
-              variant={mode === "highlight" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMode("highlight")}
-              title="Modalità evidenziazione case (click sinistro)"
-            >
-              <Highlighter className="size-4" />
-              <span className="hidden sm:inline ml-1">Evidenzia</span>
-            </Button>
-
-            {mode === "arrow" && (
-              <>
-                <div className="w-px h-6 bg-border mx-1" />
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={onClearArrows}
-                  disabled={arrows.length === 0}
-                  title="Azzera frecce della posizione corrente"
-                >
-                  <X className="size-4" />
-                </Button>
-              </>
-            )}
-          </>
-        )}
-
         {lessonMode !== "analysis" && (
           <Button
             variant={analyzing ? "default" : "ghost"}
@@ -484,6 +454,29 @@ export default function ChessBoardView({
               ) : (
                 <GraduationCap className="size-4" />
               )}
+            </Button>
+          </>
+        )}
+
+        {lessonMode === "study" && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={!onExportPgn}
+              onClick={onExportPgn}
+              title="Esporta scacchiera come PGN"
+            >
+              <FileDown className="size-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={!onExportImage}
+              onClick={onExportImage}
+              title="Esporta scacchiera come immagine"
+            >
+              <ImageDown className="size-4" />
             </Button>
           </>
         )}
@@ -607,17 +600,6 @@ export default function ChessBoardView({
 
       {bottomPlayerLabel}
 
-      {lessonMode !== "analysis" && mode === "arrow" && (
-        <p className="text-xs text-muted-foreground">
-          Tasto destro + trascina per disegnare una freccia
-        </p>
-      )}
-      {lessonMode !== "analysis" && mode === "highlight" && (
-        <p className="text-xs text-muted-foreground">
-          Clicca su una casa per evidenziarla o rimuovere l&apos;evidenziazione
-        </p>
-      )}
-
       <Dialog
         open={convertConfirmOpen}
         onOpenChange={(open) => {
@@ -667,9 +649,6 @@ export default function ChessBoardView({
         }
         cg-board square.cs-last-move-from {
           background-color: ${LAST_MOVE_COLOR};
-        }
-        cg-board square.cs-user-highlight {
-          background-color: ${HIGHLIGHT_COLOR};
         }
         cg-board square.cs-check {
           background-color: ${CHECK_COLOR};

@@ -1,5 +1,12 @@
-import { useState, useRef, useEffect, ReactNode } from "react";
-import { Eye, EyeOff, MessageSquare } from "lucide-react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
+import { Eye, EyeOff, MessageSquare, Pencil, Trash2 } from "lucide-react";
 import type { Move } from "@/types";
 import type { MoveBadge } from "@/services/analysisService";
 import MoveClassBadge from "@/components/analysis/MoveClassBadge";
@@ -18,6 +25,15 @@ interface MoveNotationProps {
   fullHeight?: boolean;
   /** Mostra l'indicatore soltanto per le note utente (`Move.comment`). */
   showUserCommentIndicators?: boolean;
+  /** Azioni contestuali disponibili soltanto nella modalita Studio. */
+  onCommentMove?: (index: number) => void;
+  onDeleteMove?: (index: number) => void;
+}
+
+interface MoveContextMenu {
+  index: number;
+  x: number;
+  y: number;
 }
 
 const WHITE_PIECES: Record<string, string> = {
@@ -76,9 +92,34 @@ export default function MoveNotation({
   startEvalBestMoveUci = null,
   fullHeight = false,
   showUserCommentIndicators = false,
+  onCommentMove,
+  onDeleteMove,
 }: MoveNotationProps) {
   const [useIcons, setUseIcons] = useState(true);
+  const [contextMenu, setContextMenu] = useState<MoveContextMenu | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [contextMenu]);
+
+  const openContextMenu = (
+    event: MouseEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    if (!onCommentMove && !onDeleteMove) return;
+    event.preventDefault();
+    setContextMenu({
+      index,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 168)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 104)),
+    });
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -173,6 +214,9 @@ export default function MoveNotation({
                       type="button"
                       data-move-index={white.index}
                       onClick={() => onGoToMove(white.index)}
+                      onContextMenu={(event) =>
+                        openContextMenu(event, white.index)
+                      }
                       className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-left w-full transition-colors ${
                         currentMoveIndex === white.index
                           ? "bg-primary/15 text-foreground"
@@ -199,6 +243,9 @@ export default function MoveNotation({
                       type="button"
                       data-move-index={black.index}
                       onClick={() => onGoToMove(black.index)}
+                      onContextMenu={(event) =>
+                        openContextMenu(event, black.index)
+                      }
                       className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-left w-full transition-colors ${
                         currentMoveIndex === black.index
                           ? "bg-primary/15 text-foreground"
@@ -224,6 +271,52 @@ export default function MoveNotation({
           </tbody>
         </table>
       </div>
+      {contextMenu && createPortal(
+        <>
+          <button
+            type="button"
+            aria-label="Chiudi menu mossa"
+            className="fixed inset-0 z-40 cursor-default"
+            onClick={() => setContextMenu(null)}
+          />
+          <div
+            role="menu"
+            aria-label={`Azioni mossa ${contextMenu.index}`}
+            className="fixed z-50 min-w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            {onCommentMove && (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                onClick={() => {
+                  onCommentMove(contextMenu.index);
+                  setContextMenu(null);
+                }}
+              >
+                <Pencil className="size-4" aria-hidden="true" />
+                Commenta
+              </button>
+            )}
+            {onDeleteMove && (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10 focus:bg-destructive/10 focus:outline-none"
+                onClick={() => {
+                  onDeleteMove(contextMenu.index);
+                  setContextMenu(null);
+                }}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                Elimina
+              </button>
+            )}
+          </div>
+        </>,
+        document.body,
+      )}
     </div>
   );
 }

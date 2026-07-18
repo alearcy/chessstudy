@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import { BookOpen, ListOrdered } from "lucide-react";
+import ViewportSidebar from "@/components/layout/ViewportSidebar";
 
 interface AnalysisSidebarTabsProps {
   movesContent: ReactNode;
@@ -19,7 +20,7 @@ export default function AnalysisSidebarTabs({
   const panelId = `${tabsId}-panel`;
 
   return (
-    <aside className="flex min-h-0 min-w-0 flex-col gap-3 xl:h-[calc(100dvh-13rem)] xl:overflow-hidden">
+    <ViewportSidebar className="gap-3">
       <div
         role="tablist"
         aria-label="Contenuti dell'analisi"
@@ -73,6 +74,6 @@ export default function AnalysisSidebarTabs({
       >
         {activeTab === "moves" ? movesContent : openingsContent}
       </div>
-    </aside>
+    </ViewportSidebar>
   );
 }

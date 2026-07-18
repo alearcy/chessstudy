@@ -1,8 +1,10 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Config } from "@lichess-org/chessground/config";
 
 import ChessBoardView from "@/components/board/ChessBoard";
+import type { BoardArrow, BoardHighlight } from "@/types";
 
 const { chessgroundMock } = vi.hoisted(() => ({
   chessgroundMock: vi.fn(() => ({
@@ -30,16 +32,21 @@ function renderBoard(
     bottom?: ReactNode;
     onConvertToStudy?: () => void;
     converting?: boolean;
+    highlights?: string[];
+    onAnnotationsChange?: (
+      arrows: BoardArrow[],
+      highlights: BoardHighlight[],
+    ) => void;
+    onExportPgn?: () => void;
+    onExportImage?: () => void;
   } = {},
 ) {
   return render(
     <ChessBoardView
       fen="start"
       arrows={[]}
-      highlights={[]}
-      onArrowsChange={vi.fn()}
-      onHighlightsChange={vi.fn()}
-      onClearArrows={vi.fn()}
+      highlights={options.highlights ?? []}
+      onAnnotationsChange={options.onAnnotationsChange ?? vi.fn()}
       canUndo={false}
       canRedo={false}
       onMove={() => true}
@@ -51,8 +58,18 @@ function renderBoard(
       bottomPlayerLabel={options.bottom}
       onConvertToStudy={options.onConvertToStudy}
       converting={options.converting}
+      onExportPgn={options.onExportPgn}
+      onExportImage={options.onExportImage}
     />,
   );
+}
+
+function lastConfig(): Config {
+  const calls = chessgroundMock.mock.calls as unknown as [
+    HTMLDivElement,
+    Config,
+  ][];
+  return calls.at(-1)![1];
 }
 
 describe.each(["study", "analysis"] as const)(
@@ -75,6 +92,84 @@ describe.each(["study", "analysis"] as const)(
     });
   },
 );
+
+describe("ChessBoardView gesture Studio", () => {
+  it("abilita movimento e disegno insieme senza selettori di modalità", () => {
+    const view = renderBoard("study");
+    const config = lastConfig();
+
+    expect(config.movable?.color).toBe("both");
+    expect(config.draggable?.enabled).toBe(true);
+    expect(config.drawable?.enabled).toBe(true);
+    expect(view.queryByRole("button", { name: "Muovi" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Frecce" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Evidenzia" })).toBeNull();
+  });
+
+  it("mantiene movimento e disegno disabilitati in Analisi", () => {
+    renderBoard("analysis");
+    const config = lastConfig();
+
+    expect(config.movable?.color).toBeUndefined();
+    expect(config.draggable?.enabled).toBe(false);
+    expect(config.drawable?.enabled).toBe(false);
+  });
+
+  it("separa e persiste atomicamente frecce e case con i colori dei modificatori", () => {
+    const onAnnotationsChange = vi.fn<
+      (arrows: BoardArrow[], highlights: BoardHighlight[]) => void
+    >();
+    renderBoard("study", {
+      highlights: ["a1"],
+      onAnnotationsChange,
+    });
+    const config = lastConfig();
+
+    expect(config.drawable?.shapes).toEqual(
+      expect.arrayContaining([{ orig: "a1", brush: "yellow" }]),
+    );
+
+    config.drawable?.onChange?.([
+      { orig: "e2", dest: "e4", brush: "green" },
+      { orig: "d4", brush: "green" },
+      { orig: "c3", brush: "red" },
+      { orig: "b2", brush: "blue" },
+    ]);
+
+    expect(onAnnotationsChange).toHaveBeenCalledWith(
+      [["e2", "e4", "rgb(239,68,68)"]],
+      [
+        ["d4", "rgb(239,68,68)"],
+        ["c3", "rgb(34,197,94)"],
+        ["b2", "rgb(250,204,21)"],
+      ],
+    );
+  });
+});
+
+describe("ChessBoardView esportazione Studio", () => {
+  it("mostra le due azioni in Studio e invoca gli handler", () => {
+    const onExportPgn = vi.fn();
+    const onExportImage = vi.fn();
+    const view = renderBoard("study", { onExportPgn, onExportImage });
+
+    fireEvent.click(view.getByTitle("Esporta scacchiera come PGN"));
+    fireEvent.click(view.getByTitle("Esporta scacchiera come immagine"));
+
+    expect(onExportPgn).toHaveBeenCalledTimes(1);
+    expect(onExportImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("non espone le azioni in Analisi", () => {
+    const view = renderBoard("analysis", {
+      onExportPgn: vi.fn(),
+      onExportImage: vi.fn(),
+    });
+
+    expect(view.queryByTitle("Esporta scacchiera come PGN")).toBeNull();
+    expect(view.queryByTitle("Esporta scacchiera come immagine")).toBeNull();
+  });
+});
 
 describe("ChessBoardView player labels", () => {
   it("mostra il giocatore superiore dopo la toolbar e prima della scacchiera", () => {

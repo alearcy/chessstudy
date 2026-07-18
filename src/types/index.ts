@@ -36,6 +36,12 @@ export interface OpeningReport {
 /** Freccia disegnata sulla scacchiera: [da, a, colore?]. */
 export type BoardArrow = [string, string, string?];
 
+/**
+ * Casa evidenziata. Le stringhe sono il formato storico (colore giallo),
+ * mentre la tupla conserva il colore scelto con i modificatori.
+ */
+export type BoardHighlight = string | [string, string?];
+
 /** Valutazione Stockfish di una posizione (POV Bianco). */
 export interface EvalFields {
   /** Centesimi di pedone, POV Bianco (null se mate o non disponibile). */
@@ -58,7 +64,7 @@ export interface Board {
   /** Frecce della posizione di partenza. */
   arrows: BoardArrow[];
   /** Evidenziazioni della posizione di partenza. */
-  highlights: string[];
+  highlights: BoardHighlight[];
   order: number;
   createdAt: Date;
   updatedAt?: Date;
@@ -99,7 +105,7 @@ export interface Move {
   /** Frecce disegnate su questa posizione. */
   arrows: BoardArrow[];
   /** Case evidenziate su questa posizione. */
-  highlights: string[];
+  highlights: BoardHighlight[];
   createdAt: Date;
   updatedAt?: Date;
   /** Valutazione Stockfish della posizione DOPO questa mossa (POV Bianco). */

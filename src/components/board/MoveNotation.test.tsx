@@ -1,4 +1,4 @@
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import MoveNotation from "@/components/board/MoveNotation";
@@ -61,5 +61,50 @@ describe("MoveNotation comment indicators", () => {
     );
 
     expect(view.getAllByLabelText("Nota utente presente")).toHaveLength(1);
+  });
+});
+
+describe("MoveNotation context menu", () => {
+  it("does not expose move actions unless handlers are provided", () => {
+    const view = render(
+      <MoveNotation
+        moves={moves}
+        currentMoveIndex={0}
+        onGoToMove={vi.fn()}
+      />,
+    );
+
+    fireEvent.contextMenu(view.getByText("e4").closest("button")!);
+
+    expect(view.queryByRole("menu")).toBeNull();
+  });
+
+  it("opens on right click and dispatches comment and delete actions", () => {
+    const onCommentMove = vi.fn();
+    const onDeleteMove = vi.fn();
+    const view = render(
+      <MoveNotation
+        moves={moves}
+        currentMoveIndex={0}
+        onGoToMove={vi.fn()}
+        onCommentMove={onCommentMove}
+        onDeleteMove={onDeleteMove}
+      />,
+    );
+
+    fireEvent.contextMenu(view.getByText("e4").closest("button")!, {
+      clientX: 120,
+      clientY: 80,
+    });
+
+    expect(view.getByRole("menu")).toBeTruthy();
+    fireEvent.click(view.getByRole("menuitem", { name: "Commenta" }));
+    expect(onCommentMove).toHaveBeenCalledWith(1);
+    expect(view.queryByRole("menu")).toBeNull();
+
+    fireEvent.contextMenu(view.getByText("e5").closest("button")!);
+    fireEvent.click(view.getByRole("menuitem", { name: "Elimina" }));
+    expect(onDeleteMove).toHaveBeenCalledWith(2);
+    expect(view.queryByRole("menu")).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Chess } from "chess.js";
 import type { Square } from "chess.js";
-import type { BoardArrow, Move } from "@/types";
+import type { BoardArrow, BoardHighlight, Move } from "@/types";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -24,7 +24,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
   const [historyIndex, setHistoryIndex] = useState(0);
   // Annotazioni della posizione di partenza (historyIndex === 0).
   const [startArrows, setStartArrows] = useState<BoardArrow[]>([]);
-  const [startHighlights, setStartHighlights] = useState<string[]>([]);
+  const [startHighlights, setStartHighlights] = useState<BoardHighlight[]>([]);
 
   const syncFen = useCallback(() => {
     setFen(game.current.fen());
@@ -39,7 +39,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
       startFen: string,
       loadedMoves: Move[],
       loadedStartArrows: BoardArrow[] = [],
-      loadedStartHighlights: string[] = [],
+      loadedStartHighlights: BoardHighlight[] = [],
       initialHistoryIndex = 0
     ) => {
       game.current.load(startFen);
@@ -130,7 +130,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
     );
   }, []);
 
-  const setMoveHighlights = useCallback((index: number, highlights: string[]) => {
+  const setMoveHighlights = useCallback((index: number, highlights: BoardHighlight[]) => {
     setMoves((prev) =>
       prev.map((m, i) => (i === index ? { ...m, highlights } : m))
     );
@@ -143,7 +143,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
       ? startArrows
       : (moves[historyIndex - 1]?.arrows ?? []);
 
-  const currentHighlights: string[] =
+  const currentHighlights: BoardHighlight[] =
     historyIndex === 0
       ? startHighlights
       : (moves[historyIndex - 1]?.highlights ?? []);
@@ -166,7 +166,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
 
   /** Imposta le evidenziazioni della posizione corrente (in memoria). */
   const setHighlights = useCallback(
-    (highlights: string[]) => {
+    (highlights: BoardHighlight[]) => {
       if (historyIndex === 0) {
         setStartHighlights(highlights);
       } else {
@@ -188,6 +188,28 @@ export function useChessBoard(initialFen: string = START_FEN) {
       syncFen();
     },
     [history, syncFen]
+  );
+
+  /**
+   * Tronca la linea dalla mossa `moveIndex` (indice 0-based nell'array moves)
+   * e mantiene la posizione corrente quando appartiene ancora al tratto salvo.
+   */
+  const truncateMovesFrom = useCallback(
+    (moveIndex: number) => {
+      const threshold = Math.min(Math.max(moveIndex, 0), moves.length);
+      const nextMoves = moves.slice(0, threshold);
+      const nextHistory = history.slice(0, threshold + 1);
+      const nextHistoryIndex = Math.min(historyIndex, threshold);
+      const nextFen = nextHistory[nextHistoryIndex];
+      if (!nextFen) return;
+
+      game.current.load(nextFen);
+      setMoves(nextMoves);
+      setHistory(nextHistory);
+      setHistoryIndex(nextHistoryIndex);
+      setFen(nextFen);
+    },
+    [history, historyIndex, moves],
   );
 
   const undo = useCallback(() => {
@@ -246,5 +268,6 @@ export function useChessBoard(initialFen: string = START_FEN) {
     setPosition,
     loadSequence,
     goToMove,
+    truncateMovesFrom,
   };
 }

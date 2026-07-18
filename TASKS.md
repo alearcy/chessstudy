@@ -24,6 +24,14 @@
 
 ## Completed
 
+- FEAT-011 Miglioramenti scacchiera di studio
+  - [x] Uniformare altezza dinamica della sidebar mosse tra Studio e Analisi
+  - [x] Aggiungere menu contestuale per commentare o eliminare una mossa
+  - [x] Sostituire i pulsanti Muovi/Frecce/Evidenzia con gesture mouse e tastiera
+  - [x] Uniformare la dimensione della scacchiera tra Studio e Analisi
+  - [x] Esportare la scacchiera di studio come PGN o immagine annotata
+  - Spec: `docs/specs/miglioramenti-scacchiera-studio.md`
+
 - UI-007 Grafico andamento partita
   - [x] Condividere scala di valutazione e classificazione mosse
   - [x] Disegnare grafico e marker per migliori mosse ed errori gravi

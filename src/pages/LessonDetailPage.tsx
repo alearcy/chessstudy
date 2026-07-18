@@ -27,6 +27,7 @@ import type {
   LessonFormData,
   Board,
   BoardArrow,
+  BoardHighlight,
   Move,
   OpeningReference,
 } from "@/types";
@@ -53,6 +54,7 @@ import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
 import OpeningInsightsPanel from "@/components/analysis/OpeningInsightsPanel";
 import OpeningStudyDialog from "@/components/analysis/OpeningStudyDialog";
 import AnalysisSidebarTabs from "@/components/analysis/AnalysisSidebarTabs";
+import ViewportSidebar from "@/components/layout/ViewportSidebar";
 import ErrorNotice from "@/components/ErrorNotice";
 import {
   analyzePositions,
@@ -81,6 +83,14 @@ import {
 import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
 import { analyzeGameOpenings } from "@/services/openingBookService";
 import { classifyMoveAtIndex } from "@/services/moveAnnotationService";
+import { lessonBoardLayoutClass } from "@/lib/lessonBoardLayout";
+import {
+  buildStudyPgn,
+  createStudyBoardPng,
+  saveStudyExportFile,
+  studyExportFilename,
+  studyPgnBlob,
+} from "@/services/studyExportService";
 
 const SAVE_DEBOUNCE_MS = 800;
 
@@ -184,6 +194,8 @@ export default function LessonDetailPage() {
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
+  const [deleteMoveIndex, setDeleteMoveIndex] = useState<number | null>(null);
+  const [deletingMove, setDeletingMove] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<{
@@ -205,6 +217,9 @@ export default function LessonDetailPage() {
   const openingRequestBoardRef = useRef<number | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
   const [moveCommentDraft, setMoveCommentDraft] = useState("");
+  const [moveCommentFocusIndex, setMoveCommentFocusIndex] = useState<
+    number | null
+  >(null);
 
   const chess = useChessBoard();
   useMoveKeyboardNavigation({ undo: chess.undo, redo: chess.redo });
@@ -215,6 +230,7 @@ export default function LessonDetailPage() {
   const mateLineTimerRef = useRef<number | null>(null);
   const lastSavedCommentRef = useRef<string>("");
   const commentMoveIdRef = useRef<number | null>(null);
+  const moveCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const persistedMoveIdsByOrderRef = useRef<Map<number, number>>(new Map());
   const movePersistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const movePersistencePendingRef = useRef(false);
@@ -303,6 +319,16 @@ const selectedBoard = useMemo(
       setNoteTab("board");
     }
   }, [chess.historyIndex, noteTab]);
+
+  useEffect(() => {
+    if (
+      noteTab === "move" &&
+      moveCommentFocusIndex === chess.historyIndex
+    ) {
+      moveCommentTextareaRef.current?.focus();
+      setMoveCommentFocusIndex(null);
+    }
+  }, [chess.historyIndex, moveCommentFocusIndex, noteTab]);
 
   const loadData = useCallback(async () => {
     setPageError(null);
@@ -464,17 +490,11 @@ const selectedBoard = useMemo(
   // discreti: un tracciato = una freccia, un click = un toggle).
   const pendingAnnotationsRef = useRef<{
     arrows: BoardArrow[];
-    highlights: string[];
+    highlights: BoardHighlight[];
   } | null>(null);
-  // Refs aggiornate ogni render per leggere i valori correnti nei handler.
-  const currentArrowsRef = useRef(chess.currentArrows);
-  currentArrowsRef.current = chess.currentArrows;
-  const currentHighlightsRef = useRef(chess.currentHighlights);
-  currentHighlightsRef.current = chess.currentHighlights;
-
   const persistAnnotations = (
     arrows: BoardArrow[],
-    highlights: string[]
+    highlights: BoardHighlight[]
   ) => {
     if (!selectedBoardId) return;
     if (chess.historyIndex === 0) {
@@ -512,28 +532,22 @@ const selectedBoard = useMemo(
     }
   }, [chess.currentMove?.id]);
 
-  const handleArrowsChange = (next: BoardArrow[]) => {
+  const handleAnnotationsChange = (
+    nextArrows: BoardArrow[],
+    nextHighlights: BoardHighlight[],
+  ) => {
     // Chessground reporta la lista completa delle frecce disegnate: accettare
     // anche lista vuota abilita la cancellazione singola/totale dal layer draw.
     const seen = new Set<string>();
-    const merged = next.filter((a) => {
+    const merged = nextArrows.filter((a) => {
       const key = `${a[0]}-${a[1]}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
     chess.setArrows(merged);
-    persistAnnotations(merged, currentHighlightsRef.current);
-  };
-
-  const handleHighlightsChange = (next: string[]) => {
-    chess.setHighlights(next);
-    persistAnnotations(currentArrowsRef.current, next);
-  };
-
-  const handleClearArrows = () => {
-    chess.setArrows([]);
-    persistAnnotations([], currentHighlightsRef.current);
+    chess.setHighlights(nextHighlights);
+    persistAnnotations(merged, nextHighlights);
   };
 
   // Persistenza FEN/notes dopo una mossa o una modifica note: aggiorna stato boards.
@@ -1170,6 +1184,45 @@ const selectedBoard = useMemo(
     chess.redo();
   };
 
+  const handleCommentMove = (index: number) => {
+    chess.goToMove(index);
+    setNoteTab("move");
+    setMoveCommentFocusIndex(index);
+  };
+
+  const handleDeleteMove = (index: number) => {
+    setDeleteMoveIndex(index);
+  };
+
+  const confirmDeleteMove = async () => {
+    if (!selectedBoardId || deleteMoveIndex == null) return;
+    const boardId = selectedBoardId;
+    const threshold = deleteMoveIndex - 1;
+    setDeletingMove(true);
+    try {
+      await movePersistenceQueueRef.current;
+      if (moveCommentTimerRef.current) {
+        clearTimeout(moveCommentTimerRef.current);
+        moveCommentTimerRef.current = null;
+      }
+      commentMoveIdRef.current = null;
+      await deleteMovesFromOrder(boardId, threshold);
+      for (const order of persistedMoveIdsByOrderRef.current.keys()) {
+        if (order >= threshold) {
+          persistedMoveIdsByOrderRef.current.delete(order);
+        }
+      }
+      chess.truncateMovesFrom(threshold);
+      setDeleteMoveIndex(null);
+      setActionError(null);
+    } catch (e) {
+      console.error("[move-delete] errore", e);
+      setActionError("Eliminazione mossa fallita.");
+    } finally {
+      setDeletingMove(false);
+    }
+  };
+
   const handleReset = () => {
     if (lesson?.mode === "analysis") {
       chess.goToMove(0);
@@ -1189,6 +1242,51 @@ const selectedBoard = useMemo(
     } catch (e) {
       console.error("[board-reset] errore", e);
       setActionError("Ripristino scacchiera fallito.");
+    }
+  };
+
+  const handleExportPgn = async () => {
+    if (!lesson || !selectedBoard) return;
+    try {
+      const pgn = buildStudyPgn({
+        initialFen: selectedBoard.fen,
+        lessonTitle: lesson.title,
+        boardTitle: selectedBoard.title,
+        moves: chess.moves,
+        headers: selectedBoard.headers,
+      });
+      const filename = studyExportFilename(
+        lesson.title,
+        selectedBoard.title,
+        "pgn",
+      );
+      await saveStudyExportFile(studyPgnBlob(pgn), filename);
+      setActionError(null);
+    } catch (error) {
+      console.error("[study-pgn-export] errore", error);
+      setActionError("Esportazione PGN fallita.");
+    }
+  };
+
+  const handleExportImage = async () => {
+    if (!lesson || !selectedBoard) return;
+    try {
+      const image = await createStudyBoardPng({
+        fen: chess.fen,
+        arrows: chess.currentArrows,
+        highlights: chess.currentHighlights,
+        orientation: flipped ? "black" : "white",
+      });
+      const filename = studyExportFilename(
+        lesson.title,
+        selectedBoard.title,
+        "png",
+      );
+      await saveStudyExportFile(image, filename);
+      setActionError(null);
+    } catch (error) {
+      console.error("[study-image-export] errore", error);
+      setActionError("Esportazione immagine fallita.");
     }
   };
 
@@ -1376,7 +1474,7 @@ const selectedBoard = useMemo(
       )}
 
       {lesson.mode === "analysis" && selectedBoard ? (
-        <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-[12rem_minmax(32.5rem,44.5rem)_20rem] 2xl:grid-cols-[13rem_minmax(36.5rem,48.5rem)_22rem] xl:justify-center">
+        <div className={lessonBoardLayoutClass("analysis")}>
           <div><PgnHeadersSidebar headers={selectedBoard.headers ?? {}} /></div>
 
           <section className="flex min-w-0 flex-col gap-4 items-center">
@@ -1395,9 +1493,7 @@ const selectedBoard = useMemo(
                     lastMoveFromSquare={lastMoveFromSquare}
                     moveBadge={moveBadge}
                     kingStatus={kingStatus}
-                    onArrowsChange={handleArrowsChange}
-                    onHighlightsChange={handleHighlightsChange}
-                    onClearArrows={handleClearArrows}
+                    onAnnotationsChange={handleAnnotationsChange}
                     canUndo={chess.canUndo}
                     canRedo={chess.canRedo}
                     onMove={handleMove}
@@ -1514,8 +1610,8 @@ const selectedBoard = useMemo(
         <div
           className={
             lesson.mode === "study"
-              ? "grid grid-cols-1 gap-4 items-start lg:grid-cols-[14rem_minmax(24rem,38rem)_22rem] xl:grid-cols-[14rem_minmax(26rem,40rem)_24rem] lg:justify-center"
-              : "grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(24rem,40rem)_24rem] lg:justify-center"
+              ? lessonBoardLayoutClass("study")
+              : lessonBoardLayoutClass("compact")
           }
         >
           {lesson.mode === "study" && (
@@ -1547,9 +1643,7 @@ const selectedBoard = useMemo(
                     lastMoveFromSquare={lastMoveFromSquare}
                     moveBadge={moveBadge}
                     kingStatus={kingStatus}
-                    onArrowsChange={handleArrowsChange}
-                    onHighlightsChange={handleHighlightsChange}
-                    onClearArrows={handleClearArrows}
+                    onAnnotationsChange={handleAnnotationsChange}
                     canUndo={chess.canUndo}
                     canRedo={chess.canRedo}
                     onMove={handleMove}
@@ -1568,6 +1662,8 @@ const selectedBoard = useMemo(
                     converting={converting}
                     boardOrientation={flipped ? "black" : "white"}
                     onFlip={handleFlip}
+                    onExportPgn={handleExportPgn}
+                    onExportImage={handleExportImage}
                   />
               </div>
                 </div>
@@ -1654,6 +1750,7 @@ const selectedBoard = useMemo(
                         />
                       ) : (
                         <Textarea
+                          ref={moveCommentTextareaRef}
                           value={moveCommentDraft}
                           onChange={handleMoveCommentChange}
                           onBlur={handleMoveCommentBlur}
@@ -1675,7 +1772,7 @@ const selectedBoard = useMemo(
             )}
           </section>
 
-          <aside className="w-full min-w-0">
+          <ViewportSidebar className="w-full" aria-label="Mosse dello studio">
             {selectedBoard ? (
               <MoveNotation
                 moves={chess.moves}
@@ -1685,18 +1782,57 @@ const selectedBoard = useMemo(
                 startEvalMate={selectedBoard?.evalMate ?? null}
                 startFen={selectedBoard.fen}
                 startEvalBestMoveUci={selectedBoard?.evalBestMoveUci ?? null}
+                fullHeight
                 showUserCommentIndicators
+                onCommentMove={handleCommentMove}
+                onDeleteMove={handleDeleteMove}
               />
             ) : (
               <div className="text-sm text-muted-foreground">
                 -
               </div>
             )}
-          </aside>
+          </ViewportSidebar>
         </div>
       )}
 
       {/* Dialog conferma reset scacchiera */}
+
+      <Dialog
+        open={deleteMoveIndex != null}
+        onOpenChange={(open) => {
+          if (!open && !deletingMove) setDeleteMoveIndex(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Elimina mossa</DialogTitle>
+            <DialogDescription>
+              Verranno eliminate la mossa {deleteMoveIndex ?? ""}
+              {deleteMoveIndex != null
+                ? ` (${chess.moves[deleteMoveIndex - 1]?.moveNotation ?? ""})`
+                : ""}
+              {" e tutte le mosse successive, con i relativi commenti e le annotazioni. L'operazione non è reversibile."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deletingMove}
+              onClick={() => setDeleteMoveIndex(null)}
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deletingMove || movePersistencePending}
+              onClick={confirmDeleteMove}
+            >
+              {deletingMove ? "Eliminazione..." : "Elimina mossa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog import PGN */}
       <ImportPgnDialog
