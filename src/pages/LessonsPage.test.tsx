@@ -6,12 +6,10 @@ import LessonsPage from "@/pages/LessonsPage";
 
 const {
   getLessonsPageMock,
-  ensureDefaultProfileMock,
   getAppSettingsMock,
   setLessonFavoriteMock,
 } = vi.hoisted(() => ({
   getLessonsPageMock: vi.fn(),
-  ensureDefaultProfileMock: vi.fn(() => Promise.resolve({ id: 1 })),
   getAppSettingsMock: vi.fn(),
   setLessonFavoriteMock: vi.fn(),
 }));
@@ -22,10 +20,6 @@ vi.mock("@/services/lessonService", () => ({
   updateLesson: vi.fn(),
   deleteLesson: vi.fn(),
   setLessonFavorite: setLessonFavoriteMock,
-}));
-
-vi.mock("@/services/profileService", () => ({
-  ensureDefaultProfile: ensureDefaultProfileMock,
 }));
 
 vi.mock("@/services/settingsService", () => ({
@@ -42,7 +36,6 @@ vi.mock("@/components/board/ImportChessComDialog", () => ({
 afterEach(() => {
   cleanup();
   getLessonsPageMock.mockReset();
-  ensureDefaultProfileMock.mockClear();
   getAppSettingsMock.mockReset();
   setLessonFavoriteMock.mockReset();
 });
@@ -58,6 +51,28 @@ function pageResult(items: unknown[]) {
 }
 
 describe("LessonsPage database queries", () => {
+  it("shows only creation actions and the empty state when the archive is empty", async () => {
+    getLessonsPageMock.mockResolvedValue(pageResult([]));
+
+    const view = render(
+      <MemoryRouter>
+        <LessonsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await view.findByText("Nessuna lezione o analisi")).toBeTruthy();
+    expect(view.getByText("Usa i pulsanti di creazione per cominciare!")).toBeTruthy();
+    expect(view.queryByRole("region", { name: "Filtri lezioni" })).toBeNull();
+
+    const creationSection = view.getByRole("button", { name: /Nuovo studio/i }).closest("section");
+    expect(creationSection).toBeTruthy();
+    expect(creationSection?.className).not.toContain("border-b");
+
+    for (const name of [/Nuovo studio/i, /Importa PGN/i, /Chess\.com/i, /Lichess/i]) {
+      expect(view.getByRole("button", { name }).className).toContain("bg-primary");
+    }
+  });
+
   it("renders compact two-row cards without the page title", async () => {
     getLessonsPageMock.mockResolvedValue(pageResult([{
       id: 1,
@@ -91,7 +106,7 @@ describe("LessonsPage database queries", () => {
     expect(within(content as HTMLElement).getByText("Lichess")).toBeTruthy();
   });
 
-  it("reloads the restored profile after the global backup event", async () => {
+  it("reloads the first page after the global backup event", async () => {
     getLessonsPageMock.mockResolvedValue(pageResult([]));
     render(
       <MemoryRouter>
@@ -102,8 +117,10 @@ describe("LessonsPage database queries", () => {
     await waitFor(() => expect(getLessonsPageMock).toHaveBeenCalledOnce());
     window.dispatchEvent(new Event("chessstudy:database-backup-restored"));
     await waitFor(() => {
-      expect(ensureDefaultProfileMock).toHaveBeenCalledTimes(2);
       expect(getLessonsPageMock.mock.calls.length).toBeGreaterThan(1);
+      expect(getLessonsPageMock).toHaveBeenLastCalledWith(expect.objectContaining({
+        page: 1,
+      }));
     });
   });
 
@@ -151,7 +168,6 @@ describe("LessonsPage database queries", () => {
 
     await waitFor(() => {
       expect(getLessonsPageMock).toHaveBeenCalledWith(expect.objectContaining({
-        profileId: 1,
         page: 1,
         pageSize: 20,
       }));
@@ -358,5 +374,6 @@ describe("LessonsPage imported game favorites", () => {
     fireEvent.click(view.getByRole("button", { name: "Preferite" }));
 
     expect(await view.findByText("Nessuna partita preferita")).toBeTruthy();
+    expect(view.getByRole("region", { name: "Filtri lezioni" })).toBeTruthy();
   });
 });

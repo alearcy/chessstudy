@@ -2,6 +2,34 @@
 
 ## In Progress
 
+## Completed
+
+- UI-008 Empty state homepage senza filtri
+  - [x] Nascondere filtri e separatore quando non esistono studi o analisi
+  - [x] Mantenere i filtri quando una ricerca non restituisce risultati
+  - [x] Uniformare lo stile chiaro dei quattro pulsanti di creazione/importazione
+  - [x] Verificare test, lint e build
+  - [x] Confermato il comportamento nell'app
+  - Spec: `docs/specs/empty-state-senza-filtri.md`
+
+- WEB-001 Migrazione web full-client con Supabase e Stockfish WASM
+  - [x] Usare il logo SVG nella testata dell'app e nel form di login
+  - [x] Configurare autenticazione con account amministrati e schema/RLS Supabase
+    - [x] Implementare client Auth, route, feedback UI e migrazione SQL versionata
+    - [x] Verificare test frontend, typecheck, build e controlli statici schema
+    - [x] Applicare la migrazione e verificare RLS con due utenti tramite MCP
+    - [x] Verificare advisor e configurazione Auth hosted
+    - [x] Forzare il cambio della password temporanea al primo accesso
+  - [x] Sostituire Dexie con repository Supabase e import backup
+  - [x] Rendere Stockfish WASM il solo motore e portare le impostazioni
+  - [x] Rimuovere Tauri/Rust e verificare il deploy statico end-to-end
+    - [x] Rimuovere runtime, sorgenti, binari e dipendenze desktop
+    - [x] Configurare Cloudflare Pages e verificare build/preview statici locali
+    - [x] Pubblicare `https://chessstudy.pages.dev` e configurare i redirect Auth
+    - [x] Confermato il completamento delle verifiche browser
+  - Spec: `docs/specs/migrazione-web-supabase-stockfish-wasm.md`
+  - ADR: `docs/adr/0007-web-supabase-stockfish-wasm.md`
+
 - UI-006 Conferma conversione da analisi a studio
   - [x] Aprire un dialog senza avviare subito la conversione
   - [x] Gestire annullamento, conferma e stato in corso
@@ -21,8 +49,6 @@
   - [x] Rimuovere il pallino e la prop inutilizzata
   - [x] Verificare test e build
   - Spec: `docs/specs/analisi-aperture.md`
-
-## Completed
 
 - FEAT-011 Miglioramenti scacchiera di studio
   - [x] Uniformare altezza dinamica della sidebar mosse tra Studio e Analisi

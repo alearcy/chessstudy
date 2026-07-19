@@ -106,9 +106,9 @@ export default function DatabaseBackupDialog({
       await restoreDatabaseBackupJson(pending.contents);
       await onRestored();
       setPending(null);
-      setSuccess("Backup ripristinato correttamente.");
+      setSuccess("Backup importato correttamente.");
     } catch (cause) {
-      setError(errorMessage(cause, "Ripristino del backup non riuscito."));
+      setError(errorMessage(cause, "Importazione del backup non riuscita."));
       setRetryOperation("restore");
     } finally {
       setBusy(null);
@@ -127,10 +127,10 @@ export default function DatabaseBackupDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DatabaseBackup className="size-5" />
-            Backup locale
+            Backup dati
           </DialogTitle>
           <DialogDescription>
-            Esporta tutti i profili e i contenuti oppure ripristina un backup precedente.
+            Esporta i dati del tuo account oppure importa un backup locale v1.
           </DialogDescription>
         </DialogHeader>
 
@@ -166,8 +166,9 @@ export default function DatabaseBackupDialog({
               <p className="font-medium">{pending.name}</p>
               <p className="text-sm text-muted-foreground">{formatSummary(pending.summary)}</p>
             </div>
-            <p className="text-sm text-destructive">
-              Il ripristino sostituirà tutti i dati presenti nell'applicazione. Questa operazione non è annullabile.
+            <p className="text-sm text-muted-foreground">
+              L'importazione aggiunge i contenuti al tuo account. Se trova un UID già
+              presente, non scrive nulla e ti chiede di annullare.
             </p>
             <Button
               variant="destructive"
@@ -175,7 +176,7 @@ export default function DatabaseBackupDialog({
               disabled={busy !== null}
             >
               {busy === "restore" && <Loader2 className="size-4 animate-spin" />}
-              Ripristina e sostituisci i dati
+              Importa nel mio account
             </Button>
           </div>
         )}

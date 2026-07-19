@@ -2,6 +2,9 @@
 
 - **Data:** 2026-07-12
 - **Stato:** Accepted
+- **Nota:** ADR-0007 supersede soltanto le parti relative al runtime Stockfish
+  nativo e al fallback WASM; strategia adattiva, soglie, default e coda restano
+  Accepted.
 
 ## Contesto
 

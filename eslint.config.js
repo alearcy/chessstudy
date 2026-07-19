@@ -12,7 +12,6 @@ export default tseslint.config(
       "dist",
       "node_modules",
       "public/stockfish",
-      "src-tauri/target",
     ],
   },
   js.configs.recommended,

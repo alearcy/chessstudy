@@ -24,11 +24,6 @@ dist-ssr
 *.sw?
 tsconfig.tsbuildinfo
 
-# Local LLM models
-models/
-!src-tauri/models/
-!src-tauri/models/*.gguf
-
 # opencode agent config
 .agents/
 skills-lock.json

@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildStudyPgn,
   createStudyBoardPng,
+  saveStudyExportFile,
   studyExportFilename,
 } from "@/services/studyExportService";
 import type { Move } from "@/types";
@@ -126,5 +127,38 @@ describe("createStudyBoardPng", () => {
     expect(context.moveTo).toHaveBeenCalledWith(750, 50);
     expect(context.lineTo).toHaveBeenCalledWith(750, 750);
     expect(context.fillText).toHaveBeenCalledWith("♖", 50, 50);
+  });
+});
+
+describe("saveStudyExportFile", () => {
+  it("usa sempre il download browser anche se esiste un marker Tauri storico", async () => {
+    const click = vi.fn();
+    const createElement = vi.spyOn(document, "createElement").mockReturnValue({
+      click,
+      href: "",
+      download: "",
+    } as unknown as HTMLAnchorElement);
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:study");
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {},
+    });
+
+    try {
+      await expect(saveStudyExportFile(
+        new Blob(["1. e4"], { type: "application/x-chess-pgn" }),
+        "studio.pgn",
+      )).resolves.toBe("studio.pgn");
+      expect(createObjectUrl).toHaveBeenCalledOnce();
+      expect(click).toHaveBeenCalledOnce();
+      expect(revokeObjectUrl).toHaveBeenCalledWith("blob:study");
+    } finally {
+      Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+      createElement.mockRestore();
+      createObjectUrl.mockRestore();
+      revokeObjectUrl.mockRestore();
+    }
+
   });
 });

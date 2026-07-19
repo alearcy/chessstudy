@@ -3,6 +3,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "@/App";
 
+vi.mock("@/auth/AuthProvider", () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+vi.mock("@/auth/authContext", () => ({
+  useAuth: () => ({
+    authError: null,
+    loading: false,
+    passwordChangeRequired: false,
+    refreshPasswordChangeRequired: vi.fn(),
+    user: { id: "user-1", email: "player@example.com" },
+  }),
+}));
+vi.mock("@/auth/authService", () => ({ signOut: vi.fn() }));
+
 vi.mock("@/pages/LessonsPage", () => ({ default: () => <div>Lezioni</div> }));
 vi.mock("@/pages/LessonDetailPage", () => ({ default: () => <div>Dettaglio</div> }));
 vi.mock("@/components/SettingsDialog", () => ({
@@ -21,6 +35,16 @@ vi.mock("@/components/DatabaseBackupDialog", () => ({
 afterEach(cleanup);
 
 describe("App toolbar", () => {
+  it("uses the Chess Study SVG as the home link", () => {
+    const view = render(<App />);
+    const homeLink = view.getByRole("link", { name: "Chess Study" });
+    const logo = view.getByRole("img", { name: "Chess Study" });
+
+    expect(homeLink.getAttribute("href")).toBe("/");
+    expect(homeLink.contains(logo)).toBe(true);
+    expect(logo.getAttribute("src")).toBe("/chessstudy.svg");
+  });
+
   it("shows an icon-only backup button next to settings and opens the dialog", () => {
     const view = render(<App />);
     const backupButton = view.getByRole("button", { name: "Backup dati" });

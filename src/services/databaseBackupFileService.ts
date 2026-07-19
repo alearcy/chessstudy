@@ -3,30 +3,8 @@ function backupFilename(): string {
   return `chessstudy-backup-${date}.json`;
 }
 
-function basename(path: string): string {
-  return path.split(/[\\/]/).pop() || path;
-}
-
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 export async function saveDatabaseBackupFile(contents: string): Promise<string | null> {
   const filename = backupFilename();
-  if (isTauriRuntime()) {
-    const [{ save }, { writeTextFile }] = await Promise.all([
-      import("@tauri-apps/plugin-dialog"),
-      import("@tauri-apps/plugin-fs"),
-    ]);
-    const path = await save({
-      defaultPath: filename,
-      filters: [{ name: "Backup Chess Study", extensions: ["json"] }],
-    });
-    if (!path) return null;
-    await writeTextFile(path, contents);
-    return basename(path);
-  }
-
   const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -42,20 +20,6 @@ export interface SelectedBackupFile {
 }
 
 export async function selectDatabaseBackupFile(): Promise<SelectedBackupFile | null> {
-  if (isTauriRuntime()) {
-    const [{ open }, { readTextFile }] = await Promise.all([
-      import("@tauri-apps/plugin-dialog"),
-      import("@tauri-apps/plugin-fs"),
-    ]);
-    const path = await open({
-      multiple: false,
-      directory: false,
-      filters: [{ name: "Backup Chess Study", extensions: ["json"] }],
-    });
-    if (typeof path !== "string") return null;
-    return { name: basename(path), contents: await readTextFile(path) };
-  }
-
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";

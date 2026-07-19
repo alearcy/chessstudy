@@ -1,7 +1,7 @@
 # ADR-0002: Conversione a Tauri con Stockfish 18 nativo e Gemma 4 E2B locale
 
 - **Data:** 2026-06-22
-- **Stato:** Accepted
+- **Stato:** Superseded da [ADR-0007](0007-web-supabase-stockfish-wasm.md)
 
 ## Contesto
 

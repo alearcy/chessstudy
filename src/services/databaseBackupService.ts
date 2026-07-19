@@ -1,16 +1,33 @@
-import db from "@/db/database";
-import type { Board, Lesson, LocalProfile, Move } from "@/types";
+import { supabase } from "@/lib/supabase/client";
+import { toJson } from "@/lib/dataUtils";
+import {
+  boardFromRow,
+  lessonFromRow,
+  moveFromRow,
+  type BoardRow,
+  type LessonRow,
+  type MoveRow,
+} from "@/repositories/supabaseMappers";
+import type { Board, Lesson, Move } from "@/types";
 
 const BACKUP_FORMAT = "chessstudy-backup";
 const BACKUP_VERSION = 1;
 export const DATABASE_BACKUP_RESTORED_EVENT = "chessstudy:database-backup-restored";
+
+interface LegacyBackupProfile {
+  id?: number;
+  uid: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 interface DatabaseBackupV1 {
   format: typeof BACKUP_FORMAT;
   version: typeof BACKUP_VERSION;
   createdAt: string;
   data: {
-    profiles: LocalProfile[];
+    profiles: LegacyBackupProfile[];
     lessons: Lesson[];
     boards: Board[];
     moves: Move[];
@@ -135,7 +152,7 @@ function validateAndReviveBackup(value: unknown): DatabaseBackupV1 {
       ...record,
       createdAt: requireDate(record, "createdAt", label),
       updatedAt: requireDate(record, "updatedAt", label),
-    } as unknown as LocalProfile;
+    } as unknown as LegacyBackupProfile;
   });
 
   const revivedLessons = lessons.map((record, index) => {
@@ -235,19 +252,44 @@ function validateAndReviveBackup(value: unknown): DatabaseBackupV1 {
 }
 
 export async function createDatabaseBackupJson(): Promise<string> {
-  const [profiles, lessons, boards, moves] = await db.transaction(
-    "r",
-    db.profiles,
-    db.lessons,
-    db.boards,
-    db.moves,
-    () => Promise.all([
-      db.profiles.toArray(),
-      db.lessons.toArray(),
-      db.boards.toArray(),
-      db.moves.toArray(),
-    ]),
-  );
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user) throw new Error("Sessione non disponibile.");
+
+  async function fetchAllRows<T>(
+    table: "lessons" | "boards" | "moves",
+  ): Promise<T[]> {
+    const rows: T[] = [];
+    const pageSize = 1000;
+    for (let start = 0; ; start += pageSize) {
+      const { data, error } = await supabase
+        .from(table)
+        .select("*")
+        .order("id", { ascending: true })
+        .range(start, start + pageSize - 1);
+      if (error) throw error;
+      const page = (data ?? []) as T[];
+      rows.push(...page);
+      if (page.length < pageSize) return rows;
+    }
+  }
+
+  const [lessonRows, boardRows, moveRows] = await Promise.all([
+    fetchAllRows<LessonRow>("lessons"),
+    fetchAllRows<BoardRow>("boards"),
+    fetchAllRows<MoveRow>("moves"),
+  ]);
+  const lessons = lessonRows.map((row) => ({ ...lessonFromRow(row), profileId: 1 }));
+  const boards = boardRows.map(boardFromRow);
+  const moves = moveRows.map(moveFromRow);
+  const profileCreatedAt = new Date(userData.user.created_at);
+  const profiles: LegacyBackupProfile[] = [{
+    id: 1,
+    uid: userData.user.id,
+    name: "Principale",
+    createdAt: profileCreatedAt,
+    updatedAt: profileCreatedAt,
+  }];
 
   const backup: DatabaseBackupV1 = {
     format: BACKUP_FORMAT,
@@ -274,17 +316,17 @@ export function inspectDatabaseBackupJson(json: string): DatabaseBackupSummary {
 
 export async function restoreDatabaseBackupJson(json: string): Promise<DatabaseBackupSummary> {
   const backup = parseDatabaseBackupJson(json);
-
-  await db.transaction("rw", db.profiles, db.lessons, db.boards, db.moves, async () => {
-    await db.moves.clear();
-    await db.boards.clear();
-    await db.lessons.clear();
-    await db.profiles.clear();
-    if (backup.data.profiles.length > 0) await db.profiles.bulkAdd(backup.data.profiles);
-    if (backup.data.lessons.length > 0) await db.lessons.bulkAdd(backup.data.lessons);
-    if (backup.data.boards.length > 0) await db.boards.bulkAdd(backup.data.boards);
-    if (backup.data.moves.length > 0) await db.moves.bulkAdd(backup.data.moves);
+  const payload = toJson(backup);
+  const { data, error } = await supabase.rpc("import_database_backup_v1", {
+    p_backup: payload,
   });
-
-  return backupSummary(backup);
+  if (error) {
+    if (error.code === "23505") {
+      throw new BackupValidationError(
+        "Il backup contiene contenuti già presenti. L'importazione è stata annullata senza modifiche.",
+      );
+    }
+    throw error;
+  }
+  return (data ?? backupSummary(backup)) as unknown as DatabaseBackupSummary;
 }

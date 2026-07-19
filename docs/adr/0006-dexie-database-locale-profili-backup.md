@@ -1,6 +1,6 @@
 # ADR-0006 — Dexie/IndexedDB per database locale, profili e backup
 
-- **Stato:** Accepted
+- **Stato:** Superseded da [ADR-0007](0007-web-supabase-stockfish-wasm.md)
 - **Data:** 2026-07-15
 
 ## Context

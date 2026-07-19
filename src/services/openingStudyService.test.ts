@@ -1,13 +1,23 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import db from "@/db/database";
-import type { OpeningReference } from "@/types";
+const { fromMock, rpcMock } = vi.hoisted(() => ({
+  fromMock: vi.fn(),
+  rpcMock: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase/client", () => ({
+  supabase: {
+    from: fromMock,
+    rpc: rpcMock,
+  },
+}));
+
 import {
   OpeningDestinationConflict,
   addOpeningToStudy,
   createOpeningStudy,
-  getOpeningStudyDestinations,
 } from "@/services/openingStudyService";
+import type { OpeningReference } from "@/types";
 
 const sicilian: OpeningReference = {
   eco: "B20",
@@ -16,104 +26,91 @@ const sicilian: OpeningReference = {
   pgn: "1. e4 c5",
 };
 
-const dragon: OpeningReference = {
-  eco: "B70",
-  name: "Sicilian Defense: Dragon Variation",
-  family: "Sicilian Defense",
-  pgn: "1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 g6",
-};
+function studiesQuery(data: unknown[]) {
+  const builder = {
+    select: vi.fn(),
+    eq: vi.fn(),
+  };
+  builder.select.mockReturnValue(builder);
+  builder.eq.mockResolvedValue({ data, error: null });
+  return builder;
+}
 
-describe("openingStudyService", () => {
-  afterEach(async () => {
-    await db.delete();
-    await db.open();
+describe("opening study remote persistence", () => {
+  beforeEach(() => {
+    fromMock.mockReset();
+    rpcMock.mockReset();
   });
 
-  it("creates a study board containing the complete opening sequence", async () => {
-    const { lessonId, boardId } = await createOpeningStudy(sicilian, {
-      title: "Siciliana",
-      conflict: "error",
+  it("creates lesson, board and complete line with one RPC", async () => {
+    fromMock.mockReturnValue(studiesQuery([]));
+    rpcMock.mockResolvedValue({
+      data: { lesson_id: 10, board_id: 20 },
+      error: null,
     });
 
-    await expect(db.lessons.get(lessonId)).resolves.toMatchObject({
+    await expect(createOpeningStudy(sicilian, {
       title: "Siciliana",
+      conflict: "error",
+    })).resolves.toEqual({ lessonId: 10, boardId: 20 });
+
+    const [, args] = rpcMock.mock.calls[0];
+    expect(rpcMock).toHaveBeenCalledWith("save_lesson_tree", expect.any(Object));
+    expect(args.p_moves).toHaveLength(2);
+    expect(args.p_moves.map((move: { move_notation: string }) => move.move_notation))
+      .toEqual(["e4", "c5"]);
+  });
+
+  it("surfaces an explicit conflict without writing", async () => {
+    fromMock.mockReturnValue(studiesQuery([{
+      id: 10,
+      uid: "10000000-0000-4000-8000-000000000010",
+      title: "Siciliana",
+      description: "",
       mode: "study",
-    });
-    await expect(db.boards.get(boardId)).resolves.toMatchObject({
-      title: "Sicilian Defense",
-      openingEco: "B20",
-      openingFamily: "Sicilian Defense",
-    });
+      is_favorite: false,
+      boards: [],
+    }]));
 
-    const moves = await db.moves.where("boardId").equals(boardId).sortBy("order");
-    expect(moves.map((move) => move.moveNotation)).toEqual(["e4", "c5"]);
-    expect(moves[0].parentId).toBeNull();
-    expect(moves[1].parentId).toBe(moves[0].id);
-  });
-
-  it("adds a variant as a new board without renaming the destination study", async () => {
-    const { lessonId } = await createOpeningStudy(sicilian, {
-      title: "Siciliana",
-      conflict: "error",
-    });
-
-    const { boardId } = await addOpeningToStudy(dragon, {
-      lessonId,
-      conflict: "error",
-    });
-
-    await expect(db.lessons.get(lessonId)).resolves.toMatchObject({
-      title: "Siciliana",
-    });
-    const boards = await db.boards.where("lessonId").equals(lessonId).sortBy("order");
-    expect(boards.map((board) => board.title)).toEqual([
-      "Sicilian Defense",
-      "Sicilian Defense: Dragon Variation",
-    ]);
-
-    const moves = await db.moves.where("boardId").equals(boardId).sortBy("order");
-    expect(moves.map((move) => move.moveNotation)).toEqual([
-      "e4", "c5", "Nf3", "d6", "d4", "cxd4", "Nxd4", "Nf6", "Nc3", "g6",
-    ]);
-  });
-
-  it("suggests a free name instead of silently overwriting a study", async () => {
-    await createOpeningStudy(sicilian, {
-      title: "Siciliana",
-      conflict: "error",
-    });
-
-    await expect(createOpeningStudy(dragon, {
+    await expect(createOpeningStudy(sicilian, {
       title: "Siciliana",
       conflict: "error",
     })).rejects.toMatchObject({
       kind: "lesson",
       suggestedName: "Siciliana (2)",
     } satisfies Partial<OpeningDestinationConflict>);
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
-  it("lists related studies first using persisted opening family metadata", async () => {
-    const related = await createOpeningStudy(sicilian, {
-      title: "Repertorio principale",
-      conflict: "error",
-    });
-    await createOpeningStudy({
-      eco: "C50",
-      name: "Italian Game",
-      family: "Italian Game",
-      pgn: "1. e4 e5 2. Nf3 Nc6 3. Bc4",
-    }, {
-      title: "Altro studio",
-      conflict: "error",
+  it("replaces a conflicting board atomically after confirmation", async () => {
+    fromMock.mockReturnValue(studiesQuery([{
+      id: 10,
+      uid: "10000000-0000-4000-8000-000000000010",
+      title: "Siciliana",
+      description: "",
+      mode: "study",
+      is_favorite: false,
+      boards: [{
+        id: 20,
+        uid: "20000000-0000-4000-8000-000000000020",
+        title: "Sicilian Defense",
+        board_order: 0,
+        opening_family: "Sicilian Defense",
+      }],
+    }]));
+    rpcMock.mockResolvedValue({
+      data: { lesson_id: 10, board_id: 20 },
+      error: null,
     });
 
-    const destinations = await getOpeningStudyDestinations(dragon);
-
-    expect(destinations[0]).toMatchObject({
-      lessonId: related.lessonId,
-      title: "Repertorio principale",
-      related: true,
+    await addOpeningToStudy(sicilian, {
+      lessonId: 10,
+      conflict: "overwrite",
     });
-    expect(destinations[1].related).toBe(false);
+
+    expect(rpcMock).toHaveBeenCalledWith("save_board_line", expect.objectContaining({
+      p_lesson_id: 10,
+      p_board_id: 20,
+    }));
   });
 });

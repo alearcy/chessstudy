@@ -1,9 +1,12 @@
 import { Chess, DEFAULT_POSITION } from "chess.js";
-import db from "@/db/database";
-import { createStableId } from "@/db/recordMetadata";
-import { createBoardWithFen } from "@/services/boardService";
-import { createLesson } from "@/services/lessonService";
-import type { Move } from "@/types";
+import { createStableId } from "@/lib/dataUtils";
+import { supabase } from "@/lib/supabase/client";
+import {
+  boardPayload,
+  lessonPayload,
+  movePayload,
+} from "@/repositories/supabaseMappers";
+import { requireData } from "@/repositories/repositoryError";
 
 export interface ParsedPgnMove {
   san: string;
@@ -134,52 +137,41 @@ export async function importPgnToLesson(
   pgn: string
 ): Promise<number> {
   const parsed = parsePgn(pgn);
-  if (parsed.moves.length === 0) {
-    // PGN valido ma senza mosse: crea comunque la board con la posizione di partenza.
-    return createBoardWithFen(lessonId, {
+  const now = new Date();
+  const response = await supabase.rpc("save_board_line", {
+    p_lesson_id: lessonId,
+    p_board_id: null,
+    p_board: boardPayload({
+      uid: createStableId(),
       title: parsed.title,
       fen: parsed.startFen,
       notes: "",
+      arrows: [],
+      highlights: [],
       whiteName: parsed.whiteName,
       blackName: parsed.blackName,
       headers: parsed.headers,
-    });
-  }
-
-  const boardId = await createBoardWithFen(lessonId, {
-    title: parsed.title,
-    fen: parsed.startFen,
-    notes: "",
-    whiteName: parsed.whiteName,
-    blackName: parsed.blackName,
-    headers: parsed.headers,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    p_moves: parsed.moves.map((move, order) => movePayload({
+      uid: createStableId(),
+      moveNotation: move.san,
+      fen: move.fenAfter,
+      order,
+      comment: move.comment,
+      arrows: [],
+      highlights: [],
+      createdAt: now,
+      updatedAt: now,
+    })),
   });
-
-  // Costruisce i record Move con parentId placeholder (aggiornato dopo bulkAdd).
-  const now = new Date();
-  const records: Omit<Move, "id">[] = parsed.moves.map((m, i) => ({
-    uid: createStableId(),
-    boardId,
-    parentId: null,
-    order: i,
-    moveNotation: m.san,
-    fen: m.fenAfter,
-    comment: m.comment,
-    stockfishComment: null,
-    arrows: [],
-    highlights: [],
-    createdAt: now,
-    updatedAt: now,
-  }));
-
-  const ids = (await db.moves.bulkAdd(records, { allKeys: true })) as number[];
-
-  // Aggiorna parentId con l'id reale della mossa precedente.
-  for (let i = 1; i < ids.length; i++) {
-    await db.moves.update(ids[i], { parentId: ids[i - 1] });
-  }
-
-  return boardId;
+  const result = requireData(
+    response.data as { board_id: number } | null,
+    response.error,
+    "Importazione PGN fallita.",
+  );
+  return result.board_id;
 }
 
 /**
@@ -193,10 +185,47 @@ export async function importPgnAsLesson(
   pgn: string
 ): Promise<{ lessonId: number; boardId: number }> {
   const parsed = parsePgn(pgn);
-  const lessonId = await createLesson(
-    { title: parsed.title, description: "" },
-    "analysis"
+  const now = new Date();
+  const response = await supabase.rpc("save_lesson_tree", {
+    p_lesson_id: null,
+    p_lesson: lessonPayload({
+      uid: createStableId(),
+      title: parsed.title,
+      description: "",
+      mode: "analysis",
+      createdAt: now,
+      updatedAt: now,
+    }),
+    p_board: boardPayload({
+      uid: createStableId(),
+      title: parsed.title,
+      fen: parsed.startFen,
+      notes: "",
+      arrows: [],
+      highlights: [],
+      whiteName: parsed.whiteName,
+      blackName: parsed.blackName,
+      headers: parsed.headers,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    p_moves: parsed.moves.map((move, order) => movePayload({
+      uid: createStableId(),
+      moveNotation: move.san,
+      fen: move.fenAfter,
+      order,
+      comment: move.comment,
+      arrows: [],
+      highlights: [],
+      createdAt: now,
+      updatedAt: now,
+    })),
+    p_replace: false,
+  });
+  const result = requireData(
+    response.data as { lesson_id: number; board_id: number } | null,
+    response.error,
+    "Importazione PGN fallita.",
   );
-  const boardId = await importPgnToLesson(lessonId, pgn);
-  return { lessonId, boardId };
+  return { lessonId: result.lesson_id, boardId: result.board_id };
 }

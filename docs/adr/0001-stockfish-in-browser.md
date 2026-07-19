@@ -1,7 +1,7 @@
 # ADR-0001: Stockfish 18 in browser (lite single-threaded WASM)
 
 **Data:** 2026-06-22
-**Stato:** Accettato
+**Stato:** Superseded da [ADR-0007](0007-web-supabase-stockfish-wasm.md)
 
 ## Contesto
 FEAT-004 richiede analisi automatica delle mosse di una partita con "l'ultimo

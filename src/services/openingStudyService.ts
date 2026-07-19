@@ -1,10 +1,14 @@
 import { Chess } from "chess.js";
 
-import db from "@/db/database";
-import { buildLessonSearchTerms, createStableId } from "@/db/recordMetadata";
-import { refreshLessonSearchIndex } from "@/services/lessonSearchService";
-import { ensureDefaultProfile } from "@/services/profileService";
-import type { Board, Lesson, Move, OpeningReference } from "@/types";
+import { createStableId } from "@/lib/dataUtils";
+import { supabase } from "@/lib/supabase/client";
+import {
+  boardPayload,
+  lessonPayload,
+  movePayload,
+} from "@/repositories/supabaseMappers";
+import { requireData, throwIfError } from "@/repositories/repositoryError";
+import type { OpeningReference } from "@/types";
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -23,14 +27,27 @@ export class OpeningDestinationConflict extends Error {
     public readonly existingId: number,
     public readonly suggestedName: string,
   ) {
-    super(kind === "lesson" ? "Esiste già uno studio con questo nome." : "Esiste già una scacchiera con questo nome.");
+    super(kind === "lesson"
+      ? "Esiste già uno studio con questo nome."
+      : "Esiste già una scacchiera con questo nome.");
     this.name = "OpeningDestinationConflict";
   }
 }
 
-interface ParsedOpeningMove {
-  san: string;
-  fenAfter: string;
+interface StudyRow {
+  id: number;
+  uid: string;
+  title: string;
+  description: string;
+  mode: "study" | "analysis";
+  is_favorite: boolean;
+  boards: Array<{
+    id: number;
+    uid: string;
+    title: string;
+    board_order: number;
+    opening_family: string | null;
+  }>;
 }
 
 function normalizeName(name: string): string {
@@ -40,89 +57,55 @@ function normalizeName(name: string): string {
 function nextAvailableName(baseName: string, existingNames: string[]): string {
   const normalized = new Set(existingNames.map(normalizeName));
   if (!normalized.has(normalizeName(baseName))) return baseName;
-
   let suffix = 2;
   while (normalized.has(normalizeName(`${baseName} (${suffix})`))) suffix += 1;
   return `${baseName} (${suffix})`;
 }
 
-function parseOpeningMoves(opening: OpeningReference): ParsedOpeningMove[] {
+function openingPayload(opening: OpeningReference, boardTitle: string) {
   const chess = new Chess();
   chess.loadPgn(opening.pgn);
   const history = chess.history({ verbose: true });
-  if (history.length === 0) throw new Error("L'apertura selezionata non contiene mosse valide.");
-  return history.map((move) => ({ san: move.san, fenAfter: move.after }));
-}
-
-function openingBoardData(
-  lessonId: number,
-  opening: OpeningReference,
-  title: string,
-  order: number,
-): Omit<Board, "id"> {
+  if (history.length === 0) {
+    throw new Error("L'apertura selezionata non contiene mosse valide.");
+  }
+  const now = new Date();
   return {
-    uid: createStableId(),
-    lessonId,
-    title,
-    fen: DEFAULT_FEN,
-    notes: "",
-    arrows: [],
-    highlights: [],
-    order,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    openingEco: opening.eco,
-    openingName: opening.name,
-    openingFamily: opening.family,
-    evalCp: null,
-    evalMate: null,
-    evalDepth: 0,
-    evalBestMoveUci: null,
-    whiteName: null,
-    blackName: null,
-    headers: {},
-    gameAnalysis: "",
-    openingReport: undefined,
-  };
-}
-
-async function persistOpeningMoves(
-  boardId: number,
-  opening: OpeningReference,
-): Promise<void> {
-  let parentId: number | null = null;
-  const moves = parseOpeningMoves(opening);
-
-  for (let order = 0; order < moves.length; order += 1) {
-    const move = moves[order];
-    const moveId = (await db.moves.add({
+    board: boardPayload({
       uid: createStableId(),
-      boardId,
+      title: boardTitle,
+      fen: DEFAULT_FEN,
+      notes: "",
+      arrows: [],
+      highlights: [],
+      openingEco: opening.eco,
+      openingName: opening.name,
+      openingFamily: opening.family,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    moves: history.map((move, order) => movePayload({
+      uid: createStableId(),
       moveNotation: move.san,
-      fen: move.fenAfter,
-      parentId,
+      fen: move.after,
       order,
       comment: "",
       arrows: [],
       highlights: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as Move)) as number;
-    parentId = moveId;
-  }
+      createdAt: now,
+      updatedAt: now,
+    })),
+    now,
+  };
 }
 
-async function createOpeningBoard(
-  lessonId: number,
-  opening: OpeningReference,
-  title: string,
-  order: number,
-): Promise<number> {
-  const boardId = (await db.boards.add(
-    openingBoardData(lessonId, opening, title, order),
-  )) as number;
-  await persistOpeningMoves(boardId, opening);
-  return boardId;
+async function getStudies(): Promise<StudyRow[]> {
+  const { data, error } = await supabase
+    .from("lessons")
+    .select("id, uid, title, description, mode, is_favorite, boards(id, uid, title, board_order, opening_family)")
+    .eq("mode", "study");
+  throwIfError(error);
+  return (data ?? []) as StudyRow[];
 }
 
 export async function createOpeningStudy(
@@ -130,59 +113,39 @@ export async function createOpeningStudy(
   options: { title?: string; conflict: OpeningConflictStrategy },
 ): Promise<{ lessonId: number; boardId: number }> {
   const title = options.title?.trim() || opening.name;
-  const profile = await ensureDefaultProfile();
-
-  const result = await db.transaction("rw", db.lessons, db.boards, db.moves, async () => {
-    const studies = await db.lessons
-      .where("mode")
-      .equals("study")
-      .filter((lesson) => lesson.profileId === profile.id)
-      .toArray();
-    const existing = studies.find(
-      (lesson) => lesson.id != null && normalizeName(lesson.title) === normalizeName(title),
+  const studies = await getStudies();
+  const existing = studies.find((lesson) =>
+    normalizeName(lesson.title) === normalizeName(title));
+  if (existing && options.conflict === "error") {
+    throw new OpeningDestinationConflict(
+      "lesson",
+      existing.id,
+      nextAvailableName(title, studies.map((lesson) => lesson.title)),
     );
+  }
 
-    let lessonId: number;
-    if (existing?.id != null) {
-      if (options.conflict === "error") {
-        throw new OpeningDestinationConflict(
-          "lesson",
-          existing.id,
-          nextAvailableName(title, studies.map((lesson) => lesson.title)),
-        );
-      }
-
-      lessonId = existing.id;
-      const boards = await db.boards.where("lessonId").equals(lessonId).toArray();
-      for (const board of boards) {
-        if (board.id != null) await db.moves.where("boardId").equals(board.id).delete();
-      }
-      await db.boards.where("lessonId").equals(lessonId).delete();
-      await db.lessons.update(lessonId, {
-        title,
-        searchTerms: buildLessonSearchTerms({ title, description: existing.description }),
-        updatedAt: new Date(),
-      });
-    } else {
-      const now = new Date();
-      lessonId = (await db.lessons.add({
-        uid: createStableId(),
-        profileId: profile.id,
-        title,
-        description: "",
-        mode: "study",
-        isFavorite: false,
-        searchTerms: buildLessonSearchTerms({ title, description: "" }),
-        createdAt: now,
-        updatedAt: now,
-      } as Lesson)) as number;
-    }
-
-    const boardId = await createOpeningBoard(lessonId, opening, opening.name, 0);
-    return { lessonId, boardId };
+  const { board, moves, now } = openingPayload(opening, opening.name);
+  const response = await supabase.rpc("save_lesson_tree", {
+    p_lesson_id: existing?.id ?? null,
+    p_lesson: lessonPayload({
+      uid: existing?.uid ?? createStableId(),
+      title,
+      description: existing?.description ?? "",
+      mode: "study",
+      isFavorite: existing?.is_favorite ?? false,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    p_board: board,
+    p_moves: moves,
+    p_replace: existing != null,
   });
-  await refreshLessonSearchIndex(result.lessonId);
-  return result;
+  const result = requireData(
+    response.data as { lesson_id: number; board_id: number } | null,
+    response.error,
+    "Creazione studio fallita.",
+  );
+  return { lessonId: result.lesson_id, boardId: result.board_id };
 }
 
 export async function addOpeningToStudy(
@@ -193,80 +156,48 @@ export async function addOpeningToStudy(
     conflict: OpeningConflictStrategy;
   },
 ): Promise<{ lessonId: number; boardId: number }> {
+  const studies = await getStudies();
+  const lesson = studies.find((candidate) => candidate.id === options.lessonId);
+  if (!lesson) throw new Error("Lo studio selezionato non è disponibile.");
+
   const boardTitle = options.boardTitle?.trim() || opening.name;
-
-  const result = await db.transaction("rw", db.lessons, db.boards, db.moves, async () => {
-    const lesson = await db.lessons.get(options.lessonId);
-    if (!lesson || lesson.mode !== "study") {
-      throw new Error("Lo studio selezionato non è disponibile.");
-    }
-
-    const boards = await db.boards.where("lessonId").equals(options.lessonId).sortBy("order");
-    const existing = boards.find(
-      (board) => board.id != null && normalizeName(board.title) === normalizeName(boardTitle),
+  const existing = lesson.boards.find((board) =>
+    normalizeName(board.title) === normalizeName(boardTitle));
+  if (existing && options.conflict === "error") {
+    throw new OpeningDestinationConflict(
+      "board",
+      existing.id,
+      nextAvailableName(boardTitle, lesson.boards.map((board) => board.title)),
     );
+  }
 
-    if (existing?.id != null && options.conflict === "error") {
-      throw new OpeningDestinationConflict(
-        "board",
-        existing.id,
-        nextAvailableName(boardTitle, boards.map((board) => board.title)),
-      );
-    }
-
-    let boardId: number;
-    if (existing?.id != null) {
-      boardId = existing.id;
-      await db.moves.where("boardId").equals(boardId).delete();
-      const replacement = openingBoardData(
-        options.lessonId,
-        opening,
-        boardTitle,
-        existing.order,
-      );
-      replacement.uid = existing.uid ?? replacement.uid;
-      await db.boards.update(
-        boardId,
-        replacement,
-      );
-      await persistOpeningMoves(boardId, opening);
-    } else {
-      boardId = await createOpeningBoard(
-        options.lessonId,
-        opening,
-        boardTitle,
-        boards.length,
-      );
-    }
-
-    return { lessonId: options.lessonId, boardId };
+  const { board, moves } = openingPayload(opening, boardTitle);
+  if (existing) board.uid = existing.uid;
+  const response = await supabase.rpc("save_board_line", {
+    p_lesson_id: lesson.id,
+    p_board_id: existing?.id ?? null,
+    p_board: board,
+    p_moves: moves,
   });
-  await refreshLessonSearchIndex(result.lessonId);
-  return result;
+  const result = requireData(
+    response.data as { lesson_id: number; board_id: number } | null,
+    response.error,
+    "Salvataggio variante fallito.",
+  );
+  return { lessonId: result.lesson_id, boardId: result.board_id };
 }
 
 export async function getOpeningStudyDestinations(
   opening: OpeningReference,
 ): Promise<OpeningStudyDestination[]> {
-  const profile = await ensureDefaultProfile();
-  const studies = await db.lessons
-    .where("mode")
-    .equals("study")
-    .filter((lesson) => lesson.profileId === profile.id)
-    .toArray();
-  const destinations = await Promise.all(studies.flatMap(async (lesson) => {
-    if (lesson.id == null) return [];
-    const boards = await db.boards.where("lessonId").equals(lesson.id).toArray();
-    const related = boards.some(
-      (board) => board.openingFamily === opening.family,
-    );
-    return [{ lessonId: lesson.id, title: lesson.title, related }];
-  }));
-
-  return destinations
-    .flat()
+  const studies = await getStudies();
+  return studies
+    .map((lesson) => ({
+      lessonId: lesson.id,
+      title: lesson.title,
+      related: lesson.boards.some((board) => board.opening_family === opening.family),
+    }))
     .sort((left, right) =>
       Number(right.related) - Number(left.related) ||
-      left.title.localeCompare(right.title, "it"),
-    );
+      left.title.localeCompare(right.title, "it"));
 }

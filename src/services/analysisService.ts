@@ -1,24 +1,80 @@
 import type { EvalFields } from "@/types";
+import {
+  DEFAULT_APP_SETTINGS,
+  getAppSettings,
+} from "@/services/settingsService";
 
-/**
- * Rileva se l'app sta girando dentro Tauri (finestra nativa).
- * In dev mode browser, `window.__TAURI__` non è definito.
- */
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI__" in window;
+const MULTI_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-18-lite.js";
+const SINGLE_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-18-lite-single.js";
+
+export interface StockfishCapabilities {
+  crossOriginIsolated: boolean;
+  hasSharedArrayBuffer: boolean;
+  hardwareConcurrency: number;
 }
 
-/**
- * Stockfish 18 (lite single-threaded) wrapper.
- *
- * Engine: `public/stockfish/stockfish-18-lite-single.js` + `stockfish.wasm`
- * (vedi docs/adr/0001-stockfish-in-browser.md). Lo script glue emscripten è
- * già uno worker classic: `new Worker(url)` e si parla UCI via postMessage.
- * Single-threaded → niente SharedArrayBuffer → niente COOP/COEP.
- */
+export interface StockfishRuntime {
+  flavor: "multi" | "single";
+  workerUrl: string;
+  threads: number;
+  compatibilityMode: boolean;
+}
 
-const ENGINE_URL =
-  import.meta.env.BASE_URL + "stockfish/stockfish-18-lite-single.js";
+function clampInteger(value: number, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value)) return minimum;
+  return Math.min(maximum, Math.max(minimum, Math.trunc(value)));
+}
+
+function browserCapabilities(): StockfishCapabilities {
+  return {
+    crossOriginIsolated: globalThis.crossOriginIsolated === true,
+    hasSharedArrayBuffer: typeof globalThis.SharedArrayBuffer !== "undefined",
+    hardwareConcurrency: typeof navigator !== "undefined"
+      ? clampInteger(navigator.hardwareConcurrency || 1, 1, 32)
+      : 1,
+  };
+}
+
+export function selectStockfishRuntime(
+  capabilities: StockfishCapabilities,
+  requestedThreads: number,
+): StockfishRuntime {
+  const canUseThreads = capabilities.crossOriginIsolated
+    && capabilities.hasSharedArrayBuffer;
+  if (!canUseThreads) {
+    return {
+      flavor: "single",
+      workerUrl: SINGLE_ENGINE_URL,
+      threads: 1,
+      compatibilityMode: true,
+    };
+  }
+  const hardwareLimit = clampInteger(capabilities.hardwareConcurrency, 1, 32);
+  return {
+    flavor: "multi",
+    workerUrl: MULTI_ENGINE_URL,
+    threads: clampInteger(requestedThreads, 1, hardwareLimit),
+    compatibilityMode: false,
+  };
+}
+
+export function getStockfishRuntimeInfo(requestedThreads = 2): StockfishRuntime {
+  return selectStockfishRuntime(browserCapabilities(), requestedThreads);
+}
+
+export function buildStockfishCommands(
+  fen: string,
+  depth: number,
+  multipv: number,
+  runtime: StockfishRuntime,
+): string[] {
+  return [
+    `setoption name Threads value ${runtime.threads}`,
+    `setoption name MultiPV value ${clampInteger(multipv, 1, 3)}`,
+    `position fen ${fen}`,
+    `go depth ${clampInteger(depth, 1, 30)}`,
+  ];
+}
 
 export interface PositionEval {
   fen: string;
@@ -33,14 +89,74 @@ export interface PositionEval {
 
 type LineListener = (line: string) => void;
 
-class StockfishEngine {
+export interface StockfishEngineHandle {
+  runtime: StockfishRuntime;
+  whenReady: () => Promise<void>;
+  analyze: (fen: string, depth: number, multipv?: number) => Promise<PositionEval>;
+  terminate: () => void;
+}
+
+type StockfishEngineFactory = (
+  runtime: StockfishRuntime,
+) => StockfishEngineHandle;
+
+type WorkerFactory = (url: string) => Worker;
+
+export function parseStockfishEvaluation(
+  fen: string,
+  lines: string[],
+): PositionEval | null {
+  let scoreCp: number | null = null;
+  let scoreMate: number | null = null;
+  let depth = 0;
+  let bestMoveUci: string | null = null;
+  let isComplete = false;
+
+  for (const line of lines) {
+    if (line.startsWith("info") && line.includes(" score ")) {
+      const depthMatch = line.match(/ depth (\d+)/);
+      const cpMatch = line.match(/score cp (-?\d+)/);
+      const mateMatch = line.match(/score mate (-?\d+)/);
+      if (cpMatch) {
+        scoreCp = Number.parseInt(cpMatch[1], 10);
+        scoreMate = null;
+      } else if (mateMatch) {
+        scoreMate = Number.parseInt(mateMatch[1], 10);
+        scoreCp = null;
+      }
+      if (depthMatch) depth = Number.parseInt(depthMatch[1], 10);
+    } else if (line.startsWith("bestmove")) {
+      const bestMoveMatch = line.match(/bestmove (\S+)/);
+      bestMoveUci = bestMoveMatch && bestMoveMatch[1] !== "(none)"
+        ? bestMoveMatch[1]
+        : null;
+      isComplete = true;
+    }
+  }
+
+  if (!isComplete) return null;
+  const blackToMove = fen.split(" ")[1] === "b";
+  return {
+    fen,
+    depth,
+    scoreCp: scoreCp == null || !blackToMove ? scoreCp : -scoreCp,
+    scoreMate: scoreMate == null || !blackToMove ? scoreMate : -scoreMate,
+    bestMoveUci,
+  };
+}
+
+export class StockfishEngine implements StockfishEngineHandle {
   private worker: Worker;
   private listener: LineListener | null = null;
+  private rejectCurrent: ((reason: Error) => void) | null = null;
   private readyPromise: Promise<void>;
   private analysisTail: Promise<void> = Promise.resolve();
 
-  constructor() {
-    this.worker = new Worker(ENGINE_URL);
+  constructor(
+    readonly runtime: StockfishRuntime,
+    createWorker: WorkerFactory = (url) => new Worker(url),
+  ) {
+    this.worker = createWorker(runtime.workerUrl);
     this.worker.onmessage = (e: MessageEvent) => {
       const data = e.data;
       const line = typeof data === "string" ? data : "";
@@ -48,17 +164,24 @@ class StockfishEngine {
     };
     this.worker.onerror = (e: ErrorEvent) => {
       console.error("[stockfish] worker error", e.message ?? e);
+      const error = new Error(e.message || "Avvio di Stockfish non riuscito.");
+      this.listener = null;
+      const reject = this.rejectCurrent;
+      this.rejectCurrent = null;
+      reject?.(error);
     };
     this.readyPromise = this.init();
   }
 
   private init(): Promise<void> {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
+      this.rejectCurrent = reject;
       const onLine: LineListener = (line) => {
         if (line === "uciok") {
           this.send("isready");
         } else if (line === "readyok") {
           this.listener = null;
+          this.rejectCurrent = null;
           resolve();
         }
       };
@@ -88,51 +211,25 @@ class StockfishEngine {
   }
 
   private analyzeNow(fen: string, depth: number, multipv: number): Promise<PositionEval> {
-    return new Promise<PositionEval>((resolve) => {
-      let bestCp: number | null = null;
-      let bestMate: number | null = null;
-      let bestDepth = 0;
-      let bestMove: string | null = null;
-
-      // Lato al tratto dal FEN per normalizzare al POV Bianco.
-      const sideToMove = fen.split(" ")[1];
-      const blackToMove = sideToMove === "b";
+    return new Promise<PositionEval>((resolve, reject) => {
+      const outputLines: string[] = [];
+      this.rejectCurrent = reject;
 
       const onLine: LineListener = (line) => {
         if (line.startsWith("info") && line.includes(" score ")) {
-          const depthM = line.match(/ depth (\d+)/);
-          const cpM = line.match(/score cp (-?\d+)/);
-          const mateM = line.match(/score mate (-?\d+)/);
-          if (cpM) {
-            bestCp = parseInt(cpM[1], 10);
-            bestMate = null;
-          } else if (mateM) {
-            bestMate = parseInt(mateM[1], 10);
-            bestCp = null;
-          }
-          if (depthM) bestDepth = parseInt(depthM[1], 10);
+          outputLines.push(line);
         } else if (line.startsWith("bestmove")) {
-          const m = line.match(/bestmove (\S+)/);
-          bestMove = m && m[1] !== "(none)" ? m[1] : null;
+          outputLines.push(line);
+          const evaluation = parseStockfishEvaluation(fen, outputLines);
           this.listener = null;
-          // Normalizza al POV Bianco (l'engine riporta POV lato al tratto).
-          const scoreCp =
-            bestCp == null ? null : blackToMove ? -bestCp : bestCp;
-          const scoreMate =
-            bestMate == null ? null : blackToMove ? -bestMate : bestMate;
-          resolve({
-            fen,
-            depth: bestDepth,
-            scoreCp,
-            scoreMate,
-            bestMoveUci: bestMove,
-          });
+          this.rejectCurrent = null;
+          if (evaluation) resolve(evaluation);
         }
       };
       this.listener = onLine;
-      this.send("setoption name MultiPV value " + Math.max(1, Math.min(multipv, 3)));
-      this.send("position fen " + fen);
-      this.send("go depth " + depth);
+      for (const command of buildStockfishCommands(fen, depth, multipv, this.runtime)) {
+        this.send(command);
+      }
     });
   }
 
@@ -143,9 +240,50 @@ class StockfishEngine {
 
 // Singleton: un solo engine per sessione (costoso da istanziare).
 let engineInstance: StockfishEngine | null = null;
-export function getEngine(): StockfishEngine {
-  if (!engineInstance) engineInstance = new StockfishEngine();
+export function getEngine(runtime: StockfishRuntime): StockfishEngine {
+  if (
+    !engineInstance
+    || engineInstance.runtime.flavor !== runtime.flavor
+    || engineInstance.runtime.threads !== runtime.threads
+  ) {
+    engineInstance?.terminate();
+    engineInstance = new StockfishEngine(runtime);
+  }
   return engineInstance;
+}
+
+function terminateEngine(engine: StockfishEngineHandle): void {
+  engine.terminate();
+  if (engine === engineInstance) engineInstance = null;
+}
+
+export async function prepareStockfishEngine(
+  runtime: StockfishRuntime,
+  createEngine: StockfishEngineFactory = getEngine,
+): Promise<StockfishEngineHandle> {
+  const engine = createEngine(runtime);
+  try {
+    await engine.whenReady();
+    return engine;
+  } catch (error) {
+    terminateEngine(engine);
+    if (runtime.flavor === "single") throw error;
+  }
+
+  const fallbackRuntime: StockfishRuntime = {
+    flavor: "single",
+    workerUrl: SINGLE_ENGINE_URL,
+    threads: 1,
+    compatibilityMode: true,
+  };
+  const fallbackEngine = createEngine(fallbackRuntime);
+  try {
+    await fallbackEngine.whenReady();
+    return fallbackEngine;
+  } catch (error) {
+    terminateEngine(fallbackEngine);
+    throw error;
+  }
 }
 
 export interface AnalyzeOptions {
@@ -171,9 +309,8 @@ let analysisQueueRunning = false;
  * Analizza una sequenza di posizioni (FEN) in ordine. Risolve con gli eval
  * (POV Bianco). Interruzione cooperativa via `signal.cancelled`.
  *
- * In contesto Tauri: chiama il comando Rust `analyze_position` (Stockfish
- * nativo multi-threaded). In browser: fallback a Stockfish 18 WASM lite
- * single-threaded (vedi ADR-0001).
+ * Usa Stockfish 18 lite WASM multi-threaded quando il browser e isolato;
+ * altrimenti forza il worker single-threaded in modalita compatibilita.
  */
 export async function analyzePositions(
   fens: string[],
@@ -301,21 +438,7 @@ async function analyzePositionsNow(
   fens: string[],
   options: AnalyzeOptions
 ): Promise<PositionEval[]> {
-  if (isTauri()) {
-    return analyzePositionsNative(fens, options);
-  }
   return analyzePositionsWasm(fens, options);
-}
-
-// ── Percorso Tauri (Stockfish nativo) ────────────────────────────────────────
-
-/** Formato restituito dal comando Rust `analyze_position` (serde snake_case). */
-interface NativeEval {
-  fen: string;
-  depth: number;
-  score_cp: number | null;
-  score_mate: number | null;
-  best_move_uci: string | null;
 }
 
 export interface StockfishSettings {
@@ -330,58 +453,19 @@ export function resetStockfishSettingsCache(): void {
 }
 
 export async function getStockfishSettings(): Promise<StockfishSettings> {
-  if (!isTauri()) {
-    return { stockfish_depth: 15, stockfish_threads: 2 };
-  }
   if (!stockfishSettingsPromise) {
-    stockfishSettingsPromise = import("@tauri-apps/api/core")
-      .then(({ invoke }) =>
-        invoke<StockfishSettings>("get_settings")
-      )
-      .catch(() => ({ stockfish_depth: 15, stockfish_threads: 2 }));
+    stockfishSettingsPromise = getAppSettings()
+      .then(({ stockfish_depth, stockfish_threads }) => ({
+        stockfish_depth,
+        stockfish_threads,
+      }))
+      .catch(() => ({
+        stockfish_depth: DEFAULT_APP_SETTINGS.stockfish_depth,
+        stockfish_threads: DEFAULT_APP_SETTINGS.stockfish_threads,
+      }));
   }
   return stockfishSettingsPromise;
 }
-
-/** Converte il risultato nativo (snake_case) in PositionEval. */
-function toPositionEval(ne: NativeEval): PositionEval {
-  return {
-    fen: ne.fen,
-    depth: ne.depth,
-    scoreCp: ne.score_cp,
-    scoreMate: ne.score_mate,
-    bestMoveUci: ne.best_move_uci,
-  };
-}
-
-async function analyzePositionsNative(
-  fens: string[],
-  options: AnalyzeOptions
-): Promise<PositionEval[]> {
-  const settings = await getStockfishSettings();
-  const depth = options.depth ?? settings.stockfish_depth;
-  const threads = options.threads ?? settings.stockfish_threads;
-  const multipv = options.multipv ?? 1;
-  // Lazy import: @tauri-apps/api non esiste in contesto browser.
-  const { invoke } = await import("@tauri-apps/api/core");
-  const results: PositionEval[] = [];
-
-  for (let i = 0; i < fens.length; i++) {
-    if (options.signal?.cancelled) break;
-    const raw = await invoke<NativeEval>("analyze_position", {
-      fen: fens[i],
-      depth,
-      threads,
-      multipv,
-    });
-    results.push(toPositionEval(raw));
-    options.onProgress?.(i + 1, fens.length);
-  }
-
-  return results;
-}
-
-// ── Percorso WASM (browser fallback) ─────────────────────────────────────────
 
 async function analyzePositionsWasm(
   fens: string[],
@@ -389,9 +473,10 @@ async function analyzePositionsWasm(
 ): Promise<PositionEval[]> {
   const settings = await getStockfishSettings();
   const depth = options.depth ?? settings.stockfish_depth;
+  const threads = options.threads ?? settings.stockfish_threads;
   const multipv = options.multipv ?? 1;
-  const engine = getEngine();
-  await engine.whenReady();
+  const runtime = getStockfishRuntimeInfo(threads);
+  const engine = await prepareStockfishEngine(runtime);
   const results: PositionEval[] = [];
   for (let i = 0; i < fens.length; i++) {
     if (options.signal?.cancelled) break;

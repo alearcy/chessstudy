@@ -1,20 +1,10 @@
-export interface LocalProfile {
-  id?: number;
-  uid: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export interface Lesson {
   id?: number;
   uid?: string;
-  profileId?: number;
   title: string;
   description: string;
   mode: "study" | "analysis";
   isFavorite?: boolean;
-  searchTerms?: string[];
   createdAt: Date;
   updatedAt?: Date;
 }

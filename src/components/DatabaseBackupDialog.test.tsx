@@ -63,13 +63,13 @@ describe("DatabaseBackupDialog", () => {
     expect(view.getByText("2 profili, 8 lezioni, 10 scacchiere e 240 mosse")).toBeTruthy();
     expect(restoreBackupMock).not.toHaveBeenCalled();
 
-    fireEvent.click(view.getByRole("button", { name: "Ripristina e sostituisci i dati" }));
+    fireEvent.click(view.getByRole("button", { name: "Importa nel mio account" }));
 
     await waitFor(() => {
       expect(restoreBackupMock).toHaveBeenCalledWith("backup-json");
       expect(onRestored).toHaveBeenCalledOnce();
     });
-    expect(view.getByText("Backup ripristinato correttamente.")).toBeTruthy();
+    expect(view.getByText("Backup importato correttamente.")).toBeTruthy();
   });
 
   it("shows an actionable error when file selection or validation fails", async () => {

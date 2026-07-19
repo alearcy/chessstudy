@@ -252,29 +252,10 @@ export async function createStudyBoardPng(
   });
 }
 
-function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 export async function saveStudyExportFile(
   contents: Blob,
   filename: string,
 ): Promise<string | null> {
-  if (isTauriRuntime()) {
-    const [{ save }, { writeFile }] = await Promise.all([
-      import("@tauri-apps/plugin-dialog"),
-      import("@tauri-apps/plugin-fs"),
-    ]);
-    const extension = filename.split(".").pop() ?? "";
-    const path = await save({
-      defaultPath: filename,
-      filters: [{ name: "Esportazione Chess Study", extensions: [extension] }],
-    });
-    if (!path) return null;
-    await writeFile(path, new Uint8Array(await contents.arrayBuffer()));
-    return path.split(/[\\/]/).pop() || path;
-  }
-
   const url = URL.createObjectURL(contents);
   try {
     const anchor = document.createElement("a");

@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildStockfishCommands,
   evalScore,
   findCriticalPositionIndexes,
   formatEval,
   moveClassification,
+  parseStockfishEvaluation,
+  prepareStockfishEngine,
   runAdaptiveAnalysis,
+  selectStockfishRuntime,
+  StockfishEngine,
   stockfishCommentForMove,
   evalToWhiteShare,
   type AnalyzeOptions,
@@ -140,5 +145,141 @@ describe("adaptive Stockfish analysis", () => {
     );
 
     expect(analyzeBatch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Stockfish 18 web runtime", () => {
+  it("selects the multi-threaded lite worker only in an isolated browser", () => {
+    expect(selectStockfishRuntime({
+      crossOriginIsolated: true,
+      hasSharedArrayBuffer: true,
+      hardwareConcurrency: 8,
+    }, 4)).toMatchObject({
+      flavor: "multi",
+      threads: 4,
+      compatibilityMode: false,
+      workerUrl: expect.stringContaining("stockfish-18-lite.js"),
+    });
+  });
+
+  it("forces the single-threaded fallback when isolation is unavailable", () => {
+    expect(selectStockfishRuntime({
+      crossOriginIsolated: false,
+      hasSharedArrayBuffer: true,
+      hardwareConcurrency: 8,
+    }, 4)).toMatchObject({
+      flavor: "single",
+      threads: 1,
+      compatibilityMode: true,
+      workerUrl: expect.stringContaining("stockfish-18-lite-single.js"),
+    });
+  });
+
+  it("builds clamped UCI commands including Threads and MultiPV", () => {
+    const runtime = selectStockfishRuntime({
+      crossOriginIsolated: true,
+      hasSharedArrayBuffer: true,
+      hardwareConcurrency: 8,
+    }, 99);
+
+    expect(buildStockfishCommands("start-fen", 99, 1, runtime)).toEqual([
+      "setoption name Threads value 8",
+      "setoption name MultiPV value 1",
+      "position fen start-fen",
+      "go depth 30",
+    ]);
+  });
+
+  it.each([
+    {
+      fen: "8/8/8/8/8/8/8/K6k w - - 0 1",
+      lines: [
+        "info depth 18 score cp 42 nodes 1000",
+        "bestmove a1b1",
+      ],
+      expected: {
+        depth: 18,
+        scoreCp: 42,
+        scoreMate: null,
+        bestMoveUci: "a1b1",
+      },
+    },
+    {
+      fen: "8/8/8/8/8/8/8/K6k b - - 0 1",
+      lines: [
+        "info depth 21 score mate 3 nodes 2000",
+        "bestmove h1g1",
+      ],
+      expected: {
+        depth: 21,
+        scoreCp: null,
+        scoreMate: -3,
+        bestMoveUci: "h1g1",
+      },
+    },
+    {
+      fen: "8/8/8/8/8/8/8/K6k w - - 0 1",
+      lines: ["bestmove (none)"],
+      expected: {
+        depth: 0,
+        scoreCp: null,
+        scoreMate: null,
+        bestMoveUci: null,
+      },
+    },
+  ])("parses cp, mate and bestmove from White's POV", ({ fen, lines, expected }) => {
+    expect(parseStockfishEvaluation(fen, lines)).toMatchObject(expected);
+  });
+
+  it("rejects worker initialization errors instead of waiting forever", async () => {
+    const worker = {
+      onmessage: null,
+      onerror: null,
+      postMessage: vi.fn(),
+      terminate: vi.fn(),
+    };
+    const runtime = selectStockfishRuntime({
+      crossOriginIsolated: false,
+      hasSharedArrayBuffer: false,
+      hardwareConcurrency: 8,
+    }, 2);
+    const engine = new StockfishEngine(
+      runtime,
+      () => worker as unknown as Worker,
+    );
+
+    const readiness = engine.whenReady();
+    (worker.onerror as ((event: ErrorEvent) => void) | null)?.({
+      message: "WASM non disponibile",
+    } as ErrorEvent);
+
+    await expect(readiness).rejects.toThrow("WASM non disponibile");
+  });
+
+  it("falls back from the multi-threaded worker to the single-threaded worker", async () => {
+    const multiRuntime = selectStockfishRuntime({
+      crossOriginIsolated: true,
+      hasSharedArrayBuffer: true,
+      hardwareConcurrency: 8,
+    }, 4);
+    const terminateMulti = vi.fn();
+    const createEngine = vi.fn((runtime: typeof multiRuntime) => ({
+      runtime,
+      whenReady: runtime.flavor === "multi"
+        ? () => Promise.reject(new Error("multi worker failed"))
+        : () => Promise.resolve(),
+      analyze: vi.fn(),
+      terminate: runtime.flavor === "multi" ? terminateMulti : vi.fn(),
+    }));
+
+    const engine = await prepareStockfishEngine(multiRuntime, createEngine);
+
+    expect(terminateMulti).toHaveBeenCalledOnce();
+    expect(createEngine).toHaveBeenCalledTimes(2);
+    expect(engine.runtime).toMatchObject({
+      flavor: "single",
+      threads: 1,
+      compatibilityMode: true,
+    });
   });
 });

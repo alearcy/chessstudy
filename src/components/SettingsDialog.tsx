@@ -9,7 +9,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { resetStockfishSettingsCache } from "@/services/analysisService";
+import {
+  getStockfishRuntimeInfo,
+  resetStockfishSettingsCache,
+} from "@/services/analysisService";
 import { Input } from "@/components/ui/input";
 import {
   getAppSettings,
@@ -40,27 +43,14 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
   const [chesscomUsername, setChesscomUsername] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isTauri, setIsTauri] = useState<boolean | null>(null);
   const detectedThreads =
     typeof navigator !== "undefined" && navigator.hardwareConcurrency
       ? navigator.hardwareConcurrency
       : null;
   const cpuOptions = buildCpuOptions(detectedThreads);
-
-  useEffect(() => {
-    async function check() {
-      try {
-        await getAppSettings();
-        setIsTauri(true);
-      } catch {
-        setIsTauri(false);
-      }
-    }
-    check();
-  }, []);
+  const runtime = getStockfishRuntimeInfo(stockfishThreads);
 
   const loadSettings = useCallback(async () => {
-    if (!isTauri) return;
     try {
       const info: AppSettingsInfo = await getAppSettings();
       setStockfishDepth(normalizeDepthOption(info.stockfish_depth));
@@ -71,16 +61,13 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [detectedThreads, isTauri]);
+  }, [detectedThreads]);
 
   useEffect(() => {
-    if (open && isTauri) {
-      loadSettings();
-    }
-  }, [open, isTauri, loadSettings]);
+    if (open) void loadSettings();
+  }, [open, loadSettings]);
 
   const handleSaveSettings = async () => {
-    if (!isTauri) return;
     setSavingSettings(true);
     setError(null);
     try {
@@ -113,12 +100,7 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
           <DialogDescription>Configura motore e account usati per importare le partite.</DialogDescription>
         </DialogHeader>
 
-        {!isTauri ? (
-          <div className="py-4 text-center text-sm text-muted-foreground">
-            Le impostazioni Stockfish sono disponibili nell'app desktop.
-          </div>
-        ) : (
-          <div className="space-y-5 py-2">
+        <div className="space-y-5 py-2">
             {error && (
               <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
@@ -208,17 +190,22 @@ export default function SettingsDialog({ open, onOpenChange, onSettingsChanged }
                   </p>
                 </div>
               </div>
+              <div className={runtime.compatibilityMode
+                ? "rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
+                : "rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-800 dark:text-emerald-200"}
+              >
+                {runtime.compatibilityMode
+                  ? "Modalita compatibilita: questo browser usa 1 thread. Per il multi-thread servono SharedArrayBuffer e isolamento cross-origin."
+                  : `Stockfish 18 lite multi-thread attivo: usa ${runtime.threads} thread.`}
+              </div>
             </section>
-          </div>
-        )}
+        </div>
 
         <DialogFooter>
-          {isTauri && (
-            <Button onClick={handleSaveSettings} disabled={savingSettings}>
-              {savingSettings ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              <span className="ml-1">Salva impostazioni</span>
-            </Button>
-          )}
+          <Button onClick={handleSaveSettings} disabled={savingSettings}>
+            {savingSettings ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            <span className="ml-1">Salva impostazioni</span>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

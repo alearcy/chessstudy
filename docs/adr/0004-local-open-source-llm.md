@@ -1,6 +1,6 @@
 # ADR-0004: Switch da OpenRouter a GGUF embedded via Rust
 
-## Stato: Accettato
+## Stato: Superseded da [ADR-0007](0007-web-supabase-stockfish-wasm.md)
 
 ## Contesto
 ADR-0003 ha scelto OpenRouter per ridurre complessita rispetto a `llama-cpp` embedded. Il requisito corrente richiede invece un modello open source locale servito direttamente dall'app, senza API key cloud e senza un servizio esterno come Ollama.

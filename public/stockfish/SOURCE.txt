@@ -1,0 +1,8 @@
+Chess Study distributes the Stockfish.js 18.0.8 lite WebAssembly builds under
+the GNU General Public License version 3, reproduced in Copying.txt.
+
+The exact corresponding source is available at:
+https://github.com/nmrugg/stockfish.js/tree/93c994592dcf3b4b21052ab925e9b534df9c0918
+
+Upstream Stockfish source and build documentation:
+https://github.com/official-stockfish/Stockfish

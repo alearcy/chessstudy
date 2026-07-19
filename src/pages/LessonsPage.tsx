@@ -20,7 +20,6 @@ import {
   deleteLesson,
   setLessonFavorite,
 } from "@/services/lessonService";
-import { ensureDefaultProfile } from "@/services/profileService";
 import type { Lesson, LessonFormData } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -206,7 +205,6 @@ function DeleteConfirmDialog({
 export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const navigate = useNavigate();
   const [lessons, setLessons] = useState<LessonListItem[]>([]);
-  const [profileId, setProfileId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [totalLessons, setTotalLessons] = useState(0);
@@ -230,15 +228,12 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
   const [updatingFavoriteId, setUpdatingFavoriteId] = useState<number | null>(null);
 
   const loadLessons = useCallback(async (
-    override: { profileId?: number; page?: number } = {},
+    override: { page?: number } = {},
   ) => {
-    const targetProfileId = override.profileId ?? profileId;
     const targetPage = override.page ?? page;
-    if (targetProfileId == null) return;
     try {
       setPageError(null);
       const result = await getLessonsPage({
-        profileId: targetProfileId,
         query: searchQuery,
         createdOn: dateFilter || undefined,
         kind: kindFilter,
@@ -253,22 +248,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
       console.error("[lessons-load] errore", e);
       setPageError("Impossibile caricare le lezioni.");
     }
-  }, [dateFilter, kindFilter, page, profileId, searchQuery]);
-
-  useEffect(() => {
-    let cancelled = false;
-    ensureDefaultProfile()
-      .then((profile) => {
-        if (!cancelled) setProfileId(profile.id);
-      })
-      .catch((error: unknown) => {
-        console.error("[profile-load] errore", error);
-        if (!cancelled) setPageError("Impossibile inizializzare il profilo locale.");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [dateFilter, kindFilter, page, searchQuery]);
 
   useEffect(() => {
     loadLessons();
@@ -353,12 +333,11 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
   };
 
   const hasActiveFilters = Boolean(searchQuery || dateFilter || kindFilter);
+  const isEmptyArchive = totalLessons === 0 && !hasActiveFilters;
 
   const handleBackupRestored = useCallback(async () => {
-    const profile = await ensureDefaultProfile();
-    setProfileId(profile.id);
     setPage(1);
-    await loadLessons({ profileId: profile.id, page: 1 });
+    await loadLessons({ page: 1 });
   }, [loadLessons]);
 
   useEffect(() => {
@@ -382,7 +361,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
       )}
 
       {/* Azioni principali */}
-      <section className="mb-8 border-b pb-6">
+      <section className={isEmptyArchive ? undefined : "mb-8 border-b pb-6"}>
         <div className="flex flex-nowrap items-center gap-3">
           <Button
             type="button"
@@ -403,14 +382,13 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
 
           <Button
             type="button"
-            variant="outline"
             className="h-16 flex-1 justify-start gap-3 px-4 text-left"
             onClick={() => setImportOpen(true)}
           >
             <Upload className="size-4 shrink-0" />
             <span className="min-w-0">
               <span className="block font-medium leading-tight">Importa PGN</span>
-              <span className="block text-xs font-normal leading-snug text-muted-foreground">
+              <span className="block text-xs font-normal leading-snug text-primary-foreground/80">
                 carica o incolla un PGN per analizzare la partita
               </span>
             </span>
@@ -418,7 +396,6 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
 
           <Button
             type="button"
-            variant="outline"
             className="h-16 flex-1 justify-start gap-3 px-4 text-left"
             disabled={checkingChessComSettings}
             onClick={handleOpenChessCom}
@@ -426,7 +403,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
             <Swords className="size-4 shrink-0" />
             <span className="min-w-0">
               <span className="block font-medium leading-tight">Chess.com</span>
-              <span className="block text-xs font-normal leading-snug text-muted-foreground">
+              <span className="block text-xs font-normal leading-snug text-primary-foreground/80">
                 importa partite da chess.com
               </span>
             </span>
@@ -434,7 +411,6 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
 
           <Button
             type="button"
-            variant="outline"
             className="h-16 flex-1 justify-start gap-3 px-4 text-left"
             disabled={checkingPlatformSettings}
             onClick={handleOpenLichess}
@@ -442,7 +418,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
             <Cloud className="size-4 shrink-0" />
             <span className="min-w-0">
               <span className="block font-medium leading-tight">Lichess</span>
-              <span className="block text-xs font-normal leading-snug text-muted-foreground">
+              <span className="block text-xs font-normal leading-snug text-primary-foreground/80">
                 importa partite da lichess
               </span>
             </span>
@@ -461,82 +437,82 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
         ) : null}
       </section>
 
-      <section
-        className="mb-6 grid gap-3 pt-6 md:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_auto_auto]"
-        aria-label="Filtri lezioni"
-      >
-        <label className="relative block">
-          <span className="sr-only">Cerca per titolo</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(event) => {
-              setSearchQuery(event.target.value);
-              setPage(1);
-            }}
-            placeholder="Cerca titolo, giocatore, evento o ECO"
-            className="pl-9"
-          />
-        </label>
+      {!isEmptyArchive && (
+        <section
+          className="mb-6 grid gap-3 pt-6 md:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_auto_auto]"
+          aria-label="Filtri lezioni"
+        >
+          <label className="relative block">
+            <span className="sr-only">Cerca per titolo</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setPage(1);
+              }}
+              placeholder="Cerca titolo, giocatore, evento o ECO"
+              className="pl-9"
+            />
+          </label>
 
-        <label className="relative block md:w-56">
-          <span className="sr-only">Filtra per data</span>
-          <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="date"
-            value={dateFilter}
-            onChange={(event) => {
-              setDateFilter(event.target.value);
-              setPage(1);
-            }}
-            className="pl-9"
-            aria-label="Filtra per data"
-          />
-        </label>
+          <label className="relative block md:w-56">
+            <span className="sr-only">Filtra per data</span>
+            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(event) => {
+                setDateFilter(event.target.value);
+                setPage(1);
+              }}
+              className="pl-9"
+              aria-label="Filtra per data"
+            />
+          </label>
 
-        <div className="flex flex-wrap gap-2 lg:justify-end">
-          {[
-            { value: "favorites", label: "Preferite" },
-            { value: "analysis", label: "Solo analisi" },
-            { value: "study", label: "Solo studi" },
-          ].map((filter) => (
-            <Button
-              key={filter.value}
-              type="button"
-              variant={kindFilter === filter.value ? "default" : "outline"}
-              size="sm"
-              aria-pressed={kindFilter === filter.value}
-              onClick={() =>
-                {
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {[
+              { value: "favorites", label: "Preferite" },
+              { value: "analysis", label: "Solo analisi" },
+              { value: "study", label: "Solo studi" },
+            ].map((filter) => (
+              <Button
+                key={filter.value}
+                type="button"
+                variant={kindFilter === filter.value ? "default" : "outline"}
+                size="sm"
+                aria-pressed={kindFilter === filter.value}
+                onClick={() => {
                   setKindFilter((current) =>
                     current === filter.value
                       ? null
                       : (filter.value as "favorites" | "analysis" | "study"),
                   );
                   setPage(1);
-                }
-              }
-            >
-              {filter.value === "favorites" && (
-                <Heart
-                  className="size-4"
-                  fill={
-                    kindFilter === "favorites" ? "currentColor" : "none"
-                  }
-                />
-              )}
-              {filter.label}
-            </Button>
-          ))}
-        </div>
-      </section>
+                }}
+              >
+                {filter.value === "favorites" && (
+                  <Heart
+                    className="size-4"
+                    fill={
+                      kindFilter === "favorites" ? "currentColor" : "none"
+                    }
+                  />
+                )}
+                {filter.label}
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
 
-      {totalLessons === 0 && !hasActiveFilters ? (
+      {isEmptyArchive ? (
         <div className="text-center py-16 text-muted-foreground">
           <BookOpen className="size-12 mx-auto mb-4 opacity-30" />
-          <p className="text-lg">Nessuna lezione</p>
+          <p className="text-lg">Nessuna lezione o analisi</p>
           <p className="text-sm mt-1">
-            Importa un PGN per iniziare.
+            Usa i pulsanti di creazione per cominciare!
           </p>
         </div>
       ) : lessons.length === 0 ? (
