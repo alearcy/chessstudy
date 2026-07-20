@@ -255,6 +255,7 @@ function chessgroundConfig({
     turnColor: turnColorFromFen(fen),
     coordinates: true,
     coordinatesOnSquares,
+    ranksPosition: "right",
     disableContextMenu: true,
     animation: { enabled: true, duration: 200 },
     highlight: {
@@ -552,48 +553,53 @@ export default function ChessBoardView({
       {topPlayerLabel}
 
       <div className="flex w-full justify-center">
-        <div className="cs-board-shell aspect-square w-full">
-          <div ref={boardRef} className="cs-chessground h-full w-full" />
-          <div className="pointer-events-none absolute inset-0 grid grid-cols-8 grid-rows-8">
-            {overlaySquares.map((square) => {
-              const showBadge = square === lastMoveSquare && moveBadge;
-              const showCheckmateBadge =
-                kingStatus?.checkmate && square === kingStatus.square;
-              return (
-                <div key={square} className="relative">
-                  {showBadge && (
-                    <span
-                      className="absolute -bottom-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full text-[13px] font-bold leading-none shadow-sm"
-                      style={{
-                        backgroundColor: moveBadge!.color,
-                        color: "white",
-                        textShadow: "0 0 3px rgba(0,0,0,0.6)",
-                        zIndex: 10,
-                      }}
-                    >
-                      {moveBadge!.label === "!!" ? (
-                        <Star className="size-3.5 fill-current" />
-                      ) : moveBadge!.label === "!" ? (
-                        <CircleCheck className="size-3.5" />
-                      ) : (
-                        moveBadge!.label
-                      )}
-                    </span>
-                  )}
-                  {showCheckmateBadge && (
-                    <span
-                      className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
-                      style={{
-                        zIndex: 11,
-                      }}
-                      title="Scacco matto"
-                    >
-                      <Skull className="size-4" />
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+        <div
+          className="cs-board-shell aspect-square w-full"
+          data-coordinate-layout={coordinatesOnSquares ? "squares" : "frame"}
+        >
+          <div className="cs-board-surface">
+            <div ref={boardRef} className="cs-chessground h-full w-full" />
+            <div className="pointer-events-none absolute inset-0 grid grid-cols-8 grid-rows-8">
+              {overlaySquares.map((square) => {
+                const showBadge = square === lastMoveSquare && moveBadge;
+                const showCheckmateBadge =
+                  kingStatus?.checkmate && square === kingStatus.square;
+                return (
+                  <div key={square} className="relative">
+                    {showBadge && (
+                      <span
+                        className="absolute -bottom-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full text-[13px] font-bold leading-none shadow-sm"
+                        style={{
+                          backgroundColor: moveBadge!.color,
+                          color: "white",
+                          textShadow: "0 0 3px rgba(0,0,0,0.6)",
+                          zIndex: 10,
+                        }}
+                      >
+                        {moveBadge!.label === "!!" ? (
+                          <Star className="size-3.5 fill-current" />
+                        ) : moveBadge!.label === "!" ? (
+                          <CircleCheck className="size-3.5" />
+                        ) : (
+                          moveBadge!.label
+                        )}
+                      </span>
+                    )}
+                    {showCheckmateBadge && (
+                      <span
+                        className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
+                        style={{
+                          zIndex: 11,
+                        }}
+                        title="Scacco matto"
+                      >
+                        <Skull className="size-4" />
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -639,6 +645,18 @@ export default function ChessBoardView({
         .cs-board-shell {
           position: relative;
         }
+        .cs-board-shell[data-coordinate-layout="frame"] {
+          background: var(--muted);
+          box-shadow: inset 0 0 0 1px var(--border);
+        }
+        .cs-board-surface {
+          position: absolute;
+          inset: 0;
+        }
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-board-surface {
+          right: 18px;
+          bottom: 18px;
+        }
         .cs-chessground {
           position: absolute;
           inset: 0;
@@ -646,6 +664,38 @@ export default function ChessBoardView({
         .cs-chessground .cg-wrap {
           width: 100%;
           height: 100%;
+        }
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-chessground coords {
+          color: var(--foreground);
+          font-family: inherit;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1;
+          opacity: 1;
+        }
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-chessground coords.ranks {
+          top: 0;
+          left: 100%;
+          width: 18px;
+          height: 100%;
+        }
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-chessground coords.files {
+          bottom: -18px;
+          left: 0;
+          width: 100%;
+          height: 18px;
+        }
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-chessground coords coord {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-chessground coords.ranks coord {
+          transform: none;
+        }
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-chessground.orientation-white coords coord,
+        .cs-board-shell[data-coordinate-layout="frame"] .cs-chessground.orientation-black coords coord {
+          color: var(--foreground);
         }
         cg-board square.cs-last-move-from {
           background-color: ${LAST_MOVE_COLOR};

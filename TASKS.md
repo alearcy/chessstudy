@@ -4,6 +4,14 @@
 
 ## Completed
 
+- UI-010 Cornice coordinate scacchiera ad alta visibilita
+  - [x] Aggiungere la cornice compatta condivisa tra Studio e Analisi
+  - [x] Mantenere allineati scacchiera, badge e coordinate
+  - [x] Conservare la modalita con coordinate dentro ogni casa
+  - [x] Verificare test, lint e build
+  - [x] Confermata la resa visiva nell'app
+  - Spec: `docs/specs/cornice-coordinate-scacchiera.md`
+
 - UI-008 Empty state homepage senza filtri
   - [x] Nascondere filtri e separatore quando non esistono studi o analisi
   - [x] Mantenere i filtri quando una ricerca non restituisce risultati

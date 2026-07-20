@@ -77,11 +77,18 @@ describe.each(["study", "analysis"] as const)(
   (lessonMode) => {
     it("mostra le coordinate fuori di default e le porta dentro al clic", () => {
       const view = renderBoard(lessonMode);
+      const boardShell = view.container.querySelector<HTMLElement>(
+        ".cs-board-shell",
+      );
 
       expect(chessgroundMock).toHaveBeenLastCalledWith(
         expect.any(HTMLDivElement),
-        expect.objectContaining({ coordinatesOnSquares: false }),
+        expect.objectContaining({
+          coordinatesOnSquares: false,
+          ranksPosition: "right",
+        }),
       );
+      expect(boardShell.dataset.coordinateLayout).toBe("frame");
 
       fireEvent.click(view.getByTitle("Mostra coordinate dentro le case"));
 
@@ -89,6 +96,7 @@ describe.each(["study", "analysis"] as const)(
         expect.any(HTMLDivElement),
         expect.objectContaining({ coordinatesOnSquares: true }),
       );
+      expect(boardShell.dataset.coordinateLayout).toBe("squares");
     });
   },
 );
