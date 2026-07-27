@@ -2,6 +2,8 @@
 
 ## In Progress
 
+## Completed
+
 - UI-013 Layout tablet landscape e invito alla rotazione
   - [x] Correggere il breakpoint per la viewport effettiva di iPad Mini
   - [x] Sfruttare lo spazio laterale aggiuntivo sui tablet landscape più ampi
@@ -9,10 +11,8 @@
   - [x] Mostrare il guard portrait accessibile soltanto nella shell privata
   - [x] Rispettare la preferenza di riduzione dei movimenti
   - [x] Verificare test, lint e build
-  - [ ] Confermare visivamente le viewport iPad Mini
+  - [x] Confermare visivamente le viewport iPad Mini
   - Spec: `docs/specs/UI-013-layout-tablet-landscape.md`
-
-## Completed
 
 - BUG-003 Apertura Studio sull'ultima mossa
   - [x] Riprodurre il caricamento iniziale sulla prima posizione
