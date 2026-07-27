@@ -2,7 +2,76 @@
 
 ## In Progress
 
+- UI-013 Layout tablet landscape e invito alla rotazione
+  - [x] Correggere il breakpoint per la viewport effettiva di iPad Mini
+  - [x] Sfruttare lo spazio laterale aggiuntivo sui tablet landscape più ampi
+  - [x] Vincolare altezza e scroll interno delle sidebar anche sui tablet
+  - [x] Mostrare il guard portrait accessibile soltanto nella shell privata
+  - [x] Rispettare la preferenza di riduzione dei movimenti
+  - [x] Verificare test, lint e build
+  - [ ] Confermare visivamente le viewport iPad Mini
+  - Spec: `docs/specs/UI-013-layout-tablet-landscape.md`
+
 ## Completed
+
+- BUG-003 Apertura Studio sull'ultima mossa
+  - [x] Riprodurre il caricamento iniziale sulla prima posizione
+  - [x] Posizionare le scacchiere di Studio sull'ultima mossa persistita
+  - [x] Conservare l'apertura iniziale delle scacchiere di Analisi
+  - [x] Verificare test, lint e build
+  - Spec: `docs/specs/apertura-studio-ultima-mossa.md`
+
+- UI-014 Evidenziazione completa dell'ultima mossa
+  - [x] Riprodurre con un test la sola evidenziazione della partenza
+  - [x] Evidenziare in azzurro partenza e arrivo in Studio e Analisi
+  - [x] Verificare test, lint e build
+  - Spec: `docs/specs/last-move-origin-highlight.md`
+
+- FEAT-012 Duplicazione scacchiere nello Studio
+  - [x] Esporre un'azione accessibile accanto a rinomina ed elimina
+  - [x] Duplicare atomicamente scacchiera, annotazioni e linea di mosse
+  - [x] Selezionare la copia e mostrare stato in corso o errore
+  - [x] Verificare test, lint e build
+  - Spec: `docs/specs/duplicazione-scacchiere-studio.md`
+
+- UI-012 Controlli touch della scacchiera di Studio
+  - [x] Ripristinare i selettori Muovi, Frecce ed Evidenzia soltanto in Studio
+  - [x] Supportare disegno e selezione con puntatore touch
+  - [x] Aggiungere una gomma touch per cancellare case e frecce singolarmente
+  - [x] Non mostrare cursori speciali quando si seleziona uno strumento
+  - [x] Impedire il cambio di riga della toolbar al cambio strumento
+  - [x] Conservare gesture mouse e navigazione da tastiera esistenti
+  - [x] Verificare test, lint e build
+  - Spec: `docs/specs/controlli-touch-scacchiera-studio.md`
+
+- UI-011 Chip interattive per le tattiche
+  - [x] Persistire i pattern tattici separatamente dalle annotazioni
+  - [x] Mostrare chip accessibili a selezione singola
+  - [x] Evidenziare soltanto la tattica attiva sulla scacchiera
+  - [x] Ricostruire le tattiche nelle analisi esistenti
+  - [x] Affiancare ogni chip alla frase tattica senza titolo duplicato
+  - [x] Verificare test, lint, build e migrazione Supabase
+  - Spec: `docs/specs/chip-tattiche-scacchiera.md`
+
+- UI-009 Stockfish automatico e analisi solo in modalita Analisi
+  - [x] Rimuovere profondita e CPU dalle impostazioni utente
+  - [x] Usare automaticamente depth 15 e 2 thread con fallback a 1
+  - [x] Esporre avvio e annullamento Stockfish soltanto nelle analisi
+  - [x] Convertire un'analisi in Studio copiando soltanto la sequenza di mosse
+  - [x] Eliminare il layout shift durante il salvataggio delle mosse di Studio
+  - [x] Riprovare in single-thread se il worker multi-thread cade durante l'analisi
+  - [x] Eliminare la seconda passata a depth 20 sulle posizioni critiche
+  - [x] Verificare la singola passata con test, lint e build
+  - [x] Verificare test, lint e build
+  - Spec: `docs/specs/stockfish-automatico-solo-analisi.md`
+
+- FEAT-013 Riordino scacchiere nello Studio
+  - [x] Aggiungere handle drag accessibile con supporto mouse e touch
+  - [x] Mostrare l'ordine ottimistico e gestire rollback ed errore
+  - [x] Persistire atomicamente l'ordine tramite RPC Supabase
+  - [x] Verificare test, lint, build e migrazione Supabase
+  - [x] Confermato il comportamento nell'app
+  - Spec: `docs/specs/riordino-scacchiere-studio.md`
 
 - UI-010 Cornice coordinate scacchiera ad alta visibilita
   - [x] Aggiungere la cornice compatta condivisa tra Studio e Analisi
@@ -21,7 +90,7 @@
   - Spec: `docs/specs/empty-state-senza-filtri.md`
 
 - WEB-001 Migrazione web full-client con Supabase e Stockfish WASM
-  - [x] Usare il logo SVG nella testata dell'app e nel form di login
+  - [x] Usare il logo PNG nella testata dell'app e nel form di login
   - [x] Configurare autenticazione con account amministrati e schema/RLS Supabase
     - [x] Implementare client Auth, route, feedback UI e migrazione SQL versionata
     - [x] Verificare test frontend, typecheck, build e controlli statici schema

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { detectTactics, explainMoveRuleBased, formatDiagnosisHint } from "@/services/explainService";
+import {
+  detectTactics,
+  explainMoveRuleBased,
+  formatDiagnosisHint,
+  resolveMoveTactics,
+} from "@/services/explainService";
+import type { Board, Move } from "@/types";
 
 describe("explainService tactical explanations", () => {
   it("detects a fork even when the attacker is not the side encoded by legal move generation", () => {
@@ -77,5 +83,45 @@ describe("explainService tactical explanations", () => {
     });
 
     expect(explanation.stockfishExplains).toBeNull();
+  });
+
+  it("rebuilds tactics for a legacy analyzed move without persisted groups", () => {
+    const board = {
+      id: 1,
+      lessonId: 1,
+      title: "Analisi",
+      fen: "4k3/8/8/3n4/8/2Q1R3/7P/4K3 w - - 0 1",
+      notes: "",
+      arrows: [],
+      highlights: [],
+      order: 0,
+      evalCp: 0,
+      evalMate: null,
+      evalDepth: 18,
+      evalBestMoveUci: null,
+      createdAt: new Date(),
+    } satisfies Board;
+    const move = {
+      id: 2,
+      boardId: 1,
+      moveNotation: "h3",
+      fen: "4k3/8/8/3n4/8/2Q1R2P/8/4K3 b - - 0 1",
+      parentId: null,
+      order: 0,
+      comment: "",
+      analysisComment: "La posizione ora contiene debolezze tattiche.",
+      arrows: [],
+      highlights: ["d5", "c3", "e3"],
+      tactics: [],
+      evalCp: -400,
+      evalMate: null,
+      evalDepth: 18,
+      evalBestMoveUci: null,
+      createdAt: new Date(),
+    } satisfies Move;
+
+    expect(resolveMoveTactics(board, [move], 0)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "fork" })]),
+    );
   });
 });

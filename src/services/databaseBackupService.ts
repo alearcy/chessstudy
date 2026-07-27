@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { toJson } from "@/lib/dataUtils";
+import { tacticalPatternsFromJson } from "@/lib/tacticalPatterns";
 import {
   boardFromRow,
   lessonFromRow,
@@ -215,6 +216,7 @@ function validateAndReviveBackup(value: unknown): DatabaseBackupV1 {
     }
     return {
       ...record,
+      tactics: tacticalPatternsFromJson(record.tactics),
       createdAt: requireDate(record, "createdAt", label),
       updatedAt: requireDate(record, "updatedAt", label),
     } as unknown as Move;

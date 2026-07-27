@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildStockfishCommands,
   evalScore,
-  findCriticalPositionIndexes,
   formatEval,
   moveClassification,
   parseStockfishEvaluation,
   prepareStockfishEngine,
-  runAdaptiveAnalysis,
+  runAutomaticAnalysis,
+  runStockfishBatch,
   selectStockfishRuntime,
   StockfishEngine,
   stockfishCommentForMove,
@@ -77,74 +77,29 @@ describe("analysisService eval helpers", () => {
   });
 });
 
-describe("adaptive Stockfish analysis", () => {
-  it("selects and deduplicates both sides of critical moves", () => {
-    const evals = [
-      positionEval("p0", 20),
-      positionEval("p1", -40), // White loses 60: critical.
-      positionEval("p2", 30),  // Black loses 70: critical.
-      positionEval("p3", 10),  // White loses 20: not critical.
-    ];
-
-    expect(findCriticalPositionIndexes(evals)).toEqual([0, 1, 2]);
-  });
-
-  it("uses the FEN side to move for games that start with Black", () => {
-    const evals = [
-      positionEval("8/8/8/8/8/8/8/8 b - - 0 1", 80),
-      positionEval("8/8/8/8/8/8/8/8 w - - 1 2", 150),
-    ];
-
-    expect(findCriticalPositionIndexes(evals)).toEqual([0, 1]);
-  });
-
-  it("refines critical positions at depth +5 with MultiPV 1", async () => {
-    const shallow = [
+describe("automatic Stockfish analysis", () => {
+  it("analyzes every position once at depth 15 with MultiPV 1", async () => {
+    const evaluations = [
       positionEval("p0", 20),
       positionEval("p1", -40),
       positionEval("p2", -30),
     ];
-    const deep = [
-      positionEval("p0", 10, 20),
-      positionEval("p1", -20, 20),
-    ];
     const analyzeBatch = vi
       .fn<(fens: string[], options?: AnalyzeOptions) => Promise<PositionEval[]>>()
-      .mockResolvedValueOnce(shallow)
-      .mockResolvedValueOnce(deep);
+      .mockResolvedValue(evaluations);
 
-    const result = await runAdaptiveAnalysis(
+    const result = await runAutomaticAnalysis(
       ["p0", "p1", "p2"],
-      { stockfish_depth: 15, stockfish_threads: 2 },
       {},
       analyzeBatch,
     );
 
-    expect(analyzeBatch).toHaveBeenNthCalledWith(
-      1,
+    expect(analyzeBatch).toHaveBeenCalledOnce();
+    expect(analyzeBatch).toHaveBeenCalledWith(
       ["p0", "p1", "p2"],
       expect.objectContaining({ depth: 15, threads: 2, multipv: 1 }),
     );
-    expect(analyzeBatch).toHaveBeenNthCalledWith(
-      2,
-      ["p0", "p1"],
-      expect.objectContaining({ depth: 20, threads: 2, multipv: 1 }),
-    );
-    expect(result).toEqual([deep[0], deep[1], shallow[2]]);
-  });
-
-  it("does not start a deep batch when every move is stable", async () => {
-    const shallow = [positionEval("p0", 10), positionEval("p1", 0)];
-    const analyzeBatch = vi.fn().mockResolvedValue(shallow);
-
-    await runAdaptiveAnalysis(
-      ["p0", "p1"],
-      { stockfish_depth: 15, stockfish_threads: 2 },
-      {},
-      analyzeBatch,
-    );
-
-    expect(analyzeBatch).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(evaluations);
   });
 });
 
@@ -277,6 +232,40 @@ describe("Stockfish 18 web runtime", () => {
     expect(terminateMulti).toHaveBeenCalledOnce();
     expect(createEngine).toHaveBeenCalledTimes(2);
     expect(engine.runtime).toMatchObject({
+      flavor: "single",
+      threads: 1,
+      compatibilityMode: true,
+    });
+  });
+
+  it("retries the batch in single-thread mode when the multi worker fails during analysis", async () => {
+    const multiRuntime = selectStockfishRuntime({
+      crossOriginIsolated: true,
+      hasSharedArrayBuffer: true,
+      hardwareConcurrency: 8,
+    }, 2);
+    const expected = positionEval("start-fen", 12);
+    const terminateMulti = vi.fn();
+    const createEngine = vi.fn((runtime: typeof multiRuntime) => ({
+      runtime,
+      whenReady: () => Promise.resolve(),
+      analyze: runtime.flavor === "multi"
+        ? vi.fn().mockRejectedValue(new Error("multi worker crashed"))
+        : vi.fn().mockResolvedValue(expected),
+      terminate: runtime.flavor === "multi" ? terminateMulti : vi.fn(),
+    }));
+
+    const result = await runStockfishBatch(
+      ["start-fen"],
+      { depth: 15, multipv: 1 },
+      multiRuntime,
+      createEngine,
+    );
+
+    expect(result).toEqual([expected]);
+    expect(terminateMulti).toHaveBeenCalledOnce();
+    expect(createEngine).toHaveBeenCalledTimes(2);
+    expect(createEngine.mock.calls[1]?.[0]).toMatchObject({
       flavor: "single",
       threads: 1,
       compatibilityMode: true,

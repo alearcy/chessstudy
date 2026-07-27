@@ -1,7 +1,33 @@
 import { act, renderHook } from "@testing-library/react";
+import { Chess } from "chess.js";
 import { describe, expect, it } from "vitest";
 
 import { useChessBoard } from "@/hooks/useChessBoard";
+import type { Move } from "@/types";
+
+const START_FEN =
+  "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+function persistedLine(sans: string[]): Move[] {
+  const game = new Chess(START_FEN);
+  return sans.map((san, index) => {
+    const played = game.move(san);
+    const id = index + 10;
+    return {
+      id,
+      boardId: 1,
+      parentId: index === 0 ? null : id - 1,
+      order: index,
+      moveNotation: played.san,
+      fen: game.fen(),
+      comment: "",
+      arrows: [],
+      highlights: [],
+      tactics: [],
+      createdAt: new Date(),
+    };
+  });
+}
 
 describe("useChessBoard", () => {
   it("records legal moves and can navigate back to the initial position", () => {
@@ -49,5 +75,33 @@ describe("useChessBoard", () => {
     expect(result.current.historyIndex).toBe(1);
     expect(result.current.fen).toContain(" b ");
     expect(result.current.canRedo).toBe(false);
+  });
+
+  it("appends without truncating after loading at the persisted end", () => {
+    const { result } = renderHook(() => useChessBoard());
+    const loadedMoves = persistedLine(["e4", "e5"]);
+    let truncatedMoveIds: number[] | null = null;
+
+    act(() => {
+      result.current.loadSequence(
+        START_FEN,
+        loadedMoves,
+        [],
+        [],
+        loadedMoves.length,
+      );
+    });
+    act(() => {
+      truncatedMoveIds =
+        result.current.makeMove("g1", "f3")?.truncatedMoveIds ?? null;
+    });
+
+    expect(result.current.historyIndex).toBe(3);
+    expect(result.current.moves.map((move) => move.moveNotation)).toEqual([
+      "e4",
+      "e5",
+      "Nf3",
+    ]);
+    expect(truncatedMoveIds).toEqual([]);
   });
 });

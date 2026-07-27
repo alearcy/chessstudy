@@ -38,8 +38,11 @@ describe("AnalysisSidebarTabs", () => {
     fireEvent.click(view.getByRole("tab", { name: "Mosse" }));
 
     const sidebar = view.getByRole("complementary");
+    expect(sidebar.className).toContain(
+      "tablet-landscape:h-[calc(100dvh-13rem)]",
+    );
+    expect(sidebar.className).toContain("tablet-landscape:overflow-hidden");
     expect(sidebar.className).toContain("xl:h-[calc(100dvh-13rem)]");
-    expect(sidebar.className).toContain("xl:overflow-hidden");
     expect(sidebar.className).not.toContain("xl:max-h-[520px]");
     expect(sidebar.className).not.toContain("xl:h-full");
     expect(sidebar.className).not.toContain("xl:self-stretch");

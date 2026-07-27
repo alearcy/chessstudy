@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-25T14:28:02Z",
+  "title": "Design System: Chess Study",
+  "extensions": {
+    "colorMeta": {
+      "graphite-base": {
+        "role": "neutral",
+        "displayName": "Grafite base",
+        "canonical": "oklch(0.145 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.55 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "graphite-raised": {
+        "role": "neutral",
+        "displayName": "Grafite rialzata",
+        "canonical": "oklch(0.205 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.55 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "limestone-surface": {
+        "role": "neutral",
+        "displayName": "Calcare di superficie",
+        "canonical": "oklch(0.269 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.55 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "canvas-primary": {
+        "role": "primary",
+        "displayName": "Tela primaria",
+        "canonical": "oklch(0.922 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.55 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "canvas-text": {
+        "role": "primary",
+        "displayName": "Testo tela",
+        "canonical": "oklch(0.985 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.55 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "limestone-text": {
+        "role": "neutral",
+        "displayName": "Calcare testuale",
+        "canonical": "oklch(0.708 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.55 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "limestone-ring": {
+        "role": "neutral",
+        "displayName": "Calcare di focus",
+        "canonical": "oklch(0.556 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.25 0 0)", "oklch(0.35 0 0)", "oklch(0.45 0 0)", "oklch(0.55 0 0)", "oklch(0.7 0 0)", "oklch(0.85 0 0)", "oklch(0.95 0 0)"]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Linea capillare",
+        "canonical": "oklch(1 0 0 / 10%)",
+        "tonalRamp": ["oklch(1 0 0 / 4%)", "oklch(1 0 0 / 8%)", "oklch(1 0 0 / 12%)", "oklch(1 0 0 / 18%)", "oklch(1 0 0 / 28%)", "oklch(1 0 0 / 42%)", "oklch(1 0 0 / 64%)", "oklch(1 0 0 / 90%)"]
+      },
+      "input-line": {
+        "role": "neutral",
+        "displayName": "Linea input",
+        "canonical": "oklch(1 0 0 / 15%)",
+        "tonalRamp": ["oklch(1 0 0 / 4%)", "oklch(1 0 0 / 8%)", "oklch(1 0 0 / 12%)", "oklch(1 0 0 / 18%)", "oklch(1 0 0 / 28%)", "oklch(1 0 0 / 42%)", "oklch(1 0 0 / 64%)", "oklch(1 0 0 / 90%)"]
+      },
+      "tactical-red": {
+        "role": "secondary",
+        "displayName": "Rosso tattico",
+        "canonical": "oklch(0.704 0.191 22.216)",
+        "tonalRamp": ["oklch(25.8% 0.092 26.042)", "oklch(44.4% 0.177 26.899)", "oklch(50.5% 0.213 27.518)", "oklch(57.7% 0.245 27.325)", "oklch(63.7% 0.237 25.331)", "oklch(70.4% 0.191 22.216)", "oklch(88.5% 0.062 18.334)", "oklch(97.1% 0.013 17.38)"]
+      },
+      "tactic-sky": {
+        "role": "tertiary",
+        "displayName": "Tattica cielo",
+        "canonical": "#0284c7",
+        "tonalRamp": ["oklch(29.3% 0.066 243.157)", "oklch(44.3% 0.11 240.79)", "oklch(50% 0.134 242.749)", "oklch(58.8% 0.158 241.966)", "oklch(68.5% 0.169 237.323)", "oklch(82.8% 0.111 230.318)", "oklch(95.1% 0.026 236.824)", "oklch(97.7% 0.013 236.62)"]
+      },
+      "tactic-fuchsia": {
+        "role": "tertiary",
+        "displayName": "Tattica fucsia",
+        "canonical": "#c026d3",
+        "tonalRamp": ["oklch(29.3% 0.136 325.661)", "oklch(45.2% 0.211 324.591)", "oklch(51.8% 0.253 323.949)", "oklch(59.1% 0.293 322.896)", "oklch(66.7% 0.295 322.15)", "oklch(83.3% 0.145 321.434)", "oklch(95.2% 0.037 318.852)", "oklch(97.7% 0.017 320.058)"]
+      },
+      "tactic-orange": {
+        "role": "tertiary",
+        "displayName": "Tattica arancio",
+        "canonical": "#ea580c",
+        "tonalRamp": ["oklch(26.6% 0.079 36.259)", "oklch(47% 0.157 37.304)", "oklch(55.3% 0.195 38.402)", "oklch(64.6% 0.222 41.116)", "oklch(70.5% 0.213 47.604)", "oklch(83.7% 0.128 66.29)", "oklch(95.4% 0.038 75.164)", "oklch(98% 0.016 73.684)"]
+      },
+      "tactic-emerald": {
+        "role": "tertiary",
+        "displayName": "Tattica smeraldo",
+        "canonical": "#059669",
+        "tonalRamp": ["oklch(26.2% 0.051 172.552)", "oklch(43.2% 0.095 166.913)", "oklch(50.8% 0.118 165.612)", "oklch(59.6% 0.145 163.225)", "oklch(69.6% 0.17 162.48)", "oklch(84.5% 0.143 164.978)", "oklch(95% 0.052 163.051)", "oklch(97.9% 0.021 166.113)"]
+      },
+      "tactic-violet": {
+        "role": "tertiary",
+        "displayName": "Tattica viola",
+        "canonical": "#7c3aed",
+        "tonalRamp": ["oklch(28.3% 0.141 291.089)", "oklch(43.2% 0.232 292.759)", "oklch(49.1% 0.27 292.581)", "oklch(54.1% 0.281 293.009)", "oklch(60.6% 0.25 292.717)", "oklch(81.1% 0.111 293.571)", "oklch(94.3% 0.029 294.588)", "oklch(96.9% 0.016 293.756)"]
+      },
+      "tactic-rose": {
+        "role": "tertiary",
+        "displayName": "Tattica rosa",
+        "canonical": "#e11d48",
+        "tonalRamp": ["oklch(27.1% 0.105 12.094)", "oklch(45.5% 0.188 13.697)", "oklch(51.4% 0.222 16.935)", "oklch(58.6% 0.253 17.585)", "oklch(64.5% 0.246 16.439)", "oklch(81% 0.117 11.638)", "oklch(94.1% 0.03 12.58)", "oklch(96.9% 0.015 12.422)"]
+      },
+      "tactic-amber": {
+        "role": "tertiary",
+        "displayName": "Tattica ambra",
+        "canonical": "#d97706",
+        "tonalRamp": ["oklch(27.9% 0.077 45.635)", "oklch(47.3% 0.137 46.201)", "oklch(55.5% 0.163 48.998)", "oklch(66.6% 0.179 58.318)", "oklch(76.9% 0.188 70.08)", "oklch(87.9% 0.169 91.605)", "oklch(96.2% 0.059 95.617)", "oklch(98.7% 0.022 95.277)"]
+      },
+      "tactic-teal": {
+        "role": "tertiary",
+        "displayName": "Tattica teal",
+        "canonical": "#0d9488",
+        "tonalRamp": ["oklch(27.7% 0.046 192.524)", "oklch(43.7% 0.078 188.216)", "oklch(51.1% 0.096 186.391)", "oklch(60% 0.118 184.704)", "oklch(70.4% 0.14 182.503)", "oklch(85.5% 0.138 181.071)", "oklch(95.3% 0.051 180.801)", "oklch(98.4% 0.014 180.72)"]
+      },
+      "move-best": {
+        "role": "tertiary",
+        "displayName": "Mossa migliore",
+        "canonical": "rgb(59, 130, 246)",
+        "tonalRamp": ["oklch(28.2% 0.091 267.935)", "oklch(42.4% 0.199 265.638)", "oklch(48.8% 0.243 264.376)", "oklch(54.6% 0.245 262.881)", "oklch(62.3% 0.214 259.815)", "oklch(80.9% 0.105 251.813)", "oklch(93.2% 0.032 255.585)", "oklch(97% 0.014 254.604)"]
+      },
+      "move-good": {
+        "role": "tertiary",
+        "displayName": "Mossa buona",
+        "canonical": "rgb(34, 197, 94)",
+        "tonalRamp": ["oklch(26.6% 0.065 152.934)", "oklch(44.8% 0.119 151.328)", "oklch(52.7% 0.154 150.069)", "oklch(62.7% 0.194 149.214)", "oklch(72.3% 0.219 149.579)", "oklch(87.1% 0.15 154.449)", "oklch(96.2% 0.044 156.743)", "oklch(98.2% 0.018 155.826)"]
+      },
+      "move-imprecision": {
+        "role": "tertiary",
+        "displayName": "Imprecisione",
+        "canonical": "rgb(202, 138, 4)",
+        "tonalRamp": ["oklch(28.6% 0.066 53.813)", "oklch(47.6% 0.114 61.907)", "oklch(55.4% 0.135 66.442)", "oklch(68.1% 0.162 75.834)", "oklch(79.5% 0.184 86.047)", "oklch(90.5% 0.182 98.111)", "oklch(97.3% 0.071 103.193)", "oklch(98.7% 0.026 102.212)"]
+      },
+      "move-mistake": {
+        "role": "tertiary",
+        "displayName": "Errore",
+        "canonical": "rgb(234, 88, 12)",
+        "tonalRamp": ["oklch(26.6% 0.079 36.259)", "oklch(47% 0.157 37.304)", "oklch(55.3% 0.195 38.402)", "oklch(64.6% 0.222 41.116)", "oklch(70.5% 0.213 47.604)", "oklch(83.7% 0.128 66.29)", "oklch(95.4% 0.038 75.164)", "oklch(98% 0.016 73.684)"]
+      },
+      "move-blunder": {
+        "role": "tertiary",
+        "displayName": "Errore grave",
+        "canonical": "rgb(220, 38, 38)",
+        "tonalRamp": ["oklch(25.8% 0.092 26.042)", "oklch(44.4% 0.177 26.899)", "oklch(50.5% 0.213 27.518)", "oklch(57.7% 0.245 27.325)", "oklch(63.7% 0.237 25.331)", "oklch(80.8% 0.114 19.571)", "oklch(93.6% 0.032 17.717)", "oklch(97.1% 0.013 17.38)"]
+      }
+    },
+    "typographyMeta": {
+      "headline": {"displayName": "Headline", "purpose": "Titolo della lezione e messaggi di orientamento."},
+      "title": {"displayName": "Title", "purpose": "Titoli di dialoghi e blocchi principali."},
+      "body": {"displayName": "Body", "purpose": "Testo operativo, descrizioni e contenuti dei pannelli."},
+      "label": {"displayName": "Label", "purpose": "Pulsanti, campi, tab e controlli."},
+      "caption": {"displayName": "Caption", "purpose": "Metadati ed etichette compatte."},
+      "move-notation": {"displayName": "Move notation", "purpose": "SAN, numeri di mossa e valori tecnici."}
+    },
+    "shadows": [
+      {"name": "control-minimum", "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)", "purpose": "Input e pulsanti outline."},
+      {"name": "surface-calm", "value": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)", "purpose": "Carte, tab selezionate e indicatori compatti."},
+      {"name": "menu-structural", "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)", "purpose": "Menu contestuali e popover."},
+      {"name": "dialog", "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "purpose": "Dialoghi modali."},
+      {"name": "inset-area", "value": "inset 0 2px 4px 0 rgb(0 0 0 / 0.05)", "purpose": "Grafici e letture tecniche integrate."}
+    ],
+    "motion": [
+      {"name": "transition-standard", "value": "150ms", "purpose": "Cambi di colore, ombra e stato dei controlli."},
+      {"name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Easing predefinito per transizioni operative."},
+      {"name": "orientation-turn", "value": "2.8s ease-in-out infinite", "purpose": "Solo per l'icona che invita a ruotare il dispositivo; disattivata con prefers-reduced-motion."}
+    ],
+    "breakpoints": [
+      {"name": "sm", "value": "640px"},
+      {"name": "md", "value": "768px"},
+      {"name": "tablet-landscape", "value": "landscape, min-width 912px, min-height 576px"},
+      {"name": "tablet-landscape-wide", "value": "landscape, min-width 1120px, min-height 576px"},
+      {"name": "xl", "value": "1280px"}
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Azione principale compatta con superficie Tela e testo Grafite.",
+      "html": "<button class=\"ds-btn-primary\">Analizza partita</button>",
+      "css": ".ds-btn-primary { display:inline-flex; height:36px; align-items:center; justify-content:center; gap:8px; padding:8px 16px; border:0; border-radius:var(--radius-md,8px); background:var(--primary); color:var(--primary-foreground); font:500 14px/20px ui-sans-serif,system-ui,sans-serif; transition:background 150ms,box-shadow 150ms; } .ds-btn-primary:hover { background:color-mix(in oklch,var(--primary) 90%,transparent); } .ds-btn-primary:focus-visible { outline:none; box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 50%,transparent); } .ds-btn-primary:active { transform:translateY(1px); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Azione secondaria delimitata da bordo e ombra minima.",
+      "html": "<button class=\"ds-btn-outline\">Importa PGN</button>",
+      "css": ".ds-btn-outline { display:inline-flex; height:36px; align-items:center; justify-content:center; padding:8px 16px; border:1px solid var(--border); border-radius:var(--radius-md,8px); background:var(--background); color:var(--foreground); box-shadow:0 1px 2px rgb(0 0 0 / .05); font:500 14px/20px ui-sans-serif,system-ui,sans-serif; transition:background 150ms,color 150ms,box-shadow 150ms; } .ds-btn-outline:hover { background:var(--accent); color:var(--accent-foreground); } .ds-btn-outline:focus-visible { outline:none; box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 50%,transparent); } .ds-btn-outline:active { transform:translateY(1px); }"
+    },
+    {
+      "name": "Ghost Icon Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Azione iconica da header o toolbar, invisibile finché non viene interrogata.",
+      "html": "<button class=\"ds-btn-ghost\" aria-label=\"Impostazioni\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.14.38.36.72.66 1 .3.28.69.43 1.1.4H21v4h-.1a1.7 1.7 0 0 0-1.5.6z\"></path></svg></button>",
+      "css": ".ds-btn-ghost { display:inline-flex; width:24px; height:24px; align-items:center; justify-content:center; padding:0; border:0; border-radius:var(--radius-md,8px); background:transparent; color:var(--foreground); transition:background 150ms,color 150ms,box-shadow 150ms; } .ds-btn-ghost svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; } .ds-btn-ghost:hover { background:var(--accent); color:var(--accent-foreground); } .ds-btn-ghost:focus-visible { outline:none; box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 50%,transparent); }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo compatto con bordo chiaro a bassa opacità e focus netto.",
+      "html": "<label class=\"ds-field\"><span>Titolo</span><input class=\"ds-input\" placeholder=\"Es. Apertura Italiana\"></label>",
+      "css": ".ds-field { display:grid; gap:6px; color:var(--foreground); font:500 14px/20px ui-sans-serif,system-ui,sans-serif; } .ds-input { width:280px; height:36px; padding:4px 12px; border:1px solid var(--input); border-radius:var(--radius-md,8px); background:transparent; color:var(--foreground); box-shadow:0 1px 2px rgb(0 0 0 / .05); font:400 14px/20px ui-sans-serif,system-ui,sans-serif; transition:border-color 150ms,box-shadow 150ms; } .ds-input::placeholder { color:var(--muted-foreground); } .ds-input:hover { border-color:color-mix(in oklch,var(--ring) 65%,var(--input)); } .ds-input:focus-visible { outline:none; border-color:var(--ring); box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 50%,transparent); }"
+    },
+    {
+      "name": "Lesson Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Riga d'archivio rialzata con gerarchia compatta e hover tonale.",
+      "html": "<article class=\"ds-lesson-card\"><div><strong>Apertura Italiana</strong><p>25 luglio 2026 · Studio</p></div><span aria-hidden=\"true\">›</span></article>",
+      "css": ".ds-lesson-card { display:flex; min-width:320px; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border:1px solid var(--border); border-radius:var(--radius-xl,14px); background:var(--card); color:var(--card-foreground); box-shadow:0 1px 3px rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1); font-family:ui-sans-serif,system-ui,sans-serif; transition:background 150ms,border-color 150ms; } .ds-lesson-card strong { font-size:14px; font-weight:600; } .ds-lesson-card p { margin:4px 0 0; color:var(--muted-foreground); font-size:12px; } .ds-lesson-card:hover { border-color:color-mix(in oklch,var(--primary) 40%,var(--border)); background:color-mix(in oklch,var(--muted) 40%,var(--card)); } .ds-lesson-card:focus-within { box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 50%,transparent); }"
+    },
+    {
+      "name": "Segmented Tabs",
+      "kind": "nav",
+      "description": "Navigazione locale su binario Calcare con selezione Grafite.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab ds-tab-active\" role=\"tab\" aria-selected=\"true\">Mosse</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Aperture</button></div>",
+      "css": ".ds-tabs { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; border-radius:var(--radius-lg,10px); background:var(--muted); } .ds-tab { min-height:32px; padding:6px 12px; border:0; border-radius:var(--radius-md,8px); background:transparent; color:var(--muted-foreground); font:500 14px/20px ui-sans-serif,system-ui,sans-serif; transition:background 150ms,color 150ms,box-shadow 150ms; } .ds-tab:hover { color:var(--foreground); } .ds-tab-active { background:var(--background); color:var(--foreground); box-shadow:0 1px 3px rgb(0 0 0 / .1),0 1px 2px -1px rgb(0 0 0 / .1); } .ds-tab:focus-visible { outline:none; box-shadow:0 0 0 2px var(--ring); }"
+    },
+    {
+      "name": "Error Notice",
+      "kind": "custom",
+      "description": "Errore persistente con messaggio, icona e azioni di recupero visibili.",
+      "html": "<div class=\"ds-error\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M21.73 18 13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z\"></path><path d=\"M12 9v4\"></path><path d=\"M12 17h.01\"></path></svg><div><strong>Errore</strong><p>Analisi non riuscita. Riprova.</p></div><button>Riprova</button></div>",
+      "css": ".ds-error { display:flex; min-width:360px; align-items:flex-start; gap:12px; padding:8px 12px; border:1px solid color-mix(in oklch,var(--destructive) 40%,transparent); border-radius:var(--radius-md,8px); background:color-mix(in oklch,var(--destructive) 10%,transparent); color:var(--destructive); font:400 14px/20px ui-sans-serif,system-ui,sans-serif; } .ds-error svg { width:16px; height:16px; margin-top:2px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; } .ds-error div { flex:1; } .ds-error strong { font-weight:500; } .ds-error p { margin:2px 0 0; opacity:.9; } .ds-error button { height:32px; padding:0 8px; border:0; border-radius:var(--radius-md,8px); background:transparent; color:inherit; font-weight:500; } .ds-error button:hover { background:color-mix(in oklch,var(--destructive) 12%,transparent); } .ds-error button:focus-visible { outline:none; box-shadow:0 0 0 2px color-mix(in oklch,var(--destructive) 45%,transparent); }"
+    },
+    {
+      "name": "Tactical Chip",
+      "kind": "chip",
+      "description": "Categoria tattica colorata, informativa e selezionabile.",
+      "html": "<button class=\"ds-tactic-chip\" aria-pressed=\"false\">Forchetta</button>",
+      "css": ".ds-tactic-chip { padding:4px 10px; border:1px solid #0284c7; border-radius:9999px; background:#0284c71a; color:#0284c7; font:500 12px/16px ui-sans-serif,system-ui,sans-serif; transition:background 150ms,color 150ms,box-shadow 150ms; } .ds-tactic-chip:hover { background:#0284c72b; } .ds-tactic-chip[aria-pressed=\"true\"],.ds-tactic-chip:active { background:#0284c7; color:white; box-shadow:0 0 0 2px #0284c755; } .ds-tactic-chip:focus-visible { outline:none; box-shadow:0 0 0 2px var(--ring),0 0 0 4px var(--background); }"
+    },
+    {
+      "name": "Dialog",
+      "kind": "custom",
+      "refersTo": "dialog",
+      "description": "Superficie modale focalizzata con gerarchia semplice e azioni allineate.",
+      "html": "<section class=\"ds-dialog\" role=\"dialog\" aria-labelledby=\"ds-dialog-title\"><h2 id=\"ds-dialog-title\">Elimina lezione</h2><p>L'operazione non è reversibile.</p><div><button class=\"ds-dialog-cancel\">Annulla</button><button class=\"ds-dialog-danger\">Elimina</button></div></section>",
+      "css": ".ds-dialog { width:420px; padding:24px; border:1px solid var(--border); border-radius:var(--radius-lg,10px); background:var(--background); color:var(--foreground); box-shadow:0 10px 15px -3px rgb(0 0 0 / .1),0 4px 6px -4px rgb(0 0 0 / .1); font-family:ui-sans-serif,system-ui,sans-serif; } .ds-dialog h2 { margin:0; font-size:18px; line-height:1; font-weight:600; } .ds-dialog p { margin:10px 0 24px; color:var(--muted-foreground); font-size:14px; line-height:20px; } .ds-dialog div { display:flex; justify-content:flex-end; gap:8px; } .ds-dialog button { height:36px; padding:0 16px; border-radius:var(--radius-md,8px); font:500 14px/20px ui-sans-serif,system-ui,sans-serif; } .ds-dialog-cancel { border:1px solid var(--border); background:var(--background); color:var(--foreground); } .ds-dialog-danger { border:0; background:var(--destructive); color:white; } .ds-dialog button:hover { filter:brightness(.92); } .ds-dialog button:focus-visible { outline:none; box-shadow:0 0 0 3px color-mix(in oklch,var(--ring) 50%,transparent); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Il Banco del Coach",
+    "overview": "Chess Study è un banco di lavoro digitale per osservare, annotare e capire: non una sala giochi e non una dashboard aziendale. L'ambiente scuro riduce il rumore attorno alla scacchiera, mentre la gerarchia compatta mantiene sempre vicini mosse, commenti e strumenti. Il carattere è calmo, preciso e ordinato.\n\nI componenti devono risultare precisi e rassicuranti. Bordi sottili, superfici tonali e ombre contenute separano gli strumenti senza teatralità; il colore compare quando porta informazione scacchistica o segnala uno stato. Gli accenti corallo e oro del logo restano una firma del marchio, non una licenza per colorare indiscriminatamente l'interfaccia.",
+    "keyCharacteristics": [
+      "Campo di lavoro scuro e neutro, con contrasto chiaro e controllato.",
+      "Densità operativa adatta a scacchiera, mosse e pannelli affiancati.",
+      "Profondità strutturale discreta: bordi prima, ombre leggere dopo.",
+      "Colore saturo riservato a tattiche, qualità delle mosse e stati semantici.",
+      "Controlli compatti, leggibili e immediatamente riconoscibili."
+    ],
+    "rules": [
+      {"name": "The Graphite Field Rule", "body": "Grafite resta il campo dominante; Tela chiarisce contenuto e azione, ma non diventa una seconda superficie di sfondo estesa.", "section": "colors"},
+      {"name": "The Semantic Color Rule", "body": "Ogni colore saturo deve spiegare una tattica, una valutazione o uno stato. Se non aggiunge significato, resta neutro.", "section": "colors"},
+      {"name": "The Logo Boundary Rule", "body": "Corallo e oro appartengono al logo finché non vengono deliberatamente estratti in una futura evoluzione del sistema.", "section": "colors"},
+      {"name": "The One Family Rule", "body": "Usa il system sans per tutta l'interfaccia; una nuova famiglia tipografica richiede una decisione di identità, non una scelta locale.", "section": "typography"},
+      {"name": "The Chess Data Rule", "body": "Riserva il monospaziato a notazione, FEN, valutazioni e dati tecnici confrontabili; non usarlo per titoli o call to action.", "section": "typography"},
+      {"name": "The One-Viewport Rule", "body": "Sulla superficie di analisi, scacchiera e strumenti essenziali devono restare coordinati nello stesso viewport; lo scroll interno appartiene ai pannelli lunghi, non alla struttura principale.", "section": "layout"},
+      {"name": "The Compact Control Rule", "body": "Le azioni ricorrenti usano controlli da 24-36px; riserva altezze maggiori alle azioni di ingresso che spiegano anche il proprio scopo.", "section": "layout"},
+      {"name": "The Border-First Rule", "body": "A riposo, separa con bordo o tono. Aggiungi ombra solo quando una superficie è selezionata, flottante o realmente sovrapposta.", "section": "elevation"},
+      {"name": "The Nested Radius Rule", "body": "Un elemento annidato deve avere un raggio uguale o inferiore al contenitore che lo ospita.", "section": "shapes"}
+    ],
+    "dos": [
+      "Do mantenere Grafite come campo dominante e usare Tela per testo e azioni prioritarie.",
+      "Do usare il ritmo 4/8/12/16/24/32px e raggi coerenti da 8-14px.",
+      "Do rendere visibili focus, caricamento, errore, selezione e disabilitazione.",
+      "Do riservare i colori saturi a tattiche, qualità delle mosse e stati semantici.",
+      "Do mantenere scacchiera e strumenti essenziali coordinati nel viewport desktop o tablet landscape."
+    ],
+    "donts": [
+      "Don't introdurre neon, bagliori, gradienti spettacolari o cromie da interfaccia gaming.",
+      "Don't usare gamification vistosa, trofei o ricompense decorative per sostituire il feedback didattico.",
+      "Don't trasformare corallo e oro del logo in accenti globali senza una decisione esplicita di evoluzione dell'identità.",
+      "Don't aggiungere ombre grandi a superfici che possono essere separate con bordo o tono.",
+      "Don't usare font decorativi, serif o monospaziati fuori dai ruoli già stabiliti."
+    ]
+  }
+}

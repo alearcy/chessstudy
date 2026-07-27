@@ -40,7 +40,7 @@ produzione.
   deterministici e dei contratti `PositionEval` esistenti;
 - rimozione del runtime Tauri, del backend Rust, dei binari nativi e delle
   relative dipendenze frontend;
-- uso del logo `public/chessstudy.svg` nei punti in cui il nome
+- uso del logo `public/chessstudy.png` nei punti in cui il nome
   "Chess Study" identifica il marchio, inclusi testata e login;
 - configurazione Vite e hosting statico per isolamento cross-origin e fallback
   delle route SPA.
@@ -99,16 +99,16 @@ produzione.
 15. L'import non sostituisce implicitamente i dati remoti: un eventuale
     conflitto su UID viene segnalato prima della conferma e non produce
     duplicati parziali.
-16. Le impostazioni Stockfish e gli username Lichess/Chess.com sono salvati per
-    utente in Supabase e ricaricati su ogni dispositivo.
+16. Gli username Lichess/Chess.com sono salvati per utente in Supabase e
+    ricaricati su ogni dispositivo; Stockfish usa un profilo automatico.
 17. L'analisi usa `stockfish-18-lite` multi-threaded in un Web Worker quando
     `crossOriginIsolated` e `SharedArrayBuffer` sono disponibili.
 18. Se l'isolamento cross-origin non è disponibile, l'analisi passa
     automaticamente a `stockfish-18-lite-single` e mostra che è attiva la
     modalità compatibilità a un thread.
-19. Il profilo predefinito resta profondità 15, 2 thread e `MultiPV 1`; i valori
-    vengono limitati alle opzioni supportate e il fallback single-thread forza
-    un thread.
+19. Il profilo automatico resta profondità 15, 2 thread e `MultiPV 1`; il
+    fallback single-thread forza un thread e nessun valore e configurabile
+    dall'utente.
 20. L'analisi adattiva continua a eseguire la passata base e il raffinamento
     delle posizioni critiche a profondità base + 5, massimo 30, mantenendo
     cancellazione, progresso e normalizzazione dal punto di vista del Bianco.
@@ -117,7 +117,7 @@ produzione.
 22. L'app funziona con `npm run dev`, `npm run build` e `npm run preview` senza
     toolchain Rust; in produzione, un refresh su una route valida della SPA non
     restituisce 404.
-23. La testata privata e il form di login mostrano il logo SVG con testo
+23. La testata privata e il form di login mostrano il logo PNG con testo
     alternativo "Chess Study"; i titoli descrittivi delle altre pagine restano
     testo.
 
@@ -140,8 +140,8 @@ Le migrazioni imperative creano le seguenti tabelle nel schema esposto
 `public`:
 
 - `user_settings`: `user_id uuid` primary key e foreign key verso
-  `auth.users`, profondità e thread Stockfish, username Lichess/Chess.com,
-  `created_at`, `updated_at`;
+  `auth.users`, username Lichess/Chess.com, colonne Stockfish legacy con default
+  automatici, `created_at`, `updated_at`;
 - `user_security_state`: `user_id uuid` primary key e foreign key verso
   `auth.users`, flag `must_change_password` e date; gli account esistenti sono
   inizializzati a `false`, i nuovi account a `true`;
@@ -217,8 +217,8 @@ Data API, la migrazione include e verifica i grant minimi al ruolo
   configurata in Supabase;
 - nessun payload client può scegliere o modificare l'owner effettivo;
 - modalità lezione limitata a `study` o `analysis`;
-- profondità Stockfish limitata alle opzioni UI e comunque a `1..30`;
-- thread limitati a `1..min(hardwareConcurrency, limite engine)` e default 2;
+- profondità Stockfish automatica 15, con raffinamento a 20;
+- thread automatici: 2 nel runtime multi-thread e 1 nel fallback;
 - `MultiPV` resta 1 nel flusso di analisi partita;
 - FEN, ordine, date, JSON annotazioni e valori di valutazione devono essere
   validi prima di una scrittura o importazione;
@@ -244,8 +244,8 @@ Data API, la migrazione include e verifica i grant minimi al ruolo
   ripetibili senza duplicare scritture.
 - **Compatibility:** browser desktop moderni; fallback single-thread quando
   SharedArrayBuffer non è utilizzabile.
-- **Resource usage:** default visibile `2 thread (consigliato)` e coda di analisi
-  sequenziale per evitare saturazione della CPU.
+- **Resource usage:** profilo automatico conservativo a 2 thread e coda di
+  analisi sequenziale per evitare saturazione della CPU.
 - **Cost:** architettura compatibile con i piani gratuiti Supabase e hosting
   statico, senza dipendenze obbligatorie a pagamento.
 - **Maintainability:** UI separata dai dettagli PostgREST tramite repository e
@@ -286,8 +286,8 @@ del diff prima di passare alla successiva.
   `parent_id` collegati a owner o padre differenti.
 - **Repository unit:** mapping date/JSON/campi opzionali, paginazione stabile,
   ricerca, modalità, preferiti e conteggio totale.
-- **Settings integration:** default depth 15/thread 2, clamping, salvataggio e
-  isolamento tra utenti.
+- **Settings integration:** salvataggio e isolamento degli username di gioco;
+  le colonne Stockfish legacy non vengono lette o aggiornate dal frontend.
 - **RPC integration:** conversione analisi-studio completa oppure rollback;
   funzioni non eseguibili da `anon` e incapaci di operare su dati altrui.
 - **Backup unit:** parsing del formato v1, date, UID, riferimenti, catena
@@ -296,10 +296,10 @@ del diff prima di passare alla successiva.
   UID, conteggi corretti e rollback totale su errore intermedio.
 - **Stockfish unit:** protocollo UCI, parsing `cp`/`mate`, normalizzazione POV,
   progress, cancellazione e mantenimento dell'analisi adattiva.
-- **Stockfish browser:** scelta multi-thread in contesto isolato, applicazione
-  dei thread configurati e fallback single-thread quando l'isolamento manca.
+- **Stockfish browser:** scelta multi-thread automatica in contesto isolato e
+  fallback single-thread quando l'isolamento manca.
 - **UI:** stati loading/error/retry per Auth, CRUD remoto, backup e analisi;
-  indicazione visibile della modalità Stockfish compatibile; logo SVG presente
+  controlli Stockfish presenti soltanto in modalita Analisi; logo PNG presente
   e accessibile nella testata e nel login.
 - **Deployment smoke:** asset JS/WASM raggiungibili con MIME corretto, header
   COOP/COEP presenti, `crossOriginIsolated` vero sul deploy supportato e refresh
@@ -326,15 +326,15 @@ del diff prima di passare alla successiva.
   contenuti scacchistici e un errore simulato dimostra il rollback;
 - nessun accesso runtime usa Dexie, IndexedDB, Tauri, Rust o binari nativi;
 - Stockfish lite multi analizza correttamente sul deploy isolato e lite single
-  entra in funzione, con indicazione visibile, quando l'isolamento viene tolto;
-- default e limiti Stockfish restano depth 15, 2 thread consigliati,
+  entra automaticamente in funzione quando l'isolamento viene tolto;
+- il profilo Stockfish resta depth 15, 2 thread automatici,
   `MultiPV 1`, raffinamento +5 e massimo 30;
 - asset, redirect Auth, header COOP/COEP e fallback SPA sono verificati
   sull'ambiente pubblicato;
 - nel bundle non sono presenti service role key, secret key o credenziali
   amministrative;
 - migrazioni, tipi generati e configurazione deploy sono versionati;
-- testata e login usano il logo SVG senza perdere il nome accessibile
+- testata e login usano il logo PNG senza perdere il nome accessibile
   "Chess Study";
 - test frontend e integrazione RLS passano, `npm run build` e
   `git diff --check` sono verdi;

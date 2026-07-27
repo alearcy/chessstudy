@@ -24,6 +24,7 @@ function move(
     comment,
     arrows: [],
     highlights: [],
+    tactics: [],
     createdAt: new Date("2026-07-18T00:00:00Z"),
   };
 }
@@ -125,8 +126,8 @@ describe("createStudyBoardPng", () => {
     expect(context.fillRect).toHaveBeenCalledWith(0, 0, 100, 100);
     expect(context.fillRect).toHaveBeenCalledWith(0, 0, 800, 800);
     expect(context.moveTo).toHaveBeenCalledWith(750, 50);
-    expect(context.lineTo).toHaveBeenCalledWith(750, 750);
-    expect(context.fillText).toHaveBeenCalledWith("♖", 50, 50);
+    expect(context.lineTo).toHaveBeenCalledWith(750, 702);
+    expect(context.fillText).toHaveBeenCalledWith("♜", 50, 50);
   });
 });
 

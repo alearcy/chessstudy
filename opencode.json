@@ -1,4 +1,63 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "openrouter/deepseek/deepseek-v4-pro"
+  "model": "headroom/gpt-5.6-sol",
+  "provider": {
+    "headroom": {
+      "name": "Headroom Proxy",
+      "options": {
+        "baseURL": "http://127.0.0.1:8787/v1",
+        "apiKey": ""
+      },
+      "models": {
+        "gpt-5.6-sol": {
+          "name": "gpt-5.6-sol"
+        },
+        "deepseek-r1": {
+          "name": "deepseek/deepseek-r1"
+        },
+        "deepseek-v3": {
+          "name": "deepseek/deepseek-v3"
+        },
+        "deepseek-chat": {
+          "name": "deepseek/deepseek-chat"
+        },
+        "deepseek-v4-flash": {
+          "name": "deepseek/deepseek-v4-flash"
+        },
+        "deepseek-v4-pro": {
+          "name": "deepseek/deepseek-v4-pro"
+        }
+      }
+    }
+  },
+  "mcp": {
+    "headroom": {
+      "type": "local",
+      "command": ["headroom", "mcp", "serve"]
+    },
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp?project_ref=kqelpmbpacvzxpvqpfll"
+    },
+    "cloudflare": {
+      "type": "remote",
+      "url": "https://mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-docs": {
+      "type": "remote",
+      "url": "https://docs.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-bindings": {
+      "type": "remote",
+      "url": "https://bindings.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-builds": {
+      "type": "remote",
+      "url": "https://builds.mcp.cloudflare.com/mcp"
+    },
+    "cloudflare-observability": {
+      "type": "remote",
+      "url": "https://observability.mcp.cloudflare.com/mcp"
+    }
+  }
 }

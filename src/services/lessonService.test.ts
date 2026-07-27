@@ -34,7 +34,6 @@ describe("lesson service Supabase transactions", () => {
         order: 0,
         createdAt: new Date(),
       },
-      [],
     )).resolves.toBe(44);
 
     expect(rpcMock).toHaveBeenCalledWith("convert_analysis_to_study", {

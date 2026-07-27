@@ -27,3 +27,8 @@ tsconfig.tsbuildinfo
 # opencode agent config
 .agents/
 skills-lock.json
+
+# Local agent tool state
+.codex/hooks.json
+.impeccable/config.local.json
+.serena/memories/

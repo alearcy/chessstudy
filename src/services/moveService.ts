@@ -5,6 +5,7 @@ import {
   getMove,
   getMovesByBoard,
   updateMove,
+  updateMovesBatch,
 } from "@/repositories/moveRepository";
 import type { Move } from "@/types";
 
@@ -15,7 +16,9 @@ export {
   getMove,
   getMovesByBoard,
   updateMove,
+  updateMovesBatch,
 };
+export type { MoveUpdatePatch } from "@/repositories/moveRepository";
 
 export async function updateMoveEval(
   id: number,

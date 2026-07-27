@@ -96,6 +96,8 @@ export interface Move {
   arrows: BoardArrow[];
   /** Case evidenziate su questa posizione. */
   highlights: BoardHighlight[];
+  /** Pattern tattici strutturati rilevati durante l'analisi. */
+  tactics: TacticalPattern[];
   createdAt: Date;
   updatedAt?: Date;
   /** Valutazione Stockfish della posizione DOPO questa mossa (POV Bianco). */

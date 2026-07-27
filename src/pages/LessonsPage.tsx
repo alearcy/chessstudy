@@ -11,7 +11,6 @@ import {
   Swords,
   Heart,
   Search,
-  CalendarDays,
 } from "lucide-react";
 import {
   getLessonsPage,
@@ -221,7 +220,6 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
   const [chessComUsername, setChessComUsername] = useState("");
   const [checkingChessComSettings, setCheckingChessComSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
   const [kindFilter, setKindFilter] = useState<
     "favorites" | "analysis" | "study" | null
   >(null);
@@ -235,7 +233,6 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
       setPageError(null);
       const result = await getLessonsPage({
         query: searchQuery,
-        createdOn: dateFilter || undefined,
         kind: kindFilter,
         page: targetPage,
         pageSize: 20,
@@ -248,7 +245,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
       console.error("[lessons-load] errore", e);
       setPageError("Impossibile caricare le lezioni.");
     }
-  }, [dateFilter, kindFilter, page, searchQuery]);
+  }, [kindFilter, page, searchQuery]);
 
   useEffect(() => {
     loadLessons();
@@ -332,7 +329,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
     }
   };
 
-  const hasActiveFilters = Boolean(searchQuery || dateFilter || kindFilter);
+  const hasActiveFilters = Boolean(searchQuery || kindFilter);
   const isEmptyArchive = totalLessons === 0 && !hasActiveFilters;
 
   const handleBackupRestored = useCallback(async () => {
@@ -439,7 +436,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
 
       {!isEmptyArchive && (
         <section
-          className="mb-6 grid gap-3 pt-6 md:grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_auto_auto]"
+          className="mb-6 grid gap-3 pt-6 md:grid-cols-[minmax(0,1fr)_auto]"
           aria-label="Filtri lezioni"
         >
           <label className="relative block">
@@ -456,22 +453,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
             />
           </label>
 
-          <label className="relative block md:w-56">
-            <span className="sr-only">Filtra per data</span>
-            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(event) => {
-                setDateFilter(event.target.value);
-                setPage(1);
-              }}
-              className="pl-9"
-              aria-label="Filtra per data"
-            />
-          </label>
-
-          <div className="flex flex-wrap gap-2 lg:justify-end">
+          <div className="flex flex-wrap gap-2 md:justify-end">
             {[
               { value: "favorites", label: "Preferite" },
               { value: "analysis", label: "Solo analisi" },

@@ -27,6 +27,8 @@ essere creata prima che la precedente abbia ottenuto un `id`; in quel caso
   - creare la mossa;
   - aggiornare placeholder UI con l'id persistito.
 - Bloccare ulteriori drop finche la coda non torna vuota.
+- Non mostrare uno stato pending sopra la scacchiera: il blocco resta interno e
+  non deve produrre spostamenti del layout a ogni mossa.
 - In caso di errore, mostrare messaggio in pagina e ricaricare la board dal DB.
 
 ## Verifica

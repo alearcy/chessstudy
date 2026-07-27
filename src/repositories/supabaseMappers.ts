@@ -1,4 +1,5 @@
 import { toJson } from "@/lib/dataUtils";
+import { tacticalPatternsFromJson } from "@/lib/tacticalPatterns";
 import type {
   Tables,
   TablesInsert,
@@ -84,6 +85,7 @@ export function moveFromRow(row: MoveRow): Move {
     stockfishComment: row.stockfish_comment,
     arrows: Array.isArray(row.arrows) ? row.arrows as BoardArrow[] : [],
     highlights: Array.isArray(row.highlights) ? row.highlights as BoardHighlight[] : [],
+    tactics: tacticalPatternsFromJson(row.tactics),
     evalCp: row.eval_cp,
     evalMate: row.eval_mate,
     evalDepth: row.eval_depth,
@@ -147,6 +149,7 @@ export function movePayload(
     stockfish_comment: move.stockfishComment ?? null,
     arrows: toJson(move.arrows ?? []),
     highlights: toJson(move.highlights ?? []),
+    tactics: toJson(move.tactics ?? []),
     eval_cp: move.evalCp ?? null,
     eval_mate: move.evalMate ?? null,
     eval_depth: move.evalDepth ?? 0,

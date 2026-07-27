@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant tablet-landscape (@media (orientation: landscape) and (min-width: 57rem) and (min-height: 36rem) and (max-width: 79.999rem));
+@custom-variant tablet-landscape-wide (@media (orientation: landscape) and (min-width: 70rem) and (min-height: 36rem) and (max-width: 79.999rem));
 
 :root {
   --radius: 0.625rem;
@@ -115,5 +117,28 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@keyframes cs-orientation-turn {
+  0%,
+  15%,
+  100% {
+    transform: rotate(0deg);
+  }
+  45%,
+  75% {
+    transform: rotate(90deg);
+  }
+}
+
+.cs-orientation-device {
+  animation: cs-orientation-turn 2.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-orientation-device {
+    animation: none;
   }
 }

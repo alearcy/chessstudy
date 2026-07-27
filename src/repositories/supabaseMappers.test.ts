@@ -81,6 +81,13 @@ describe("Supabase data mappers", () => {
       stockfish_comment: "Buona mossa",
       arrows: [],
       highlights: [],
+      tactics: [{
+        type: "fork",
+        actor: "cavallo",
+        victims: ["torre", "donna"],
+        squares: ["d5", "c7", "f6"],
+        description: "Forchetta.",
+      }],
       eval_cp: 24,
       eval_mate: null,
       eval_depth: 15,
@@ -94,6 +101,7 @@ describe("Supabase data mappers", () => {
       moveNotation: "e4",
       order: 1,
       stockfishComment: "Buona mossa",
+      tactics: [expect.objectContaining({ type: "fork", squares: ["d5", "c7", "f6"] })],
       evalCp: 24,
       updatedAt: new Date("2026-07-18T11:00:00.000Z"),
     });

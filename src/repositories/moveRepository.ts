@@ -48,10 +48,9 @@ export async function createMove(move: Omit<Move, "id" | "createdAt">): Promise<
   return requireData(response.data as { id: number } | null, response.error, "Creazione mossa fallita.").id;
 }
 
-export async function updateMove(
-  id: number,
-  data: Partial<Pick<Move, "comment" | "analysisComment" | "stockfishComment" | "fen" | "moveNotation" | "arrows" | "highlights" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>,
-): Promise<void> {
+export type MoveUpdatePatch = Partial<Pick<Move, "comment" | "analysisComment" | "stockfishComment" | "fen" | "moveNotation" | "arrows" | "highlights" | "tactics" | "evalCp" | "evalMate" | "evalDepth" | "evalBestMoveUci">>;
+
+function buildUpdatePayload(data: MoveUpdatePatch): TablesUpdate<"moves"> {
   const payload: TablesUpdate<"moves"> = { updated_at: new Date().toISOString() };
   if ("comment" in data) payload.comment = data.comment;
   if ("analysisComment" in data) payload.analysis_comment = data.analysisComment;
@@ -60,12 +59,42 @@ export async function updateMove(
   if ("moveNotation" in data) payload.move_notation = data.moveNotation;
   if ("arrows" in data) payload.arrows = toJson(data.arrows);
   if ("highlights" in data) payload.highlights = toJson(data.highlights);
+  if ("tactics" in data) payload.tactics = toJson(data.tactics);
   if ("evalCp" in data) payload.eval_cp = data.evalCp;
   if ("evalMate" in data) payload.eval_mate = data.evalMate;
   if ("evalDepth" in data) payload.eval_depth = data.evalDepth;
   if ("evalBestMoveUci" in data) payload.eval_best_move_uci = data.evalBestMoveUci;
-  const { error } = await supabase.from("moves").update(payload).eq("id", id);
+  return payload;
+}
+
+export async function updateMove(
+  id: number,
+  data: MoveUpdatePatch,
+): Promise<void> {
+  const { error } = await supabase.from("moves").update(buildUpdatePayload(data)).eq("id", id);
   throwIfError(error);
+}
+
+// Aggiorna più mosse con UPDATE parallele a chunk. Upsert non praticabile:
+// Postgres valida i NOT NULL (board_id, ...) prima dell'ON CONFLICT, quindi
+// un upsert parziale fallirebbe. Con chunk da 20, 87 mosse ≈ 5 "ondate"
+// di richieste concorrenti invece di 87 roundtrips sequenziali.
+const BATCH_CHUNK_SIZE = 20;
+
+export async function updateMovesBatch(
+  updates: Array<{ id: number; data: MoveUpdatePatch }>,
+): Promise<void> {
+  for (let i = 0; i < updates.length; i += BATCH_CHUNK_SIZE) {
+    await Promise.all(
+      updates.slice(i, i + BATCH_CHUNK_SIZE).map(async ({ id, data }) => {
+        const { error } = await supabase
+          .from("moves")
+          .update(buildUpdatePayload(data))
+          .eq("id", id);
+        throwIfError(error);
+      })
+    );
+  }
 }
 
 export async function deleteMovesByBoard(boardId: number): Promise<void> {

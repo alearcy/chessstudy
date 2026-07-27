@@ -6,7 +6,7 @@ import ViewportSidebar from "@/components/layout/ViewportSidebar";
 afterEach(cleanup);
 
 describe("ViewportSidebar", () => {
-  it("condivide il vincolo al viewport e lo scroll interno sui layout desktop", () => {
+  it("condivide il vincolo al viewport e lo scroll interno da tablet landscape", () => {
     const view = render(
       <ViewportSidebar aria-label="Mosse dello studio">
         <div>Notazione</div>
@@ -17,8 +17,11 @@ describe("ViewportSidebar", () => {
       name: "Mosse dello studio",
     });
 
+    expect(sidebar.className).toContain(
+      "tablet-landscape:h-[calc(100dvh-13rem)]",
+    );
+    expect(sidebar.className).toContain("tablet-landscape:overflow-hidden");
     expect(sidebar.className).toContain("xl:h-[calc(100dvh-13rem)]");
-    expect(sidebar.className).toContain("xl:overflow-hidden");
     expect(sidebar.className).toContain("min-h-0");
   });
 });

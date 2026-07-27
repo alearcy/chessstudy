@@ -13,6 +13,9 @@ scacchiera di analisi per creare una lezione di studio.
   l'analisi originale restera invariata.
 - `Annulla` chiude il dialog senza chiamare la conversione.
 - `Converti` avvia il flusso esistente `convertAnalysisToStudy`.
+- Il nuovo Studio contiene soltanto la sequenza delle mosse. Valutazioni,
+  commenti e suggerimenti Stockfish, spunti didattici, annotazioni e report di
+  analisi non vengono copiati.
 - Durante la conversione i comandi del dialog sono disabilitati e il pulsante
   di conferma mostra lo stato in corso.
 - Gli errori continuano a essere mostrati dal banner contestuale gia presente
@@ -24,11 +27,15 @@ Il controllo di conversione in `ChessBoardView` gestisce lo stato di apertura
 del dialog. La callback ricevuta da `LessonDetailPage` viene invocata soltanto
 dopo la conferma esplicita.
 
-Non cambiano il servizio, il modello dati o la semantica della conversione.
+La RPC `convert_analysis_to_study` mantiene la conversione atomica ma inserisce
+board e mosse usando i default puliti dei campi di analisi. Il client passa
+soltanto gli ID della lezione e della board sorgenti; non carica preventivamente
+le mosse.
 
 ## Test
 
 - Il primo click apre il dialog senza invocare la callback.
 - `Annulla` chiude il dialog senza conversione.
 - `Converti` invoca la callback una sola volta.
+- La migrazione della RPC copia soltanto notazione, FEN e ordine delle mosse.
 - Test completi, lint e build passano.

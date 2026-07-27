@@ -1,4 +1,4 @@
-import { Chess, type Color, type PieceSymbol } from "chess.js";
+import { Chess, type PieceSymbol } from "chess.js";
 
 import type { BoardArrow, BoardHighlight, Move } from "@/types";
 
@@ -25,23 +25,15 @@ const DARK_SQUARE = "#b58863";
 const DEFAULT_HIGHLIGHT = "rgb(250,204,21)";
 const DEFAULT_ARROW = "rgb(239,68,68)";
 
-const PIECES: Record<Color, Record<PieceSymbol, string>> = {
-  w: {
-    k: "♔",
-    q: "♕",
-    r: "♖",
-    b: "♗",
-    n: "♘",
-    p: "♙",
-  },
-  b: {
-    k: "♚",
-    q: "♛",
-    r: "♜",
-    b: "♝",
-    n: "♞",
-    p: "♟",
-  },
+// Usiamo i glifi pieni (♚♛♜♝♞♟) per entrambi i colori,
+// così il fill interno è un'area solida e non un contorno vuoto.
+const PIECE_GLYPH: Record<PieceSymbol, string> = {
+  k: "♚",
+  q: "♛",
+  r: "♜",
+  b: "♝",
+  n: "♞",
+  p: "♟",
 };
 
 function cleanHeaderValue(value: string | null | undefined): string | null {
@@ -141,13 +133,19 @@ function drawArrow(
   squareSize: number,
 ) {
   const angle = Math.atan2(toY - fromY, toX - fromX);
-  const headLength = squareSize * 0.28;
+  const headLength = squareSize * 0.48;
+
+  // La linea termina alla base della punta della freccia, non al centro
+  // della casa di destinazione. Così il `lineCap` arrotondato non sporge
+  // oltre il triangolo della punta.
+  const baseX = toX - headLength * Math.cos(angle);
+  const baseY = toY - headLength * Math.sin(angle);
 
   context.beginPath();
   context.moveTo(fromX, fromY);
-  context.lineTo(toX, toY);
+  context.lineTo(baseX, baseY);
   context.strokeStyle = color;
-  context.lineWidth = squareSize * 0.11;
+  context.lineWidth = squareSize * 0.14;
   context.lineCap = "round";
   context.lineJoin = "round";
   context.stroke();
@@ -204,12 +202,12 @@ function drawStudyBoard(
       if (!piece) continue;
       const position = squarePosition(piece.square, input.orientation);
       if (!position) continue;
-      const symbol = PIECES[piece.color][piece.type];
+      const symbol = PIECE_GLYPH[piece.type];
       const x = (position.column + 0.5) * squareSize;
       const y = (position.row + 0.5) * squareSize;
-      context.fillStyle = piece.color === "w" ? "#f8fafc" : "#111827";
-      context.strokeStyle = piece.color === "w" ? "#111827" : "#f8fafc";
-      context.lineWidth = squareSize * 0.015;
+      context.fillStyle = piece.color === "w" ? "#ffffff" : "#111827";
+      context.strokeStyle = piece.color === "w" ? "#111827" : "#94a3b8";
+      context.lineWidth = squareSize * 0.022;
       context.strokeText(symbol, x, y);
       context.fillText(symbol, x, y);
     }

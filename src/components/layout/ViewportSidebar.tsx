@@ -9,7 +9,7 @@ export default function ViewportSidebar({
   return (
     <aside
       className={cn(
-        "flex min-h-0 min-w-0 flex-col xl:h-[calc(100dvh-13rem)] xl:overflow-hidden",
+        "flex min-h-0 min-w-0 flex-col tablet-landscape:h-[calc(100dvh-13rem)] tablet-landscape:overflow-hidden xl:h-[calc(100dvh-13rem)] xl:overflow-hidden",
         className,
       )}
       {...props}

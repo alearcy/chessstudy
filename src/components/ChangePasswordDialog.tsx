@@ -1,13 +1,24 @@
-import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/auth/authContext";
 import { changePassword } from "@/auth/authService";
 import ErrorNotice from "@/components/ErrorNotice";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-export default function ChangePasswordPage() {
+interface ChangePasswordDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export default function ChangePasswordDialog({ open, onOpenChange }: ChangePasswordDialogProps) {
   const { user } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -15,6 +26,16 @@ export default function ChangePasswordPage() {
   const [pending, setPending] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmation("");
+      setSuccess(false);
+      setError(null);
+    }
+  }, [open]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,15 +65,19 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <Card className="mx-auto w-full max-w-lg">
-      <CardHeader>
-        <CardTitle>Cambia password</CardTitle>
-        <CardDescription>Conferma la password corrente prima di impostarne una nuova.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!pending) onOpenChange(nextOpen); }}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Cambia password</DialogTitle>
+          <DialogDescription>Conferma la password corrente prima di impostarne una nuova.</DialogDescription>
+        </DialogHeader>
         <form className="space-y-4" onSubmit={handleSubmit}>
           {error && <ErrorNotice message={error} onDismiss={() => setError(null)} />}
-          {success && <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">Password aggiornata.</p>}
+          {success && (
+            <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+              Password aggiornata.
+            </p>
+          )}
           <div className="space-y-1.5">
             <label className="text-sm font-medium" htmlFor="current-password">Password corrente</label>
             <Input id="current-password" type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
@@ -65,12 +90,14 @@ export default function ChangePasswordPage() {
             <label className="text-sm font-medium" htmlFor="account-confirm-password">Conferma password</label>
             <Input id="account-confirm-password" type="password" autoComplete="new-password" required minLength={8} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <Link className="text-sm text-primary hover:underline" to="/">Annulla</Link>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => onOpenChange(false)}>
+              Annulla
+            </Button>
             <Button type="submit" disabled={pending}>{pending ? "Salvataggio..." : "Aggiorna password"}</Button>
-          </div>
+          </DialogFooter>
         </form>
-      </CardContent>
-    </Card>
+      </DialogContent>
+    </Dialog>
   );
 }

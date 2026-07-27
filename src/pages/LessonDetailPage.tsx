@@ -12,6 +12,8 @@ import {
   getBoard,
   getBoardsByLesson,
   createBoard,
+  duplicateBoard,
+  reorderStudyBoards,
   updateBoard,
   deleteBoard,
 } from "@/services/boardService";
@@ -19,6 +21,8 @@ import {
   getMovesByBoard,
   createMove,
   updateMove,
+  updateMovesBatch,
+  type MoveUpdatePatch,
   deleteMovesFromOrder,
   deleteMovesByBoard,
 } from "@/services/moveService";
@@ -30,6 +34,7 @@ import type {
   BoardHighlight,
   Move,
   OpeningReference,
+  TacticalPattern,
 } from "@/types";
 import type { Square } from "chess.js";
 import { Button } from "@/components/ui/button";
@@ -58,8 +63,8 @@ import ViewportSidebar from "@/components/layout/ViewportSidebar";
 import ErrorNotice from "@/components/ErrorNotice";
 import {
   analyzePositions,
-  analyzePositionsAdaptive,
-  getStockfishSettings,
+  analyzePositionsAutomatic,
+  AUTOMATIC_STOCKFISH_DEPTH,
   uciToArrow,
   toEvalFields,
   evalScore,
@@ -68,8 +73,12 @@ import {
   stockfishCommentForMove,
   type PositionEval,
 } from "@/services/analysisService";
-import { explainMoveRuleBased, formatDiagnosisHint } from "@/services/explainService";
-import { diagnoseCriticalMoves, type Diagnosis } from "@/services/coachDiagnostics";
+import {
+  explainMoveRuleBased,
+  formatDiagnosisHint,
+  resolveMoveTactics,
+} from "@/services/explainService";
+import { diagnoseCriticalMoves } from "@/services/coachDiagnostics";
 import { Chess } from "chess.js";
 import MoveCommentPreview from "@/components/lesson/MoveCommentPreview";
 import StudyBoardSidebar from "@/components/lesson/StudyBoardSidebar";
@@ -84,6 +93,11 @@ import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
 import { analyzeGameOpenings } from "@/services/openingBookService";
 import { classifyMoveAtIndex } from "@/services/moveAnnotationService";
 import { lessonBoardLayoutClass } from "@/lib/lessonBoardLayout";
+import {
+  tacticalPatternColor,
+  tacticalPatternKey,
+} from "@/lib/tacticalPatterns";
+import { initialHistoryIndexForLessonMode } from "@/lib/lessonBoardHistory";
 import {
   buildStudyPgn,
   createStudyBoardPng,
@@ -191,6 +205,8 @@ export default function LessonDetailPage() {
   const [editBoardOpen, setEditBoardOpen] = useState(false);
   const [editBoardId, setEditBoardId] = useState<number | null>(null);
   const [editBoardTitle, setEditBoardTitle] = useState("");
+  const [duplicatingBoardId, setDuplicatingBoardId] = useState<number | null>(null);
+  const [reorderingBoards, setReorderingBoards] = useState(false);
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [deleteBoardId, setDeleteBoardId] = useState<number | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
@@ -212,7 +228,6 @@ export default function LessonDetailPage() {
   const [openingLoading, setOpeningLoading] = useState(false);
   const [openingError, setOpeningError] = useState<string | null>(null);
   const [selectedOpening, setSelectedOpening] = useState<OpeningReference | null>(null);
-  const [stockfishDepth, setStockfishDepth] = useState<number | null>(null);
   const analysisSignalRef = useRef<{ cancelled: boolean } | null>(null);
   const openingRequestBoardRef = useRef<number | null>(null);
   const [noteTab, setNoteTab] = useState<"board" | "move">("board");
@@ -220,6 +235,7 @@ export default function LessonDetailPage() {
   const [moveCommentFocusIndex, setMoveCommentFocusIndex] = useState<
     number | null
   >(null);
+  const [selectedTacticKey, setSelectedTacticKey] = useState<string | null>(null);
 
   const chess = useChessBoard();
   useMoveKeyboardNavigation({ undo: chess.undo, redo: chess.redo });
@@ -242,6 +258,40 @@ const selectedBoard = useMemo(
     [boards, selectedBoardId]
   );
 
+  const currentTactics = useMemo(() => {
+    if (!selectedBoard || chess.historyIndex === 0) return [];
+    return resolveMoveTactics(
+      selectedBoard,
+      chess.moves,
+      chess.historyIndex - 1,
+    );
+  }, [chess.historyIndex, chess.moves, selectedBoard]);
+
+  const selectedTacticIndex = currentTactics.findIndex(
+    (pattern) => tacticalPatternKey(pattern) === selectedTacticKey,
+  );
+  const tacticOverlayHighlights: BoardHighlight[] = selectedTacticIndex < 0
+    ? []
+    : currentTactics[selectedTacticIndex].squares.map((square) => [
+        square,
+        tacticalPatternColor(selectedTacticIndex),
+      ]);
+
+  useEffect(() => {
+    setSelectedTacticKey(null);
+  }, [chess.historyIndex, mateLinePreviewFen, selectedBoardId]);
+
+  useEffect(() => {
+    if (
+      selectedTacticKey &&
+      !currentTactics.some(
+        (pattern) => tacticalPatternKey(pattern) === selectedTacticKey,
+      )
+    ) {
+      setSelectedTacticKey(null);
+    }
+  }, [currentTactics, selectedTacticKey]);
+
   // Inizializza l'hook scacchiera quando viene selezionata una nuova board:
   // carica il FEN di partenza, le mosse persistite e le annotazioni di partenza.
   useEffect(() => {
@@ -259,7 +309,8 @@ const selectedBoard = useMemo(
             selectedBoard.fen,
             loadedMoves,
             selectedBoard.arrows,
-            selectedBoard.highlights
+            selectedBoard.highlights,
+            initialHistoryIndexForLessonMode(lesson?.mode, loadedMoves.length),
           );
         })
         .catch((e) => {
@@ -267,7 +318,7 @@ const selectedBoard = useMemo(
           setActionError("Impossibile caricare le mosse della scacchiera.");
         });
     }
-  }, [selectedBoard, chess.loadSequence]);
+  }, [selectedBoard, lesson?.mode, chess.loadSequence]);
 
   // Sincronizza il draft delle note SOLO quando cambia la board selezionata
   // (non ad ogni mutazione di FEN/titolo della stessa board, che altrimenti
@@ -365,18 +416,6 @@ const selectedBoard = useMemo(
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  useEffect(() => {
-    const loadStockfishDepth = () => {
-      void getStockfishSettings().then((settings) => {
-        setStockfishDepth(settings.stockfish_depth);
-      });
-    };
-    loadStockfishDepth();
-    window.addEventListener("stockfish-settings-changed", loadStockfishDepth);
-    return () =>
-      window.removeEventListener("stockfish-settings-changed", loadStockfishDepth);
-  }, []);
 
   // Auto-analisi Stockfish in modalità Analysis all'ingresso.
   // Salta se tutte le posizioni hanno già eval persistito.
@@ -648,10 +687,11 @@ const selectedBoard = useMemo(
         freshBoard.fen,
         freshMoves,
         freshBoard.arrows ?? [],
-        freshBoard.highlights ?? []
+        freshBoard.highlights ?? [],
+        initialHistoryIndexForLessonMode(lesson?.mode, freshMoves.length),
       );
     },
-    [chess.loadSequence, syncBoardInList]
+    [chess.loadSequence, lesson?.mode, syncBoardInList]
   );
 
   const handleMove = useCallback(
@@ -686,6 +726,7 @@ const selectedBoard = useMemo(
           comment: "",
           arrows: [],
           highlights: [],
+          tactics: [],
         });
         moveIdsByOrder.set(result.newMoveIndex, id);
         const persistedMove: Move = {
@@ -698,6 +739,7 @@ const selectedBoard = useMemo(
           comment: "",
           arrows: [],
           highlights: [],
+          tactics: [],
           createdAt: new Date(),
         };
         if (selectedBoardIdRef.current === boardId) {
@@ -798,81 +840,10 @@ const selectedBoard = useMemo(
     }
   };
 
-  // --- Helper: genera spunti educativi separati per tutte le mosse ---
-  // Usa gli eval freschi e persiste in `analysisComment`, senza modificare
-  // il commento utente/PGN o il commento Stockfish.
-  const persistEducationalComments = useCallback(
-    async (
-      startFen: string,
-      moveList: Move[],
-      evals: PositionEval[],
-      board: Board,
-      diagnosticsByIndex: Map<number, Diagnosis>
-    ) => {
-      for (let i = 0; i < moveList.length; i++) {
-        const move = moveList[i];
-        if (move.id == null) continue;
-        const playedBy: "w" | "b" = i % 2 === 0 ? "w" : "b";
-        const beforeFen = i === 0 ? startFen : moveList[i - 1]?.fen ?? startFen;
-        const beforeEval = {
-          cp: evals[i].scoreCp,
-          mate: evals[i].scoreMate,
-          depth: evals[i].depth,
-          bestMoveUci: evals[i].bestMoveUci,
-        };
-        const afterEval = {
-          cp: evals[i + 1].scoreCp,
-          mate: evals[i + 1].scoreMate,
-          depth: evals[i + 1].depth,
-        };
-
-        try {
-          const exp = explainMoveRuleBased({
-            beforeFen,
-            afterFen: move.fen,
-            playedMoveSan: move.moveNotation,
-            playedBy,
-            whiteName: board.whiteName ?? null,
-            blackName: board.blackName ?? null,
-            beforeEval,
-            afterEval,
-          });
-          const hasEducationalValue =
-            exp.severity === "inaccuracy" ||
-            exp.severity === "mistake" ||
-            exp.severity === "blunder" ||
-            exp.tactics.length > 0;
-          const explanationText = hasEducationalValue
-            ? exp.details.join("\n")
-            : null;
-          const diagnosis = diagnosticsByIndex.get(i);
-          const diagnosisHint = diagnosis
-            ? formatDiagnosisHint(diagnosis, explanationText ?? "")
-            : null;
-          const commentText = [explanationText, diagnosisHint]
-            .filter((text): text is string => Boolean(text?.trim()))
-            .join("\n") || null;
-          const tacticalHighlights = Array.from(
-            new Set(hasEducationalValue ? exp.tactics.flatMap((tactic) => tactic.squares) : [])
-          );
-          await updateMove(move.id, {
-            analysisComment: commentText,
-            highlights: tacticalHighlights,
-          });
-          chess.setMoveAnalysisComment(i, commentText);
-          chess.setMoveHighlights(i, tacticalHighlights);
-        } catch {
-          // non critico
-        }
-      }
-    },
-    []
-  );
-
   // --- Analisi Stockfish ---
   // Posizioni da analizzare: posizione di partenza (Board.fen) + dopo ogni mossa.
   const handleAnalyze = async () => {
-    if (!selectedBoard || analyzing) return;
+    if (lesson?.mode !== "analysis" || !selectedBoard || analyzing) return;
     const boardId = selectedBoard.id;
     if (boardId == null) return;
     const startFen = selectedBoard.fen;
@@ -884,7 +855,7 @@ const selectedBoard = useMemo(
     setAnalysisError(null);
     setAnalysisProgress({ done: 0, total: fens.length });
     try {
-      const evals: PositionEval[] = await analyzePositionsAdaptive(fens, {
+      const evals: PositionEval[] = await analyzePositionsAutomatic(fens, {
         signal,
         onProgress: (done, total) => setAnalysisProgress({ done, total }),
       });
@@ -935,39 +906,87 @@ const selectedBoard = useMemo(
         diagnoseCriticalMoves(diagnosticMoves).map((move) => [move.index, move.diagnosis])
       );
 
-      for (let i = 1; i < evals.length; i++) {
-        const move = moveList[i - 1];
+      // Un solo passaggio sulle mosse: eval + commento Stockfish + commento
+      // educativo rule-based, poi persistenza in UNA richiesta batch (prima
+      // erano ~2 UPDATE HTTP sequenziali per mossa → minuti di attesa).
+      const moveUpdates: Array<{ id: number; data: MoveUpdatePatch }> = [];
+      for (let i = 0; i < moveList.length; i++) {
+        const move = moveList[i];
         if (move.id == null) continue;
-        const beforeEval = evals[i - 1];
-        const afterEval = evals[i];
-        const isWhite = (i - 1) % 2 === 0;
+        const beforeEval = evals[i];
+        const afterEval = evals[i + 1];
+        const isWhite = i % 2 === 0;
         const beforeScore = evalScore(beforeEval.scoreCp, beforeEval.scoreMate);
         const afterScore = evalScore(afterEval.scoreCp, afterEval.scoreMate);
         const cpLoss = isWhite ? beforeScore - afterScore : afterScore - beforeScore;
-        const beforeFen = i === 1 ? startFen : moveList[i - 2]?.fen;
-        const bestSan = beforeEval.bestMoveUci && beforeFen
+        const beforeFen = i === 0 ? startFen : moveList[i - 1]?.fen ?? startFen;
+        const bestSan = beforeEval.bestMoveUci
           ? uciToSan(beforeFen, beforeEval.bestMoveUci)
           : null;
         const isBestMove = sanMovesMatch(move.moveNotation, bestSan);
 
-        await updateMove(move.id, {
-          ...toEvalFields(afterEval),
-          analysisComment: null,
-          stockfishComment: stockfishCommentForMove({
-            moveNotation: move.moveNotation,
-            cpLoss,
-            bestSan,
-            isBestMove,
-          }),
-        });
-      }
+        let commentText: string | null = null;
+        let tactics: TacticalPattern[] = [];
+        try {
+          const exp = explainMoveRuleBased({
+            beforeFen,
+            afterFen: move.fen,
+            playedMoveSan: move.moveNotation,
+            playedBy: isWhite ? "w" : "b",
+            whiteName: selectedBoard.whiteName ?? null,
+            blackName: selectedBoard.blackName ?? null,
+            beforeEval: {
+              cp: beforeEval.scoreCp,
+              mate: beforeEval.scoreMate,
+              depth: beforeEval.depth,
+              bestMoveUci: beforeEval.bestMoveUci,
+            },
+            afterEval: {
+              cp: afterEval.scoreCp,
+              mate: afterEval.scoreMate,
+              depth: afterEval.depth,
+            },
+          });
+          const hasEducationalValue =
+            exp.severity === "inaccuracy" ||
+            exp.severity === "mistake" ||
+            exp.severity === "blunder" ||
+            exp.tactics.length > 0;
+          const explanationText = hasEducationalValue
+            ? exp.details.join("\n")
+            : null;
+          const diagnosis = diagnosticsByIndex.get(i);
+          const diagnosisHint = diagnosis
+            ? formatDiagnosisHint(diagnosis, explanationText ?? "")
+            : null;
+          commentText =
+            [explanationText, diagnosisHint]
+              .filter((text): text is string => Boolean(text?.trim()))
+              .join("\n") || null;
+          tactics = hasEducationalValue ? exp.tactics : [];
+        } catch {
+          // non critico
+        }
 
-      // Genera commenti rule-based usando evals freschi (non chess.moves).
+        moveUpdates.push({
+          id: move.id,
+          data: {
+            ...toEvalFields(afterEval),
+            stockfishComment: stockfishCommentForMove({
+              moveNotation: move.moveNotation,
+              cpLoss,
+              bestSan,
+              isBestMove,
+            }),
+            analysisComment: commentText,
+            tactics,
+          },
+        });
+        chess.setMoveAnalysisComment(i, commentText);
+        chess.setMoveTactics(i, tactics);
+      }
       if (!signal.cancelled) {
-        await persistEducationalComments(startFen, moveList, evals, {
-          ...selectedBoard,
-          ...toEvalFields(evals[0]),
-        }, diagnosticsByIndex);
+        await updateMovesBatch(moveUpdates);
       }
 
       if (!signal.cancelled) {
@@ -1114,6 +1133,93 @@ const selectedBoard = useMemo(
     setEditBoardOpen(true);
   };
 
+  const handleDuplicateBoard = async (boardId: number) => {
+    if (duplicatingBoardId != null) return;
+    setDuplicatingBoardId(boardId);
+    setActionError(null);
+
+    try {
+      if (boardId === selectedBoardId) {
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        if (moveCommentTimerRef.current) {
+          clearTimeout(moveCommentTimerRef.current);
+          moveCommentTimerRef.current = null;
+        }
+
+        await movePersistenceQueueRef.current;
+
+        if (notesDraft !== lastSavedRef.current) {
+          await updateBoard(boardId, { notes: notesDraft });
+          lastSavedRef.current = notesDraft;
+        }
+
+        if (
+          commentMoveIdRef.current != null &&
+          moveCommentDraft !== lastSavedCommentRef.current
+        ) {
+          await updateMove(commentMoveIdRef.current, {
+            comment: moveCommentDraft,
+          });
+          lastSavedCommentRef.current = moveCommentDraft;
+        }
+      }
+
+      const newBoardId = await duplicateBoard(boardId);
+      const updatedBoards = await getBoardsByLesson(lessonId);
+      setBoards(updatedBoards);
+      initializedRef.current = null;
+      setSelectedBoardId(newBoardId);
+    } catch (e) {
+      console.error("[board-duplicate] errore", e);
+      setActionError("Duplicazione scacchiera fallita.");
+    } finally {
+      setDuplicatingBoardId(null);
+    }
+  };
+
+  const handleReorderBoards = async (boardIds: number[]) => {
+    if (reorderingBoards) return;
+
+    const boardsById = new Map(
+      boards.flatMap((board) =>
+        board.id == null ? [] : ([[board.id, board]] as const),
+      ),
+    );
+    const reorderedBoards = boardIds.flatMap((boardId, order) => {
+      const board = boardsById.get(boardId);
+      return board ? [{ ...board, order }] : [];
+    });
+    if (
+      reorderedBoards.length !== boards.length ||
+      boardIds.every((boardId, index) => boards[index]?.id === boardId)
+    ) {
+      return;
+    }
+
+    const previousBoards = boards;
+    setBoards(reorderedBoards);
+    setReorderingBoards(true);
+    setActionError(null);
+
+    try {
+      await reorderStudyBoards(lessonId, boardIds);
+    } catch (error) {
+      console.error("[board-reorder] errore", error);
+      try {
+        setBoards(await getBoardsByLesson(lessonId));
+      } catch (reloadError) {
+        console.error("[board-reorder-reload] errore", reloadError);
+        setBoards(previousBoards);
+      }
+      setActionError("Riordino scacchiere fallito.");
+    } finally {
+      setReorderingBoards(false);
+    }
+  };
+
   const handleSaveBoardTitle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editBoardId || !editBoardTitle.trim()) return;
@@ -1137,8 +1243,7 @@ const selectedBoard = useMemo(
     if (!lesson || !selectedBoard?.id) return;
     setConverting(true);
     try {
-      const moves = await getMovesByBoard(selectedBoard.id);
-      const newLessonId = await convertAnalysisToStudy(lesson, selectedBoard, moves);
+      const newLessonId = await convertAnalysisToStudy(lesson, selectedBoard);
       navigate(`/lesson/${newLessonId}`);
       setActionError(null);
     } catch (e) {
@@ -1384,7 +1489,7 @@ const selectedBoard = useMemo(
     <div
       className={
         lesson.mode === "analysis"
-          ? "w-full xl:flex xl:flex-col"
+          ? "w-full tablet-landscape:flex tablet-landscape:flex-col xl:flex xl:flex-col"
           : "w-full"
       }
     >
@@ -1451,7 +1556,7 @@ const selectedBoard = useMemo(
             onDismiss={() => setActionError(null)}
           />
         )}
-        {analysisError && (
+        {lesson.mode === "analysis" && analysisError && (
           <ErrorNotice
             title="Stockfish"
             message={analysisError}
@@ -1461,15 +1566,9 @@ const selectedBoard = useMemo(
         )}
       </div>
 
-      {(movePersistencePending || movePersistenceError) && (
-        <div
-          className={`mb-4 rounded-md border px-3 py-2 text-sm ${
-            movePersistenceError
-              ? "border-destructive/40 bg-destructive/10 text-destructive"
-              : "border-input bg-muted/50 text-muted-foreground"
-          }`}
-        >
-          {movePersistenceError ?? "Salvataggio mossa..."}
+      {movePersistenceError && (
+        <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {movePersistenceError}
         </div>
       )}
 
@@ -1487,7 +1586,8 @@ const selectedBoard = useMemo(
                   <ChessBoardView
                     fen={mateLinePreviewFen ?? chess.fen}
                     arrows={chess.currentArrows}
-                    highlights={chess.currentHighlights}
+                    highlights={[]}
+                    overlayHighlights={tacticOverlayHighlights}
                     extraArrows={analysisArrow}
                     lastMoveSquare={lastMoveSquare}
                     lastMoveFromSquare={lastMoveFromSquare}
@@ -1503,7 +1603,7 @@ const selectedBoard = useMemo(
                     onAnalyze={handleAnalyze}
                     analyzing={analyzing}
                     analysisProgress={analysisProgress}
-                    analysisDepth={stockfishDepth ?? undefined}
+                    analysisDepth={AUTOMATIC_STOCKFISH_DEPTH}
                     canAnalyze={chess.moves.length > 0 || !!selectedBoard}
                     onCancelAnalysis={handleCancelAnalysis}
                     lessonMode={lesson.mode}
@@ -1568,6 +1668,9 @@ const selectedBoard = useMemo(
                       historyIndex={chess.historyIndex}
                       text={chess.currentMove.analysisComment}
                       onMateLineClick={handleMateLineClick}
+                      tactics={currentTactics}
+                      selectedTacticKey={selectedTacticKey}
+                      onSelectedTacticKeyChange={setSelectedTacticKey}
                     />
                   </div>
                 ) : null}
@@ -1618,10 +1721,14 @@ const selectedBoard = useMemo(
             <StudyBoardSidebar
               boards={boards}
               selectedBoardId={selectedBoardId}
+              duplicatingBoardId={duplicatingBoardId}
+              reorderingBoards={reorderingBoards}
               onSelectBoard={setSelectedBoardId}
               onImportPgn={() => setImportOpen(true)}
               onCreateBoard={handleCreateBoard}
               onEditBoard={handleEditBoardClick}
+              onDuplicateBoard={handleDuplicateBoard}
+              onReorderBoards={handleReorderBoards}
               onDeleteBoard={handleDeleteBoardClick}
             />
           )}
@@ -1637,7 +1744,8 @@ const selectedBoard = useMemo(
                 <ChessBoardView
                     fen={mateLinePreviewFen ?? chess.fen}
                     arrows={chess.currentArrows}
-                    highlights={chess.currentHighlights}
+                    highlights={lesson.mode === "analysis" ? [] : chess.currentHighlights}
+                    overlayHighlights={lesson.mode === "analysis" ? tacticOverlayHighlights : []}
                     extraArrows={analysisArrow}
                     lastMoveSquare={lastMoveSquare}
                     lastMoveFromSquare={lastMoveFromSquare}
@@ -1650,16 +1758,7 @@ const selectedBoard = useMemo(
                     onUndo={handleUndo}
                     onRedo={handleRedo}
                     onReset={handleReset}
-                    onAnalyze={handleAnalyze}
-                    analyzing={analyzing}
-                    analysisProgress={analysisProgress}
-                    analysisDepth={stockfishDepth ?? undefined}
-                    canAnalyze={chess.moves.length > 0 || !!selectedBoard}
-                    onCancelAnalysis={handleCancelAnalysis}
                     lessonMode={lesson.mode}
-                    autoAnalysis={lesson?.mode === "analysis" && autoAnalysisDoneRef.current}
-                    onConvertToStudy={lesson?.mode === "analysis" ? handleConvertToStudy : undefined}
-                    converting={converting}
                     boardOrientation={flipped ? "black" : "white"}
                     onFlip={handleFlip}
                     onExportPgn={handleExportPgn}
@@ -1693,6 +1792,9 @@ const selectedBoard = useMemo(
                             historyIndex={chess.historyIndex}
                             text={chess.currentMove.analysisComment}
                             onMateLineClick={handleMateLineClick}
+                            tactics={currentTactics}
+                            selectedTacticKey={selectedTacticKey}
+                            onSelectedTacticKeyChange={setSelectedTacticKey}
                           />
                         </div>
                       ) : null}

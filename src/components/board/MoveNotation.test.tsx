@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import MoveNotation from "@/components/board/MoveNotation";
@@ -19,6 +19,7 @@ const moves: Move[] = [
     analysisComment: "Controlla il centro.",
     arrows: [],
     highlights: [],
+    tactics: [],
     createdAt: new Date(),
   },
   {
@@ -32,6 +33,7 @@ const moves: Move[] = [
     stockfishComment: "Mossa migliore.",
     arrows: [],
     highlights: [],
+    tactics: [],
     createdAt: new Date(),
   },
 ];
@@ -106,5 +108,90 @@ describe("MoveNotation context menu", () => {
     fireEvent.click(view.getByRole("menuitem", { name: "Elimina" }));
     expect(onDeleteMove).toHaveBeenCalledWith(2);
     expect(view.queryByRole("menu")).toBeNull();
+  });
+
+  it("opens on long press and suppresses the synthetic click", () => {
+    vi.useFakeTimers();
+    try {
+      const onGoToMove = vi.fn();
+      const onCommentMove = vi.fn();
+      const view = render(
+        <MoveNotation
+          moves={moves}
+          currentMoveIndex={0}
+          onGoToMove={onGoToMove}
+          onCommentMove={onCommentMove}
+          onDeleteMove={vi.fn()}
+        />,
+      );
+
+      const button = view.getByText("e4").closest("button")!;
+      fireEvent.touchStart(button, {
+        touches: [{ clientX: 40, clientY: 60 }],
+      });
+      act(() => {
+        vi.advanceTimersByTime(499);
+      });
+      expect(view.queryByRole("menu")).toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(view.getByRole("menu")).toBeTruthy();
+
+      fireEvent.click(button);
+      expect(onGoToMove).not.toHaveBeenCalled();
+
+      fireEvent.click(view.getByRole("menuitem", { name: "Commenta" }));
+      expect(onCommentMove).toHaveBeenCalledWith(1);
+      expect(view.queryByRole("menu")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels the long press when the touch ends or moves early", () => {
+    vi.useFakeTimers();
+    try {
+      const onGoToMove = vi.fn();
+      const view = render(
+        <MoveNotation
+          moves={moves}
+          currentMoveIndex={0}
+          onGoToMove={onGoToMove}
+          onCommentMove={vi.fn()}
+          onDeleteMove={vi.fn()}
+        />,
+      );
+
+      const button = view.getByText("e4").closest("button")!;
+      fireEvent.touchStart(button, {
+        touches: [{ clientX: 40, clientY: 60 }],
+      });
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      fireEvent.touchEnd(button);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(view.queryByRole("menu")).toBeNull();
+
+      fireEvent.touchStart(button, {
+        touches: [{ clientX: 40, clientY: 60 }],
+      });
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      fireEvent.touchMove(button);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(view.queryByRole("menu")).toBeNull();
+
+      fireEvent.click(button);
+      expect(onGoToMove).toHaveBeenCalledWith(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

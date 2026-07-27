@@ -1,11 +1,9 @@
 import type { EvalFields } from "@/types";
-import {
-  DEFAULT_APP_SETTINGS,
-  getAppSettings,
-} from "@/services/settingsService";
 
 const MULTI_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-18-lite.js";
 const SINGLE_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-18-lite-single.js";
+export const AUTOMATIC_STOCKFISH_DEPTH = 15;
+export const AUTOMATIC_STOCKFISH_THREADS = 2;
 
 export interface StockfishCapabilities {
   crossOriginIsolated: boolean;
@@ -295,6 +293,59 @@ export interface AnalyzeOptions {
   signal?: { cancelled: boolean };
 }
 
+async function analyzeBatchWithEngine(
+  fens: string[],
+  options: Pick<AnalyzeOptions, "depth" | "multipv" | "onProgress" | "signal">,
+  engine: StockfishEngineHandle,
+): Promise<PositionEval[]> {
+  const depth = options.depth ?? AUTOMATIC_STOCKFISH_DEPTH;
+  const multipv = options.multipv ?? 1;
+  const results: PositionEval[] = [];
+
+  for (let i = 0; i < fens.length; i++) {
+    if (options.signal?.cancelled) break;
+    const evaluation = await engine.analyze(fens[i], depth, multipv);
+    results.push(evaluation);
+    options.onProgress?.(i + 1, fens.length);
+  }
+
+  return results;
+}
+
+/**
+ * Esegue un batch e riprova da capo con il worker single-thread se il runtime
+ * multi-thread cade dopo l'inizializzazione (per esempio per limiti di memoria
+ * o WebAssembly threads dichiarati ma non realmente utilizzabili).
+ */
+export async function runStockfishBatch(
+  fens: string[],
+  options: Pick<AnalyzeOptions, "depth" | "multipv" | "onProgress" | "signal">,
+  runtime: StockfishRuntime,
+  createEngine: StockfishEngineFactory = getEngine,
+): Promise<PositionEval[]> {
+  const engine = await prepareStockfishEngine(runtime, createEngine);
+  try {
+    return await analyzeBatchWithEngine(fens, options, engine);
+  } catch (error) {
+    terminateEngine(engine);
+    if (engine.runtime.flavor === "single") throw error;
+  }
+
+  const fallbackRuntime: StockfishRuntime = {
+    flavor: "single",
+    workerUrl: SINGLE_ENGINE_URL,
+    threads: 1,
+    compatibilityMode: true,
+  };
+  const fallbackEngine = await prepareStockfishEngine(fallbackRuntime, createEngine);
+  try {
+    return await analyzeBatchWithEngine(fens, options, fallbackEngine);
+  } catch (error) {
+    terminateEngine(fallbackEngine);
+    throw error;
+  }
+}
+
 interface AnalysisQueueJob {
   fens: string[];
   options: AnalyzeOptions;
@@ -324,78 +375,25 @@ type AnalyzeBatch = (
   options?: AnalyzeOptions,
 ) => Promise<PositionEval[]>;
 
-const ADAPTIVE_DEPTH_INCREMENT = 5;
-const CRITICAL_CP_LOSS = 50;
-
-/** Indici delle posizioni prima/dopo le mosse critiche, ordinati e deduplicati. */
-export function findCriticalPositionIndexes(evals: PositionEval[]): number[] {
-  const indexes = new Set<number>();
-
-  for (let moveIndex = 0; moveIndex < evals.length - 1; moveIndex++) {
-    const beforeScore = evalScore(evals[moveIndex].scoreCp, evals[moveIndex].scoreMate);
-    const afterScore = evalScore(evals[moveIndex + 1].scoreCp, evals[moveIndex + 1].scoreMate);
-    const sideToMove = evals[moveIndex].fen.split(" ")[1];
-    const moverIsWhite = sideToMove === "w" || (sideToMove !== "b" && moveIndex % 2 === 0);
-    const cpLoss = moverIsWhite ? beforeScore - afterScore : afterScore - beforeScore;
-
-    if (cpLoss >= CRITICAL_CP_LOSS) {
-      indexes.add(moveIndex);
-      indexes.add(moveIndex + 1);
-    }
-  }
-
-  return [...indexes].sort((a, b) => a - b);
-}
-
-/** Orchestratore iniettabile per testare le due passate senza avviare Stockfish. */
-export async function runAdaptiveAnalysis(
+/** Orchestratore iniettabile per testare il profilo automatico senza avviare Stockfish. */
+export async function runAutomaticAnalysis(
   fens: string[],
-  settings: StockfishSettings,
   options: AnalyzeOptions = {},
   analyzeBatch: AnalyzeBatch = analyzePositions,
 ): Promise<PositionEval[]> {
-  const depth = options.depth ?? settings.stockfish_depth;
-  const threads = options.threads ?? settings.stockfish_threads;
-  const shallow = await analyzeBatch(fens, {
+  return analyzeBatch(fens, {
     ...options,
-    depth,
-    threads,
+    depth: AUTOMATIC_STOCKFISH_DEPTH,
+    threads: AUTOMATIC_STOCKFISH_THREADS,
     multipv: 1,
-    onProgress: (done) => options.onProgress?.(done, fens.length),
   });
-
-  if (options.signal?.cancelled || shallow.length !== fens.length) return shallow;
-
-  const criticalIndexes = findCriticalPositionIndexes(shallow);
-  if (criticalIndexes.length === 0) return shallow;
-
-  const total = fens.length + criticalIndexes.length;
-  options.onProgress?.(fens.length, total);
-  const refined = await analyzeBatch(
-    criticalIndexes.map((index) => fens[index]),
-    {
-      ...options,
-      depth: Math.min(30, depth + ADAPTIVE_DEPTH_INCREMENT),
-      threads,
-      multipv: 1,
-      onProgress: (done) => options.onProgress?.(fens.length + done, total),
-    },
-  );
-
-  const merged = [...shallow];
-  refined.forEach((evaluation, refinedIndex) => {
-    const positionIndex = criticalIndexes[refinedIndex];
-    if (positionIndex != null) merged[positionIndex] = evaluation;
-  });
-  return merged;
 }
 
-export async function analyzePositionsAdaptive(
+export async function analyzePositionsAutomatic(
   fens: string[],
   options: AnalyzeOptions = {},
 ): Promise<PositionEval[]> {
-  const settings = await getStockfishSettings();
-  return runAdaptiveAnalysis(fens, settings, options);
+  return runAutomaticAnalysis(fens, options);
 }
 
 function enqueueAnalysis(
@@ -441,50 +439,20 @@ async function analyzePositionsNow(
   return analyzePositionsWasm(fens, options);
 }
 
-export interface StockfishSettings {
-  stockfish_depth: number;
-  stockfish_threads: number;
-}
-
-let stockfishSettingsPromise: Promise<StockfishSettings> | null = null;
-
-export function resetStockfishSettingsCache(): void {
-  stockfishSettingsPromise = null;
-}
-
-export async function getStockfishSettings(): Promise<StockfishSettings> {
-  if (!stockfishSettingsPromise) {
-    stockfishSettingsPromise = getAppSettings()
-      .then(({ stockfish_depth, stockfish_threads }) => ({
-        stockfish_depth,
-        stockfish_threads,
-      }))
-      .catch(() => ({
-        stockfish_depth: DEFAULT_APP_SETTINGS.stockfish_depth,
-        stockfish_threads: DEFAULT_APP_SETTINGS.stockfish_threads,
-      }));
-  }
-  return stockfishSettingsPromise;
-}
-
 async function analyzePositionsWasm(
   fens: string[],
   options: AnalyzeOptions
 ): Promise<PositionEval[]> {
-  const settings = await getStockfishSettings();
-  const depth = options.depth ?? settings.stockfish_depth;
-  const threads = options.threads ?? settings.stockfish_threads;
+  const depth = options.depth ?? AUTOMATIC_STOCKFISH_DEPTH;
+  const threads = options.threads ?? AUTOMATIC_STOCKFISH_THREADS;
   const multipv = options.multipv ?? 1;
   const runtime = getStockfishRuntimeInfo(threads);
-  const engine = await prepareStockfishEngine(runtime);
-  const results: PositionEval[] = [];
-  for (let i = 0; i < fens.length; i++) {
-    if (options.signal?.cancelled) break;
-    const ev = await engine.analyze(fens[i], depth, multipv);
-    results.push(ev);
-    options.onProgress?.(i + 1, fens.length);
-  }
-  return results;
+  return runStockfishBatch(fens, {
+    depth,
+    multipv,
+    onProgress: options.onProgress,
+    signal: options.signal,
+  }, runtime);
 }
 
 // --- Helpers di formatting / classificazione (POV Bianco) ---

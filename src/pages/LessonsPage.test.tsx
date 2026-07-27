@@ -203,8 +203,6 @@ describe("LessonsPage platform imports", () => {
   it("opens Chess.com with the username currently saved in settings", async () => {
     getLessonsPageMock.mockResolvedValue(pageResult([]));
     getAppSettingsMock.mockResolvedValue({
-      stockfish_depth: 15,
-      stockfish_threads: 1,
       lichess_username: "lichess-user",
       chesscom_username: "chess-user",
     });
@@ -224,8 +222,6 @@ describe("LessonsPage platform imports", () => {
   it("offers settings when the Chess.com username is missing", async () => {
     getLessonsPageMock.mockResolvedValue(pageResult([]));
     getAppSettingsMock.mockResolvedValue({
-      stockfish_depth: 15,
-      stockfish_threads: 1,
       lichess_username: "lichess-user",
       chesscom_username: "",
     });

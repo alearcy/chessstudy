@@ -9,8 +9,8 @@ ogni posizione della partita.
 
 ## Strategia
 
-1. Analizzare tutte le posizioni con il profilo base configurato. Per una nuova
-   installazione il profilo base e `depth 15`, `2 thread`, `MultiPV 1`.
+1. Analizzare tutte le posizioni con il profilo base automatico `depth 15`,
+   `2 thread`, `MultiPV 1`.
 2. Calcolare la perdita della mossa dal punto di vista di chi ha mosso usando
    le due valutazioni adiacenti.
 3. Considerare critica una mossa con perdita di almeno 50 centipawn equivalenti
@@ -20,14 +20,14 @@ ogni posizione della partita.
 5. Sostituire le valutazioni della prima passata con quelle profonde prima di
    classificare, commentare e persistere le mosse.
 
-Il numero di thread resta quello del profilo base: aumentare i thread riduce il
-tempo, ma aumenta il carico istantaneo senza migliorare la qualita a profondita
-fissa. `MultiPV` resta 1 in entrambe le passate, perche classificazione e
-commenti richiedono solo la variante principale.
+Il numero di thread resta automaticamente 2: il runtime lo limita alle capacita
+del browser e il fallback WASM single-thread forza 1. `MultiPV` resta 1 in
+entrambe le passate, perche classificazione e commenti richiedono solo la
+variante principale.
 
-Se l'utente sceglie un'altra profondita base, il raffinamento usa sempre cinque
-ply aggiuntivi, fino al limite backend di 30. Il fallback WASM resta
-single-threaded ma applica la stessa strategia di profondita.
+Il raffinamento usa sempre cinque ply aggiuntivi, fino al limite di 30. Il
+fallback WASM resta single-threaded ma applica la stessa strategia di
+profondita.
 
 ## API e integrazione
 
@@ -37,9 +37,9 @@ single-threaded ma applica la stessa strategia di profondita.
   `1..=3` e lo imposta prima di ogni ricerca.
 - `LessonDetailPage` usa il risultato adattivo nello stesso flusso di
   persistenza e generazione dei commenti gia esistente.
-- Le impostazioni predefinite diventano depth 15 e 2 thread; le preferenze gia
-  salvate non vengono sovrascritte. Il selettore CPU include sempre il profilo
-  esplicito `2 thread (consigliato)`, oltre a 1 thread, meta CPU e CPU completa.
+- Depth e thread non sono configurabili dall'utente. Le colonne Supabase
+  storiche restano compatibili ma il motore usa sempre il profilo automatico.
+- L'avvio del motore e disponibile soltanto nelle lezioni in modalita Analisi.
 
 ## Test
 

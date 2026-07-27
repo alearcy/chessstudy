@@ -87,6 +87,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
           comment: "",
           arrows: [],
           highlights: [],
+          tactics: [],
           createdAt: new Date(),
         },
       ];
@@ -133,6 +134,12 @@ export function useChessBoard(initialFen: string = START_FEN) {
   const setMoveHighlights = useCallback((index: number, highlights: BoardHighlight[]) => {
     setMoves((prev) =>
       prev.map((m, i) => (i === index ? { ...m, highlights } : m))
+    );
+  }, []);
+
+  const setMoveTactics = useCallback((index: number, tactics: Move["tactics"]) => {
+    setMoves((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, tactics } : m))
     );
   }, []);
 
@@ -260,6 +267,7 @@ export function useChessBoard(initialFen: string = START_FEN) {
     setMoveAnalysisComment,
     setMoveStockfishComment,
     setMoveHighlights,
+    setMoveTactics,
     setArrows,
     setHighlights,
     undo,

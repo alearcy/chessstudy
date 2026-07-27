@@ -13,7 +13,7 @@ import {
   type LessonPageQuery,
 } from "@/repositories/lessonRepository";
 import { requireData } from "@/repositories/repositoryError";
-import type { Board, Lesson, Move } from "@/types";
+import type { Board, Lesson } from "@/types";
 
 export {
   createLesson,
@@ -34,7 +34,6 @@ export type {
 export async function convertAnalysisToStudy(
   sourceLesson: Lesson,
   sourceBoard: Board,
-  _sourceMoves: Move[],
 ): Promise<number> {
   if (sourceLesson.id == null || sourceBoard.id == null) {
     throw new Error("Analisi non disponibile.");

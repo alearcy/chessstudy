@@ -1,7 +1,14 @@
 import { Chess, Square, PieceSymbol, Color } from "chess.js";
 import type { Diagnosis } from "@/services/coachDiagnostics";
 import { sanMovesMatch } from "@/services/analysisService";
-import type { MoveExplanationInput, MoveExplanation, TacticalPattern, Severity } from "@/types";
+import type {
+  Board,
+  Move,
+  MoveExplanationInput,
+  MoveExplanation,
+  TacticalPattern,
+  Severity,
+} from "@/types";
 // ============================================================================
 // Costanti
 // ============================================================================
@@ -437,6 +444,42 @@ export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanati
   const details = buildDetails(severity, playedMoveSan, playedBy, player, beforeFen, beforeEval, afterEval, tactics, stockfishExplains);
 
   return { summary, details, severity, tactics, stockfishExplains };
+}
+
+export function resolveMoveTactics(
+  board: Board,
+  moves: Move[],
+  moveIndex: number,
+): TacticalPattern[] {
+  const move = moves[moveIndex];
+  if (!move) return [];
+  if (move.tactics.length > 0) return move.tactics;
+  if (!move.analysisComment?.trim()) return [];
+
+  const before = moveIndex === 0 ? board : moves[moveIndex - 1];
+  if (!before || (before.evalDepth ?? 0) <= 0 || (move.evalDepth ?? 0) <= 0) {
+    return [];
+  }
+
+  return explainMoveRuleBased({
+    beforeFen: moveIndex === 0 ? board.fen : before.fen,
+    afterFen: move.fen,
+    playedMoveSan: move.moveNotation,
+    playedBy: moveIndex % 2 === 0 ? "w" : "b",
+    whiteName: board.whiteName ?? null,
+    blackName: board.blackName ?? null,
+    beforeEval: {
+      cp: before.evalCp ?? null,
+      mate: before.evalMate ?? null,
+      depth: before.evalDepth ?? 0,
+      bestMoveUci: before.evalBestMoveUci ?? null,
+    },
+    afterEval: {
+      cp: move.evalCp ?? null,
+      mate: move.evalMate ?? null,
+      depth: move.evalDepth ?? 0,
+    },
+  }).tactics;
 }
 
 function buildSummary(severity: Severity, san: string, cpLoss: number | null, tactics: TacticalPattern[]): string {

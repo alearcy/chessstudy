@@ -14,11 +14,11 @@ afterEach(() => {
 });
 
 describe("LoginPage", () => {
-  it("shows the Chess Study SVG as the form brand", () => {
+  it("shows the Chess Study PNG as the form brand", () => {
     render(<MemoryRouter><LoginPage /></MemoryRouter>);
 
     const logo = screen.getByRole("img", { name: "Chess Study" });
-    expect(logo.getAttribute("src")).toBe("/chessstudy.svg");
+    expect(logo.getAttribute("src")).toBe("/chessstudy.png");
     expect(screen.queryByText("Chess Study")).toBeNull();
   });
 

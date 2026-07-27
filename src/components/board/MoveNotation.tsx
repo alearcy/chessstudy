@@ -3,6 +3,7 @@ import {
   useRef,
   useEffect,
   type MouseEvent,
+  type TouchEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -35,6 +36,14 @@ interface MoveContextMenu {
   x: number;
   y: number;
 }
+
+/** Durata pressione prolungata (touch) per aprire il menu contestuale. */
+const LONG_PRESS_MS = 500;
+
+/** Classi condivise dai bottoni mossa: disattivano selezione/callout nativi
+ *  che su touch interferiscono con il long-press. */
+const MOVE_BUTTON_CLASSES =
+  "flex items-center gap-1 px-2 py-1 rounded font-mono text-left w-full transition-colors select-none [-webkit-touch-callout:none]";
 
 const WHITE_PIECES: Record<string, string> = {
   K: "♔",
@@ -98,6 +107,8 @@ export default function MoveNotation({
   const [useIcons, setUseIcons] = useState(true);
   const [contextMenu, setContextMenu] = useState<MoveContextMenu | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -108,17 +119,65 @@ export default function MoveNotation({
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [contextMenu]);
 
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current !== null) {
+        window.clearTimeout(longPressTimerRef.current);
+      }
+    };
+  }, []);
+
+  const hasMoveActions = Boolean(onCommentMove || onDeleteMove);
+
+  const openMenuAt = (x: number, y: number, index: number) => {
+    if (!hasMoveActions) return;
+    setContextMenu({
+      index,
+      x: Math.max(8, Math.min(x, window.innerWidth - 168)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 104)),
+    });
+  };
+
   const openContextMenu = (
     event: MouseEvent<HTMLButtonElement>,
     index: number,
   ) => {
-    if (!onCommentMove && !onDeleteMove) return;
     event.preventDefault();
-    setContextMenu({
-      index,
-      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 168)),
-      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 104)),
-    });
+    openMenuAt(event.clientX, event.clientY, index);
+  };
+
+  const startLongPress = (
+    event: TouchEvent<HTMLButtonElement>,
+    index: number,
+  ) => {
+    if (!hasMoveActions) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    const { clientX, clientY } = touch;
+    longPressFiredRef.current = false;
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null;
+      longPressFiredRef.current = true;
+      openMenuAt(clientX, clientY, index);
+    }, LONG_PRESS_MS);
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleMoveClick = (index: number) => {
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false;
+      return;
+    }
+    onGoToMove(index);
   };
 
   useEffect(() => {
@@ -213,11 +272,17 @@ export default function MoveNotation({
                     <button
                       type="button"
                       data-move-index={white.index}
-                      onClick={() => onGoToMove(white.index)}
+                      onClick={() => handleMoveClick(white.index)}
                       onContextMenu={(event) =>
                         openContextMenu(event, white.index)
                       }
-                      className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-left w-full transition-colors ${
+                      onTouchStart={(event) =>
+                        startLongPress(event, white.index)
+                      }
+                      onTouchEnd={cancelLongPress}
+                      onTouchMove={cancelLongPress}
+                      onTouchCancel={cancelLongPress}
+                      className={`${MOVE_BUTTON_CLASSES} ${
                         currentMoveIndex === white.index
                           ? "bg-primary/15 text-foreground"
                           : "hover:bg-accent"
@@ -242,11 +307,17 @@ export default function MoveNotation({
                     <button
                       type="button"
                       data-move-index={black.index}
-                      onClick={() => onGoToMove(black.index)}
+                      onClick={() => handleMoveClick(black.index)}
                       onContextMenu={(event) =>
                         openContextMenu(event, black.index)
                       }
-                      className={`flex items-center gap-1 px-2 py-1 rounded font-mono text-left w-full transition-colors ${
+                      onTouchStart={(event) =>
+                        startLongPress(event, black.index)
+                      }
+                      onTouchEnd={cancelLongPress}
+                      onTouchMove={cancelLongPress}
+                      onTouchCancel={cancelLongPress}
+                      className={`${MOVE_BUTTON_CLASSES} ${
                         currentMoveIndex === black.index
                           ? "bg-primary/15 text-foreground"
                           : "hover:bg-accent"

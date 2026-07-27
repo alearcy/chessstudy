@@ -46,22 +46,18 @@ describe("settingsService", () => {
     maybeSingleMock.mockResolvedValue({ data: null, error: null });
 
     await expect(getAppSettings()).resolves.toEqual({
-      stockfish_depth: 15,
-      stockfish_threads: 2,
       lichess_username: "",
       chesscom_username: "",
     });
   });
 
-  it("upserts clamped settings for the authenticated user", async () => {
+  it("upserts only game account usernames for the authenticated user", async () => {
     getUserMock.mockResolvedValue({
       data: { user: { id: "10000000-0000-4000-8000-000000000001" } },
       error: null,
     });
     singleMock.mockResolvedValue({
       data: {
-        stockfish_depth: 30,
-        stockfish_threads: 1,
         lichess_username: "lichess-user",
         chesscom_username: "chess-user",
       },
@@ -69,16 +65,12 @@ describe("settingsService", () => {
     });
 
     await setAppSettings({
-      stockfish_depth: 99,
-      stockfish_threads: 0,
       lichess_username: "  lichess-user  ",
       chesscom_username: " chess-user ",
     });
 
     expect(upsertMock).toHaveBeenCalledWith({
       user_id: "10000000-0000-4000-8000-000000000001",
-      stockfish_depth: 30,
-      stockfish_threads: 1,
       lichess_username: "lichess-user",
       chesscom_username: "chess-user",
       updated_at: expect.any(String),

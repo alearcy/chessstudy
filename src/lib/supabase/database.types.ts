@@ -160,6 +160,7 @@ export type Database = {
           move_order: number
           parent_id: number | null
           stockfish_comment: string | null
+          tactics: Json
           uid: string
           updated_at: string
           user_id: string
@@ -181,6 +182,7 @@ export type Database = {
           move_order: number
           parent_id?: number | null
           stockfish_comment?: string | null
+          tactics?: Json
           uid?: string
           updated_at?: string
           user_id?: string
@@ -202,6 +204,7 @@ export type Database = {
           move_order?: number
           parent_id?: number | null
           stockfish_comment?: string | null
+          tactics?: Json
           uid?: string
           updated_at?: string
           user_id?: string
@@ -282,6 +285,14 @@ export type Database = {
       convert_analysis_to_study: {
         Args: { p_source_board_id: number; p_source_lesson_id: number }
         Returns: number
+      }
+      duplicate_study_board: {
+        Args: { p_source_board_id: number }
+        Returns: number
+      }
+      reorder_study_boards: {
+        Args: { p_board_ids: number[]; p_lesson_id: number }
+        Returns: undefined
       }
       import_database_backup_v1: { Args: { p_backup: Json }; Returns: Json }
       save_board_line: {

@@ -1,5 +1,7 @@
 import { parseBadgePrefix } from "@/services/analysisService";
-import type { Move } from "@/types";
+import { TacticalPatternChip } from "@/components/analysis/TacticalPatternChips";
+import { tacticalPatternLabel } from "@/lib/tacticalPatterns";
+import type { Move, TacticalPattern } from "@/types";
 import { CircleCheck, Star } from "lucide-react";
 
 interface MoveCommentPreviewProps {
@@ -8,6 +10,9 @@ interface MoveCommentPreviewProps {
   text: string;
   stockfishLabel?: boolean;
   onMateLineClick?: (mateIn: number) => void;
+  tactics?: TacticalPattern[];
+  selectedTacticKey?: string | null;
+  onSelectedTacticKeyChange?: (key: string | null) => void;
 }
 
 export default function MoveCommentPreview({
@@ -16,12 +21,25 @@ export default function MoveCommentPreview({
   text,
   stockfishLabel = false,
   onMateLineClick,
+  tactics = [],
+  selectedTacticKey = null,
+  onSelectedTacticKeyChange,
 }: MoveCommentPreviewProps) {
   return (
     <div className="w-full min-h-[64px] rounded-md border border-input bg-muted/40 px-3 py-2 text-sm whitespace-pre-wrap shrink-0">
       {currentMove ? (
         text.trim() ? (
-          <FormattedMoveComment text={text} onMateLineClick={onMateLineClick} />
+          tactics.length > 0 && onSelectedTacticKeyChange ? (
+            <TacticalMoveCommentText
+              text={text}
+              tactics={tactics}
+              selectedTacticKey={selectedTacticKey}
+              onSelectedTacticKeyChange={onSelectedTacticKeyChange}
+              onMateLineClick={onMateLineClick}
+            />
+          ) : (
+            <FormattedMoveComment text={text} onMateLineClick={onMateLineClick} />
+          )
         ) : (
           <span className="text-muted-foreground italic">
             Nessun commento per la mossa {historyIndex}. {currentMove.moveNotation}.
@@ -34,6 +52,77 @@ export default function MoveCommentPreview({
       )}
     </div>
   );
+}
+
+function TacticalMoveCommentText({
+  text,
+  tactics,
+  selectedTacticKey,
+  onSelectedTacticKeyChange,
+  onMateLineClick,
+}: {
+  text: string;
+  tactics: TacticalPattern[];
+  selectedTacticKey: string | null;
+  onSelectedTacticKeyChange: (key: string | null) => void;
+  onMateLineClick?: (mateIn: number) => void;
+}) {
+  const lines = text.split("\n");
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {lines.map((line, lineIndex) => {
+        const description = line.replace(/^\s*•\s*/, "").trim();
+        const patternIndex = tactics.findIndex(
+          (pattern) => pattern.description.trim() === description,
+        );
+        const newline = lineIndex < lines.length - 1 ? "\n" : null;
+
+        if (patternIndex < 0) {
+          return (
+            <span key={`line-${lineIndex}`}>
+              <MateLineText text={line} onMateLineClick={onMateLineClick} />
+              {newline}
+            </span>
+          );
+        }
+
+        const pattern = tactics[patternIndex];
+        const explanation = tacticalExplanation(pattern);
+        return (
+          <span key={`tactic-${pattern.type}-${lineIndex}`}>
+            <span data-tactical-comment>
+              <TacticalPatternChip
+                pattern={pattern}
+                patternIndex={patternIndex}
+                patterns={tactics}
+                selectedKey={selectedTacticKey}
+                onSelectedKeyChange={onSelectedTacticKeyChange}
+              />
+              {": "}
+              <MateLineText
+                text={explanation}
+                onMateLineClick={onMateLineClick}
+              />
+            </span>
+            {newline}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function tacticalExplanation(pattern: TacticalPattern): string {
+  const description = pattern.description.trim();
+  const separatorIndex = description.indexOf(":");
+  if (separatorIndex < 0) return description;
+
+  const storedLabel = description.slice(0, separatorIndex).trim();
+  const chipLabel = tacticalPatternLabel(pattern.type);
+  return storedLabel.localeCompare(chipLabel, "it", { sensitivity: "base" }) === 0
+    ? description.slice(separatorIndex + 1).trimStart()
+    : description;
 }
 
 function FormattedMoveComment({

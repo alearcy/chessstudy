@@ -9,7 +9,7 @@ type BrandLogoProps = Omit<
 export default function BrandLogo({ className, ...props }: BrandLogoProps) {
   return (
     <img
-      src="/chessstudy.svg"
+      src="/chessstudy.png"
       alt="Chess Study"
       width={1679}
       height={342}

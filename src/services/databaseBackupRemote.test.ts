@@ -103,6 +103,34 @@ describe("remote database backup import", () => {
     });
   });
 
+  it("preserves structured tactics while accepting the same backup version", async () => {
+    const withTactics = structuredClone(validBackup);
+    (withTactics.data.moves[0] as unknown as Record<string, unknown>).tactics = [{
+      type: "fork",
+      actor: "cavallo",
+      victims: ["torre", "donna"],
+      squares: ["d5", "c7", "f6"],
+      description: "Forchetta.",
+    }];
+    rpcMock.mockResolvedValue({
+      data: { profiles: 1, lessons: 1, boards: 1, moves: 1 },
+      error: null,
+    });
+
+    await restoreDatabaseBackupJson(JSON.stringify(withTactics));
+
+    expect(rpcMock).toHaveBeenCalledWith("import_database_backup_v1", {
+      p_backup: expect.objectContaining({
+        version: 1,
+        data: expect.objectContaining({
+          moves: [expect.objectContaining({
+            tactics: [expect.objectContaining({ type: "fork" })],
+          })],
+        }),
+      }),
+    });
+  });
+
   it("rejects broken relationships before calling the database", async () => {
     const broken = structuredClone(validBackup);
     broken.data.boards[0].lessonId = 999;

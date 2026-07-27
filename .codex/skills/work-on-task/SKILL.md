@@ -48,15 +48,21 @@ Before implementing, read all files in `docs/tech-debt/` and check if any open d
 - If no → proceed, but reference the debt file in any code that touches the workaround
 
 
-## Step 7 — Implement with TDD (and surface tech debt)
+## Step 7 — Implement with proportionate testing (and surface tech debt)
 
-For ALL feature implementation:
+Use TDD for behavioral work such as features, bug fixes, state transitions,
+data transformations, persistence, and public contracts:
 
 1. **RED** — Write tests FIRST that fail
 2. **GREEN** — Implement the minimum code to pass tests
 3. **REFACTOR** — Clean up while keeping tests green
 
-Never implement first and write tests after.
+Do not require TDD or new tests for trivial, low-risk presentational changes
+such as removing a CSS utility, adjusting spacing, changing static copy, or
+swapping an icon, provided they do not alter behavior, state, accessibility
+semantics, or a public contract. For these micro-changes, implement directly
+and inspect the focused diff; run broader verification only when the affected
+surface or risk justifies it.
 
 If during implementation a workaround, stub, missing dependency, or TODO is encountered → **immediately invoke the `/find-tech-debt` skill** before continuing.
 
@@ -112,7 +118,8 @@ When all subtasks are completed:
      Remove or add criteria based on your project's needs. -->
 A task is done only if:
 - the implementation matches the spec
-- required tests pass
+- tests required by the change's behavior and risk pass; trivial presentational
+  micro-changes may be verified with a focused diff and no new tests
 - required lint / typecheck pass
 - no unrelated files were modified
 - any workaround introduced is tracked in `docs/tech-debt/` via `/find-tech-debt`
