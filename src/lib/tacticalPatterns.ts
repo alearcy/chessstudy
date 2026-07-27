@@ -1,4 +1,9 @@
-import type { TacticalPattern } from "@/types";
+import { Chess } from "chess.js";
+import type {
+  TacticalPattern,
+  TacticalPatternGeometry,
+  TacticalReviewState,
+} from "@/types";
 
 const TACTICAL_TYPES = new Set<TacticalPattern["type"]>([
   "fork",
@@ -10,6 +15,12 @@ const TACTICAL_TYPES = new Set<TacticalPattern["type"]>([
   "mate_threat",
   "hanging_piece",
   "trapped_piece",
+]);
+
+const TACTICAL_STATES = new Set<TacticalReviewState>([
+  "missed",
+  "conceded",
+  "found",
 ]);
 
 const TACTICAL_LABELS: Record<TacticalPattern["type"], string> = {
@@ -43,8 +54,28 @@ function isSquare(value: unknown): value is string {
   return typeof value === "string" && /^[a-h][1-8]$/.test(value);
 }
 
+function isFen(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    new Chess(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isTacticalPattern(value: unknown): value is TacticalPattern {
   if (!isRecord(value) || !TACTICAL_TYPES.has(value.type as TacticalPattern["type"])) {
+    return false;
+  }
+  const state = value.state as TacticalReviewState;
+  if (!TACTICAL_STATES.has(state)) return false;
+  const hasValidAlternative =
+    isRecord(value.alternative) &&
+    typeof value.alternative.moveSan === "string" &&
+    value.alternative.moveSan.trim().length > 0 &&
+    isFen(value.alternative.fen);
+  if (state === "missed" ? !hasValidAlternative : value.alternative !== undefined) {
     return false;
   }
   return (
@@ -62,8 +93,14 @@ export function tacticalPatternsFromJson(value: unknown): TacticalPattern[] {
   return Array.isArray(value) ? value.filter(isTacticalPattern) : [];
 }
 
-export function tacticalPatternKey(pattern: TacticalPattern): string {
+export function tacticalPatternGeometryKey(
+  pattern: TacticalPatternGeometry,
+): string {
   return `${pattern.type}:${[...pattern.squares].sort().join(",")}`;
+}
+
+export function tacticalPatternKey(pattern: TacticalPattern): string {
+  return `${pattern.state}:${tacticalPatternGeometryKey(pattern)}`;
 }
 
 export function tacticalPatternLabel(type: TacticalPattern["type"]): string {

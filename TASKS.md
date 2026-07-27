@@ -2,6 +2,13 @@
 
 ## In Progress
 
+- FEAT-014 Revisione tattica per stato
+  - [x] Classificare e persistere tattiche trovate, mancate e concesse
+  - [ ] Differenziare i chip e mostrare la posizione alternativa delle tattiche mancate
+  - [ ] Ordinare i momenti importanti e aggiungere il riepilogo didattico
+  - [ ] Verificare test, lint, build e resa desktop/tablet landscape
+  - Spec: `docs/specs/revisione-tattiche-per-stato.md`
+
 ## Completed
 
 - UI-013 Layout tablet landscape e invito alla rotazione

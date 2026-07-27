@@ -8,6 +8,7 @@ import type { TacticalPattern } from "@/types";
 const patterns: TacticalPattern[] = [
   {
     type: "fork",
+    state: "found",
     actor: "cavallo",
     victims: ["torre", "donna"],
     squares: ["d5", "c7", "f6"],
@@ -15,6 +16,7 @@ const patterns: TacticalPattern[] = [
   },
   {
     type: "skewer",
+    state: "conceded",
     actor: "alfiere",
     victims: ["Re", "torre"],
     squares: ["b5", "e8", "f7"],

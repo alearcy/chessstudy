@@ -7,8 +7,10 @@ import type {
   MoveExplanationInput,
   MoveExplanation,
   TacticalPattern,
+  TacticalPatternGeometry,
   Severity,
 } from "@/types";
+import { tacticalPatternGeometryKey } from "@/lib/tacticalPatterns";
 // ============================================================================
 // Costanti
 // ============================================================================
@@ -76,9 +78,9 @@ function classifySeverity(cpLoss: number | null, isBestMove?: boolean): Severity
 // Detection tattica
 // ============================================================================
 
-function detectHangingPieces(game: Chess, attacker: Color): TacticalPattern[] {
+function detectHangingPieces(game: Chess, attacker: Color): TacticalPatternGeometry[] {
   const defender: Color = attacker === "w" ? "b" : "w";
-  const patterns: TacticalPattern[] = [];
+  const patterns: TacticalPatternGeometry[] = [];
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
@@ -112,9 +114,9 @@ function detectHangingPieces(game: Chess, attacker: Color): TacticalPattern[] {
   return patterns.slice(0, 3);
 }
 
-function detectForks(game: Chess, attacker: Color): TacticalPattern[] {
+function detectForks(game: Chess, attacker: Color): TacticalPatternGeometry[] {
   const defender: Color = attacker === "w" ? "b" : "w";
-  const patterns: TacticalPattern[] = [];
+  const patterns: TacticalPatternGeometry[] = [];
 
   for (let r = 0; r < 8; r++) {
     for (let c = 0; c < 8; c++) {
@@ -157,8 +159,8 @@ function detectForks(game: Chess, attacker: Color): TacticalPattern[] {
   return patterns.slice(0, 2);
 }
 
-function detectPins(game: Chess, attacker: Color): TacticalPattern[] {
-  const patterns: TacticalPattern[] = [];
+function detectPins(game: Chess, attacker: Color): TacticalPatternGeometry[] {
+  const patterns: TacticalPatternGeometry[] = [];
   const dirs: [number, number][] = [
     [-1, -1], [-1, 0], [-1, 1],
     [0, -1],           [0, 1],
@@ -216,8 +218,8 @@ function detectPins(game: Chess, attacker: Color): TacticalPattern[] {
   return patterns.slice(0, 2);
 }
 
-function detectSkewers(game: Chess, attacker: Color): TacticalPattern[] {
-  const patterns: TacticalPattern[] = [];
+function detectSkewers(game: Chess, attacker: Color): TacticalPatternGeometry[] {
+  const patterns: TacticalPatternGeometry[] = [];
   const dirs: [number, number][] = [
     [-1, -1], [-1, 0], [-1, 1],
     [0, -1],           [0, 1],
@@ -272,8 +274,8 @@ function detectSkewers(game: Chess, attacker: Color): TacticalPattern[] {
   return patterns.slice(0, 2);
 }
 
-function detectMateThreat(game: Chess): TacticalPattern[] {
-  const patterns: TacticalPattern[] = [];
+function detectMateThreat(game: Chess): TacticalPatternGeometry[] {
+  const patterns: TacticalPatternGeometry[] = [];
   const moves = game.moves({ verbose: true });
 
   for (const m of moves) {
@@ -301,7 +303,7 @@ function detectMateThreat(game: Chess): TacticalPattern[] {
   return patterns;
 }
 
-function detectDoubleCheck(game: Chess): TacticalPattern[] {
+function detectDoubleCheck(game: Chess): TacticalPatternGeometry[] {
   if (!game.isCheck()) return [];
 
   const turn = game.turn();
@@ -336,13 +338,13 @@ function findKingSquare(game: Chess, color: Color): Square | null {
 // API pubblica: detection
 // ============================================================================
 
-export function detectTactics(fen: string, attackerColor?: Color): TacticalPattern[] {
+export function detectTactics(fen: string, attackerColor?: Color): TacticalPatternGeometry[] {
   const game = new Chess(fen);
   if (game.isGameOver()) return [];
 
   const attacker = attackerColor ?? game.turn();
 
-  const patterns: TacticalPattern[] = [];
+  const patterns: TacticalPatternGeometry[] = [];
   if (attacker === (game.turn() === "w" ? "b" : "w")) {
     patterns.push(...detectDoubleCheck(game));
   }
@@ -359,6 +361,13 @@ export function detectTactics(fen: string, attackerColor?: Color): TacticalPatte
 // ============================================================================
 
 function uciToSan(fen: string, uci: string): string {
+  return positionAfterUci(fen, uci)?.moveSan ?? uci;
+}
+
+function positionAfterUci(
+  fen: string,
+  uci: string,
+): { fen: string; moveSan: string } | null {
   try {
     const game = new Chess(fen);
     const move = game.move({
@@ -366,9 +375,9 @@ function uciToSan(fen: string, uci: string): string {
       to: uci.slice(2, 4) as Square,
       promotion: uci.length > 4 ? (uci[4] as PieceSymbol) : undefined,
     });
-    return move?.san ?? uci;
+    return move ? { fen: game.fen(), moveSan: move.san } : null;
   } catch {
-    return uci;
+    return null;
   }
 }
 
@@ -410,6 +419,105 @@ function playerLabel(playedBy: "w" | "b", whiteName: string | null | undefined, 
 // Generatore principale
 // ============================================================================
 
+const ADVERSE_TACTICAL_TYPES = new Set<TacticalPatternGeometry["type"]>([
+  "fork",
+  "pin_absolute",
+  "skewer",
+  "discovered_attack",
+  "double_check",
+  "mate_threat",
+  "hanging_piece",
+  "trapped_piece",
+]);
+
+const POSITIVE_TACTICAL_TYPES = new Set<TacticalPatternGeometry["type"]>([
+  "fork",
+  "skewer",
+  "discovered_attack",
+  "double_check",
+  "mate_threat",
+  "trapped_piece",
+]);
+
+function geometryKeys(patterns: TacticalPatternGeometry[]): Set<string> {
+  return new Set(patterns.map(tacticalPatternGeometryKey));
+}
+
+function withReviewState(
+  pattern: TacticalPatternGeometry,
+  state: TacticalPattern["state"],
+  alternative?: TacticalPattern["alternative"],
+): TacticalPattern {
+  return {
+    ...pattern,
+    state,
+    ...(alternative ? { alternative } : {}),
+  };
+}
+
+function classifyTacticalPatterns(
+  input: MoveExplanationInput,
+  severity: Severity,
+  isBestMove: boolean,
+): TacticalPattern[] {
+  const player = input.playedBy;
+  const opponent: Color = player === "w" ? "b" : "w";
+  const beforeForPlayer = detectTactics(input.beforeFen, player);
+  const playedForPlayer = detectTactics(input.afterFen, player);
+  const playedForOpponent = detectTactics(input.afterFen, opponent);
+  const beforePlayerKeys = geometryKeys(beforeForPlayer);
+  const playedPlayerKeys = geometryKeys(playedForPlayer);
+  const bestPosition = input.beforeEval.bestMoveUci
+    ? positionAfterUci(input.beforeFen, input.beforeEval.bestMoveUci)
+    : null;
+  const bestForPlayer = bestPosition
+    ? detectTactics(bestPosition.fen, player)
+    : [];
+  const bestOpponentKeys = bestPosition
+    ? geometryKeys(detectTactics(bestPosition.fen, opponent))
+    : new Set<string>();
+
+  const missed = !bestPosition || isBestMove
+    ? []
+    : bestForPlayer
+      .filter((pattern) => ADVERSE_TACTICAL_TYPES.has(pattern.type))
+      .filter((pattern) => {
+        const key = tacticalPatternGeometryKey(pattern);
+        return !beforePlayerKeys.has(key) && !playedPlayerKeys.has(key);
+      })
+      .slice(0, 2)
+      .map((pattern) => withReviewState(pattern, "missed", {
+        moveSan: bestPosition.moveSan,
+        fen: bestPosition.fen,
+      }));
+
+  const conceded = severity === "inaccuracy" ||
+    severity === "mistake" ||
+    severity === "blunder"
+    ? playedForOpponent
+      .filter((pattern) => ADVERSE_TACTICAL_TYPES.has(pattern.type))
+      .filter(
+        (pattern) =>
+          !bestOpponentKeys.has(tacticalPatternGeometryKey(pattern)),
+      )
+      .slice(0, 2)
+      .map((pattern) => withReviewState(pattern, "conceded"))
+    : [];
+
+  const found = severity === "best" || severity === "good"
+    ? playedForPlayer
+      .filter((pattern) => POSITIVE_TACTICAL_TYPES.has(pattern.type))
+      .filter(
+        (pattern) =>
+          !beforePlayerKeys.has(tacticalPatternGeometryKey(pattern)),
+      )
+      .slice(0, 1)
+      .map((pattern) => withReviewState(pattern, "found"))
+    : [];
+
+  return [...missed, ...conceded, ...found].slice(0, 3);
+}
+
 export async function explainMove(input: MoveExplanationInput): Promise<MoveExplanation> {
   return explainMoveRuleBased(input);
 }
@@ -421,11 +529,7 @@ export function explainMoveRuleBased(input: MoveExplanationInput): MoveExplanati
   const cpLoss = calcCpLoss(playedBy, beforeEval.cp, beforeEval.mate, afterEval.cp, afterEval.mate);
   const isBestMove = checkIsBestMove(beforeFen, beforeEval.bestMoveUci, playedMoveSan);
   const severity = classifySeverity(cpLoss, isBestMove);
-  const opponent: Color = playedBy === "w" ? "b" : "w";
-  const tacticalSide = severity === "inaccuracy" || severity === "mistake" || severity === "blunder"
-    ? opponent
-    : playedBy;
-  const tactics = detectTactics(input.afterFen, tacticalSide);
+  const tactics = classifyTacticalPatterns(input, severity, isBestMove);
 
   let stockfishExplains: string | null = null;
   if (beforeEval.bestMoveUci && severity !== "best") {
@@ -496,11 +600,21 @@ function buildSummary(severity: Severity, san: string, cpLoss: number | null, ta
             ? ": la posizione peggiora leggermente"
             : "";
   let sentence = `${badge} ${san} — ${label}${impact}.`;
-  const fork = tactics.find((t) => t.type === "fork");
-  if (fork && (severity === "inaccuracy" || severity === "mistake" || severity === "blunder")) {
-    sentence += " Subisci una forchetta.";
+  const missedFork = tactics.find(
+    (t) => t.type === "fork" && t.state === "missed",
+  );
+  if (missedFork) {
+    sentence += " Lasci sfuggire una forchetta.";
   }
-  const hanging = tactics.find((t) => t.type === "hanging_piece");
+  const concededFork = tactics.find(
+    (t) => t.type === "fork" && t.state === "conceded",
+  );
+  if (concededFork) {
+    sentence += " Concedi una forchetta.";
+  }
+  const hanging = tactics.find(
+    (t) => t.type === "hanging_piece" && t.state === "conceded",
+  );
   if (hanging && severity === "blunder") sentence += ` ${hanging.description}`;
   return sentence;
 }
@@ -568,7 +682,7 @@ function stockfishExplanation(
   playedBy: Color
 ): string | null {
   let materialNote = "";
-  let avoidedTactic: TacticalPattern | null = null;
+  let avoidedTactic: TacticalPatternGeometry | null = null;
   try {
     const gamePlayed = new Chess(beforeFen);
     gamePlayed.move(playedSan);
@@ -589,12 +703,12 @@ function stockfishExplanation(
     const opponent: Color = playedBy === "w" ? "b" : "w";
     const playedTactics = detectTactics(gamePlayed.fen(), opponent);
     const bestTacticKeys = new Set(
-      detectTactics(gameBest.fen(), opponent).map(tacticalPatternKey)
+      detectTactics(gameBest.fen(), opponent).map(tacticalPatternGeometryKey)
     );
     avoidedTactic = playedTactics.find(
       (pattern) =>
         (pattern.type === "hanging_piece" || pattern.type === "fork" || pattern.type === "mate_threat") &&
-        !bestTacticKeys.has(tacticalPatternKey(pattern))
+        !bestTacticKeys.has(tacticalPatternGeometryKey(pattern))
     ) ?? null;
   } catch {
     // mossa non legale: ignoriamo
@@ -607,10 +721,6 @@ function stockfishExplanation(
     reasons.push(`Con ${bestSan} ${player} avrebbe evitato: ${avoidedTactic.description}`);
   }
   return reasons.length > 0 ? reasons.join(" ") : null;
-}
-
-function tacticalPatternKey(pattern: TacticalPattern): string {
-  return `${pattern.type}:${[...pattern.squares].sort().join(",")}`;
 }
 
 function materialBalance(game: Chess, color: Color): number {

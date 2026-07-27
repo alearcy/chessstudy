@@ -113,7 +113,7 @@ export type LessonFormData = Pick<Lesson, "title" | "description">;
 // explainService types (FEAT-005)
 // ============================================================================
 
-export interface TacticalPattern {
+export interface TacticalPatternGeometry {
   type:
     | "fork"
     | "pin_absolute"
@@ -132,6 +132,22 @@ export interface TacticalPattern {
   squares: string[];
   /** Descrizione breve in italiano */
   description: string;
+}
+
+export type TacticalReviewState = "missed" | "conceded" | "found";
+
+export interface TacticalAlternative {
+  /** Mossa alternativa mostrata all'utente, in SAN. */
+  moveSan: string;
+  /** Posizione raggiunta dopo la mossa alternativa. */
+  fen: string;
+}
+
+export interface TacticalPattern extends TacticalPatternGeometry {
+  /** Ruolo didattico del pattern nella revisione della mossa. */
+  state: TacticalReviewState;
+  /** Presente soltanto per una tattica mancata. */
+  alternative?: TacticalAlternative;
 }
 
 export type Severity = "best" | "good" | "inaccuracy" | "mistake" | "blunder";

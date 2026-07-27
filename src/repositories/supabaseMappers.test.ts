@@ -83,6 +83,7 @@ describe("Supabase data mappers", () => {
       highlights: [],
       tactics: [{
         type: "fork",
+        state: "found",
         actor: "cavallo",
         victims: ["torre", "donna"],
         squares: ["d5", "c7", "f6"],

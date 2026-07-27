@@ -9,6 +9,7 @@ const forkExplanation = "Il cavallo crea una forchetta.";
 
 const fork: TacticalPattern = {
   type: "fork",
+  state: "found",
   actor: "cavallo",
   victims: ["torre", "donna"],
   squares: ["d5", "c7", "f6"],

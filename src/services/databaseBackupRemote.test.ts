@@ -107,6 +107,7 @@ describe("remote database backup import", () => {
     const withTactics = structuredClone(validBackup);
     (withTactics.data.moves[0] as unknown as Record<string, unknown>).tactics = [{
       type: "fork",
+      state: "found",
       actor: "cavallo",
       victims: ["torre", "donna"],
       squares: ["d5", "c7", "f6"],
