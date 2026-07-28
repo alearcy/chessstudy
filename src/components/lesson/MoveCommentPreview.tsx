@@ -2,7 +2,7 @@ import { parseBadgePrefix } from "@/services/analysisService";
 import { TacticalPatternChip } from "@/components/analysis/TacticalPatternChips";
 import { tacticalPatternLabel } from "@/lib/tacticalPatterns";
 import type { Move, TacticalPattern } from "@/types";
-import { CircleCheck, Star } from "lucide-react";
+import { CircleCheck, Route, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MoveCommentPreviewProps {
@@ -196,9 +196,12 @@ function MateLineText({
           <button
             key={`mate-${index}`}
             type="button"
-            className="font-medium text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Mostra la sequenza: ${part}`}
+            title="Mostra la sequenza di matto"
+            className="inline-flex items-center gap-1 rounded-full border border-emerald-500/45 bg-emerald-500/10 px-2 py-0.5 align-baseline text-xs font-medium leading-none text-emerald-200 transition-colors hover:bg-emerald-500/20 hover:text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             onClick={() => onMateLineClick(mateIn)}
           >
+            <Route aria-hidden="true" className="size-3" />
             {part}
           </button>
         );

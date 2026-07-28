@@ -59,10 +59,14 @@ import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
 import OpeningInsightsPanel from "@/components/analysis/OpeningInsightsPanel";
 import OpeningStudyDialog from "@/components/analysis/OpeningStudyDialog";
 import AnalysisSidebarTabs from "@/components/analysis/AnalysisSidebarTabs";
+import MateVariationNotice, {
+  type MateLineNoticeState,
+} from "@/components/analysis/MateVariationNotice";
 import TacticalVariationNotice from "@/components/analysis/TacticalVariationNotice";
 import TacticalReviewPanel from "@/components/analysis/TacticalReviewPanel";
 import ViewportSidebar from "@/components/layout/ViewportSidebar";
 import ErrorNotice from "@/components/ErrorNotice";
+import { clearMateLineTimers } from "@/lib/mateLinePreview";
 import {
   analyzePositions,
   analyzePositionsAutomatic,
@@ -226,7 +230,10 @@ export default function LessonDetailPage() {
   const [movePersistencePending, setMovePersistencePending] = useState(false);
   const [movePersistenceError, setMovePersistenceError] = useState<string | null>(null);
   const [mateLinePreviewFen, setMateLinePreviewFen] = useState<string | null>(null);
-  const [mateLineStatus, setMateLineStatus] = useState<string | null>(null);
+  const [mateLineStatus, setMateLineStatus] = useState<{
+    mateIn: number;
+    state: MateLineNoticeState;
+  } | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -248,7 +255,8 @@ export default function LessonDetailPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>("");
   const moveCommentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mateLineTimerRef = useRef<number | null>(null);
+  const mateLineTimerRef = useRef<number[]>([]);
+  const mateLinePreviewIdRef = useRef(0);
   const lastSavedCommentRef = useRef<string>("");
   const commentMoveIdRef = useRef<number | null>(null);
   const moveCommentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1466,10 +1474,8 @@ const selectedBoard = useMemo(
   };
 
   const clearMateLinePreview = useCallback(() => {
-    if (mateLineTimerRef.current !== null) {
-      window.clearTimeout(mateLineTimerRef.current);
-      mateLineTimerRef.current = null;
-    }
+    mateLinePreviewIdRef.current += 1;
+    clearMateLineTimers(mateLineTimerRef.current);
     setMateLinePreviewFen(null);
     setMateLineStatus(null);
   }, []);
@@ -1481,13 +1487,12 @@ const selectedBoard = useMemo(
       const startFen = chess.currentMove?.fen;
       if (!startFen) return;
 
-      if (mateLineTimerRef.current !== null) {
-        window.clearTimeout(mateLineTimerRef.current);
-        mateLineTimerRef.current = null;
-      }
+      clearMateLineTimers(mateLineTimerRef.current);
+      const previewId = mateLinePreviewIdRef.current + 1;
+      mateLinePreviewIdRef.current = previewId;
 
       setMateLinePreviewFen(startFen);
-      setMateLineStatus("Calcolo la linea di matto...");
+      setMateLineStatus({ mateIn, state: { phase: "loading" } });
 
       try {
         const game = new Chess(startFen);
@@ -1496,6 +1501,7 @@ const selectedBoard = useMemo(
 
         for (let ply = 0; ply < maxPlies && !game.isGameOver(); ply += 1) {
           const [ev] = await analyzePositions([game.fen()], { depth: Math.max(currentEvalDepth, 12) });
+          if (mateLinePreviewIdRef.current !== previewId) return;
           const move = ev.bestMoveUci ? uciToChessMove(ev.bestMoveUci) : null;
           if (!move) break;
 
@@ -1505,21 +1511,36 @@ const selectedBoard = useMemo(
           if (game.isCheckmate()) break;
         }
 
+        if (mateLinePreviewIdRef.current !== previewId) return;
         if (fens.length <= 1) {
-          setMateLineStatus("Linea di matto non disponibile.");
+          setMateLineStatus({ mateIn, state: { phase: "unavailable" } });
           return;
         }
 
-        setMateLineStatus(`Linea di matto: 1/${fens.length - 1}`);
+        setMateLineStatus({
+          mateIn,
+          state: { phase: "ready", current: 1, total: fens.length - 1 },
+        });
         fens.slice(1).forEach((fen, index) => {
-          mateLineTimerRef.current = window.setTimeout(() => {
-            setMateLinePreviewFen(fen);
-            setMateLineStatus(`Linea di matto: ${index + 1}/${fens.length - 1}`);
-          }, (index + 1) * 700);
+          mateLineTimerRef.current.push(
+            window.setTimeout(() => {
+              if (mateLinePreviewIdRef.current !== previewId) return;
+              setMateLinePreviewFen(fen);
+              setMateLineStatus({
+                mateIn,
+                state: {
+                  phase: "ready",
+                  current: index + 1,
+                  total: fens.length - 1,
+                },
+              });
+            }, (index + 1) * 700),
+          );
         });
       } catch (error) {
+        if (mateLinePreviewIdRef.current !== previewId) return;
         console.error("[mate-line-preview] errore", error);
-        setMateLineStatus("Impossibile calcolare la linea di matto.");
+        setMateLineStatus({ mateIn, state: { phase: "error" } });
       }
     },
     [chess.currentMove?.fen, currentEvalDepth]
@@ -1735,6 +1756,12 @@ const selectedBoard = useMemo(
                           moveSan={tacticalAlternative.moveSan}
                           onClose={() => setSelectedTacticKey(null)}
                         />
+                      ) : mateLineStatus ? (
+                        <MateVariationNotice
+                          mateIn={mateLineStatus.mateIn}
+                          state={mateLineStatus.state}
+                          onClose={clearMateLinePreview}
+                        />
                       ) : null
                     }
                   />
@@ -1780,18 +1807,6 @@ const selectedBoard = useMemo(
                       selectedTacticKey={selectedTacticKey}
                       onSelectedTacticKeyChange={handleSelectedTacticKeyChange}
                     />
-                  </div>
-                ) : null}
-                {mateLineStatus ? (
-                  <div className="flex items-center justify-between gap-2 border-b bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                    <span>{mateLineStatus}</span>
-                    <button
-                      type="button"
-                      className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-800"
-                      onClick={clearMateLinePreview}
-                    >
-                      Chiudi
-                    </button>
                   </div>
                 ) : null}
                 <MoveNotation

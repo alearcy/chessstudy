@@ -85,6 +85,13 @@ nessun nuovo mondo visivo, nessuna gamification e nessuna modifica a
 - Selezionare `Mancata` mostra la FEN alternativa con il messaggio
   `Se avessi giocato <SAN>…` e un comando `Torna alla partita`. La preview è
   temporanea e non modifica storia, annotazioni o persistenza.
+- Le sequenze di matto trovate riusano lo stesso slot contestuale sopra la
+  scacchiera, con avanzamento compatto, stato di errore e comando
+  `Torna alla partita`; non aggiungono un secondo banner nella sidebar.
+- Nel commento didattico, `Matto in <N>` è una chip positiva compatta e
+  accessibile, non un link testuale sottolineato.
+- `Torna alla partita` invalida il calcolo corrente e annulla tutti i passaggi
+  programmati, così la sequenza non può riaprirsi dopo la chiusura.
 
 ## Percorso di revisione
 
@@ -109,7 +116,8 @@ nessun nuovo mondo visivo, nessuna gamification e nessuna modifica a
 
 - Test RED/GREEN per nascita, confronto e priorità dei tre stati.
 - Test parser/mapper per payload aggiornato e compatibilità storica.
-- Test componenti per etichette, icone, accessibilità e preview alternativa.
+- Test componenti per etichette, icone, accessibilità, preview alternativa e
+  notice delle sequenze di matto.
 - Test del percorso di revisione e del riepilogo.
 - `npm test`, `npm run lint`, `npm run build`, `git diff --check`.
 - Verifica visiva desktop e iPad Mini landscape prima della chiusura.

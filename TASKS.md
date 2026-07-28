@@ -1,15 +1,17 @@
 # TASKS
 
-## In Progress
+## Completed
 
 - FEAT-014 Revisione tattica per stato
   - [x] Classificare e persistere tattiche trovate, mancate e concesse
   - [x] Differenziare i chip e mostrare la posizione alternativa delle tattiche mancate
   - [x] Ordinare i momenti importanti e aggiungere il riepilogo didattico
-  - [ ] Verificare test, lint, build e resa desktop/tablet landscape
+  - [x] Uniformare la UI delle sequenze di matto trovate alle preview tattiche
+  - [x] Mostrare Matto in N come chip interattiva nel commento
+  - [x] Interrompere definitivamente la sequenza di matto con Torna
+  - [x] Verificare test, lint e build
+  - [x] Verificare la resa desktop/tablet landscape
   - Spec: `docs/specs/revisione-tattiche-per-stato.md`
-
-## Completed
 
 - UI-013 Layout tablet landscape e invito alla rotazione
   - [x] Correggere il breakpoint per la viewport effettiva di iPad Mini

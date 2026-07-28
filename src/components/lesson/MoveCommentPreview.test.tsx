@@ -34,6 +34,27 @@ const move: Move = {
 afterEach(cleanup);
 
 describe("MoveCommentPreview tactical lines", () => {
+  it("renders a mate sequence action as a compact chip", () => {
+    const onMateLineClick = vi.fn();
+    const view = render(
+      <MoveCommentPreview
+        currentMove={move}
+        historyIndex={1}
+        text={"alearcy perde molto vantaggio.\nMatto in 12 per il Nero."}
+        onMateLineClick={onMateLineClick}
+      />,
+    );
+
+    const chip = view.getByRole("button", {
+      name: "Mostra la sequenza: Matto in 12",
+    });
+    expect(chip.className).toContain("rounded-full");
+    expect(chip.className).not.toContain("underline");
+
+    fireEvent.click(chip);
+    expect(onMateLineClick).toHaveBeenCalledWith(12);
+  });
+
   it("places the chip beside the matching tactical explanation", () => {
     const onSelectedTacticKeyChange = vi.fn();
     const view = render(
