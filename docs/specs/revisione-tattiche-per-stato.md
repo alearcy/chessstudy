@@ -64,7 +64,8 @@ partita.
 
 **FIRST VIEWPORT.** Il commento della mossa resta compatto nella sidebar; il
 chip precede la spiegazione. Una preview mancata usa la scacchiera principale
-e un avviso contestuale immediatamente sotto di essa.
+e uno stato contestuale compatto nella toolbar già riservata sopra di essa,
+senza spostare scacchiera o grafico.
 
 **FORM.** Estensione locale in modalità Operate della superficie di Analisi:
 nessun nuovo mondo visivo, nessuna gamification e nessuna modifica a
@@ -112,4 +113,3 @@ nessun nuovo mondo visivo, nessuna gamification e nessuna modifica a
 - Test del percorso di revisione e del riepilogo.
 - `npm test`, `npm run lint`, `npm run build`, `git diff --check`.
 - Verifica visiva desktop e iPad Mini landscape prima della chiusura.
-

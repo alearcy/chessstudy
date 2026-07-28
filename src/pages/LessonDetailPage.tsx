@@ -1729,23 +1729,17 @@ const selectedBoard = useMemo(
                         blackElo={selectedBoard.headers?.BlackElo}
                       />
                     }
+                    toolbarStatus={
+                      tacticalAlternative ? (
+                        <TacticalVariationNotice
+                          moveSan={tacticalAlternative.moveSan}
+                          onClose={() => setSelectedTacticKey(null)}
+                        />
+                      ) : null
+                    }
                   />
                 </div>
-                {tacticalAlternative ? (
-                  <div className="col-start-2 row-start-2 min-w-0">
-                    <TacticalVariationNotice
-                      moveSan={tacticalAlternative.moveSan}
-                      onClose={() => setSelectedTacticKey(null)}
-                    />
-                  </div>
-                ) : null}
-                <div
-                  className={
-                    tacticalAlternative
-                      ? "col-start-2 row-start-3 min-w-0"
-                      : "col-start-2 row-start-2 min-w-0"
-                  }
-                >
+                <div className="col-start-2 row-start-2 min-w-0">
                   <GameEvaluationChart
                     start={selectedBoard}
                     moves={chess.moves}

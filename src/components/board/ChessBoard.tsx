@@ -99,6 +99,8 @@ interface ChessBoardViewProps {
   topPlayerLabel?: ReactNode;
   /** Contenuto mostrato sotto la scacchiera. */
   bottomPlayerLabel?: ReactNode;
+  /** Stato contestuale compatto mostrato nello spazio stabile della toolbar. */
+  toolbarStatus?: ReactNode;
   /** Esporta la linea della scacchiera di studio come PGN. */
   onExportPgn?: () => void;
   /** Esporta la posizione corrente annotata come PNG. */
@@ -361,6 +363,7 @@ export default function ChessBoardView({
   onFlip,
   topPlayerLabel,
   bottomPlayerLabel,
+  toolbarStatus,
   onExportPgn,
   onExportImage,
 }: ChessBoardViewProps) {
@@ -587,7 +590,12 @@ export default function ChessBoardView({
             </>
           )}
         </div>
-        <div className="flex-1" />
+        <div
+          data-testid="board-toolbar-status"
+          className="min-w-0 flex-1 px-2"
+        >
+          {toolbarStatus}
+        </div>
         <div className="w-10 shrink-0 flex justify-end">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

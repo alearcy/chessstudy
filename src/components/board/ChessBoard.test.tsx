@@ -35,6 +35,7 @@ function renderBoard(
   options: {
     top?: ReactNode;
     bottom?: ReactNode;
+    toolbarStatus?: ReactNode;
     onConvertToStudy?: () => void;
     converting?: boolean;
     arrows?: BoardArrow[];
@@ -67,6 +68,7 @@ function renderBoard(
       lessonMode={lessonMode}
       topPlayerLabel={options.top}
       bottomPlayerLabel={options.bottom}
+      toolbarStatus={options.toolbarStatus}
       onConvertToStudy={options.onConvertToStudy}
       converting={options.converting}
       onExportPgn={options.onExportPgn}
@@ -403,6 +405,25 @@ describe("ChessBoardView gesture Studio", () => {
         expect.objectContaining({ orig: "c7" }),
       ]),
     );
+  });
+});
+
+describe("ChessBoardView toolbar contestuale", () => {
+  it("mantiene uno slot stabile anche quando monta lo stato alternativo", () => {
+    const emptyView = renderBoard("analysis");
+
+    expect(
+      emptyView.getByTestId("board-toolbar-status").textContent,
+    ).toBe("");
+    emptyView.unmount();
+
+    const activeView = renderBoard("analysis", {
+      toolbarStatus: <span>Se avessi giocato Cc7+</span>,
+    });
+
+    expect(
+      activeView.getByTestId("board-toolbar-status").textContent,
+    ).toBe("Se avessi giocato Cc7+");
   });
 });
 
