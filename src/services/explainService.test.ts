@@ -27,6 +27,10 @@ describe("explainService tactical explanations", () => {
         }),
       ]),
     );
+    expect(explanation.details).toContain("Tattica trovata:");
+    expect(
+      explanation.details.some((detail) => detail.includes("fa una forchetta")),
+    ).toBe(true);
   });
 
   it("marks the fork created only by the best alternative as missed", () => {
@@ -51,6 +55,10 @@ describe("explainService tactical explanations", () => {
         }),
       ]),
     );
+    expect(explanation.details).toContain("Occasione tattica mancata:");
+    expect(
+      explanation.details.some((detail) => detail.includes("fa una forchetta")),
+    ).toBe(true);
   });
 
   it("marks an opponent fork left available by a weak move as conceded", () => {
@@ -71,6 +79,7 @@ describe("explainService tactical explanations", () => {
         }),
       ]),
     );
+    expect(explanation.details).toContain("Tattica concessa all'avversario:");
   });
 
   it("detects a fork even when the attacker is not the side encoded by legal move generation", () => {

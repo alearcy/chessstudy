@@ -3,6 +3,7 @@ import { TacticalPatternChip } from "@/components/analysis/TacticalPatternChips"
 import { tacticalPatternLabel } from "@/lib/tacticalPatterns";
 import type { Move, TacticalPattern } from "@/types";
 import { CircleCheck, Star } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface MoveCommentPreviewProps {
   currentMove: Move | null;
@@ -68,6 +69,11 @@ function TacticalMoveCommentText({
   onMateLineClick?: (mateIn: number) => void;
 }) {
   const lines = text.split("\n");
+  const lineClasses: Record<TacticalPattern["state"], string> = {
+    missed: "border-dashed border-amber-500/35 bg-amber-500/5",
+    conceded: "border-destructive/35 bg-destructive/10",
+    found: "border-emerald-500/25 bg-emerald-500/5",
+  };
 
   return (
     <span className="whitespace-pre-wrap">
@@ -91,7 +97,14 @@ function TacticalMoveCommentText({
         const explanation = tacticalExplanation(pattern);
         return (
           <span key={`tactic-${pattern.type}-${lineIndex}`}>
-            <span data-tactical-comment>
+            <span
+              data-tactical-comment
+              data-tactical-state={pattern.state}
+              className={cn(
+                "my-1 block rounded-md border px-2 py-1.5",
+                lineClasses[pattern.state],
+              )}
+            >
               <TacticalPatternChip
                 pattern={pattern}
                 patternIndex={patternIndex}

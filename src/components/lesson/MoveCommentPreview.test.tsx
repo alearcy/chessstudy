@@ -51,13 +51,20 @@ describe("MoveCommentPreview tactical lines", () => {
     const tacticalLine = explanation.closest("[data-tactical-comment]");
     expect(tacticalLine).not.toBeNull();
     expect(
-      within(tacticalLine as HTMLElement).getByRole("button", { name: "Forchetta" }),
+      within(tacticalLine as HTMLElement).getByRole("button", {
+        name: "Trovata · Forchetta",
+      }),
     ).toBeTruthy();
-    expect(tacticalLine?.textContent).toBe(`Forchetta: ${forkExplanation}`);
+    expect(tacticalLine?.getAttribute("data-tactical-state")).toBe("found");
+    expect(tacticalLine?.textContent).toBe(
+      `Trovata · Forchetta: ${forkExplanation}`,
+    );
     expect(tacticalLine?.className).not.toContain("inline-flex");
 
     fireEvent.click(
-      within(tacticalLine as HTMLElement).getByRole("button", { name: "Forchetta" }),
+      within(tacticalLine as HTMLElement).getByRole("button", {
+        name: "Trovata · Forchetta",
+      }),
     );
     expect(onSelectedTacticKeyChange).toHaveBeenCalledWith(
       tacticalPatternKey(fork),
@@ -77,7 +84,9 @@ describe("MoveCommentPreview tactical lines", () => {
     );
 
     expect(view.getAllByText(forkExplanation)).toHaveLength(1);
-    expect(view.getByRole("button", { name: "Forchetta" }).getAttribute("aria-pressed"))
+    expect(view.getByRole("button", {
+      name: "Trovata · Forchetta",
+    }).getAttribute("aria-pressed"))
       .toBe("true");
   });
 });

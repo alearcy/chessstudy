@@ -59,6 +59,7 @@ import PgnHeadersSidebar from "@/components/board/PgnHeadersSidebar";
 import OpeningInsightsPanel from "@/components/analysis/OpeningInsightsPanel";
 import OpeningStudyDialog from "@/components/analysis/OpeningStudyDialog";
 import AnalysisSidebarTabs from "@/components/analysis/AnalysisSidebarTabs";
+import TacticalVariationNotice from "@/components/analysis/TacticalVariationNotice";
 import ViewportSidebar from "@/components/layout/ViewportSidebar";
 import ErrorNotice from "@/components/ErrorNotice";
 import {
@@ -94,6 +95,8 @@ import { analyzeGameOpenings } from "@/services/openingBookService";
 import { classifyMoveAtIndex } from "@/services/moveAnnotationService";
 import { lessonBoardLayoutClass } from "@/lib/lessonBoardLayout";
 import {
+  tacticalAlternativeForSelection,
+  tacticalAlternativeMoveSquares,
   tacticalPatternColor,
   tacticalPatternKey,
 } from "@/lib/tacticalPatterns";
@@ -270,11 +273,23 @@ const selectedBoard = useMemo(
   const selectedTacticIndex = currentTactics.findIndex(
     (pattern) => tacticalPatternKey(pattern) === selectedTacticKey,
   );
+  const selectedTactic = selectedTacticIndex < 0
+    ? null
+    : currentTactics[selectedTacticIndex];
+  const tacticalAlternative = tacticalAlternativeForSelection(
+    currentTactics,
+    selectedTacticKey,
+  );
+  const tacticalAlternativeMove = useMemo(() => {
+    const beforeFen = chess.history[chess.historyIndex - 1];
+    if (!beforeFen || !tacticalAlternative) return null;
+    return tacticalAlternativeMoveSquares(beforeFen, tacticalAlternative);
+  }, [chess.history, chess.historyIndex, tacticalAlternative]);
   const tacticOverlayHighlights: BoardHighlight[] = selectedTacticIndex < 0
     ? []
-    : currentTactics[selectedTacticIndex].squares.map((square) => [
+    : selectedTactic!.squares.map((square) => [
         square,
-        tacticalPatternColor(selectedTacticIndex),
+        tacticalPatternColor(selectedTactic!.type),
       ]);
 
   useEffect(() => {
@@ -1126,6 +1141,24 @@ const selectedBoard = useMemo(
     return classifyMoveAtIndex(selectedBoard, chess.moves, i)?.badge ?? null;
   }, [chess.historyIndex, chess.moves, selectedBoard]);
 
+  const tacticalPreviewEvalSource = chess.historyIndex <= 1
+    ? selectedBoard
+    : chess.moves[chess.historyIndex - 2] ?? null;
+  const displayedFen =
+    tacticalAlternative?.fen ?? mateLinePreviewFen ?? chess.fen;
+  const displayedEvalCp = tacticalAlternative
+    ? tacticalPreviewEvalSource?.evalCp ?? null
+    : currentEvalCp;
+  const displayedEvalMate = tacticalAlternative
+    ? tacticalPreviewEvalSource?.evalMate ?? null
+    : currentEvalMate;
+  const displayedLastMoveSquare =
+    tacticalAlternativeMove?.to ?? lastMoveSquare;
+  const displayedLastMoveFromSquare =
+    tacticalAlternativeMove?.from ?? lastMoveFromSquare;
+  const displayedKingStatus =
+    displayedFen === chess.fen ? kingStatus : getKingStatus(displayedFen);
+
   const handleEditBoardClick = (board: Board, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditBoardId(board.id ?? null);
@@ -1455,6 +1488,14 @@ const selectedBoard = useMemo(
     [chess.currentMove?.fen, currentEvalDepth]
   );
 
+  const handleSelectedTacticKeyChange = useCallback(
+    (key: string | null) => {
+      if (key) clearMateLinePreview();
+      setSelectedTacticKey(key);
+    },
+    [clearMateLinePreview],
+  );
+
 
   if (loading) {
     return (
@@ -1580,19 +1621,19 @@ const selectedBoard = useMemo(
             <div className="w-full">
               <div className="grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-stretch gap-x-2 gap-y-3">
                 <div className="pointer-events-none col-start-1 row-start-1 flex">
-                  <EvalBar cp={currentEvalCp} mate={currentEvalMate} />
+                  <EvalBar cp={displayedEvalCp} mate={displayedEvalMate} />
                 </div>
                 <div className="col-start-2 row-start-1 min-w-0">
                   <ChessBoardView
-                    fen={mateLinePreviewFen ?? chess.fen}
+                    fen={displayedFen}
                     arrows={chess.currentArrows}
                     highlights={[]}
                     overlayHighlights={tacticOverlayHighlights}
-                    extraArrows={analysisArrow}
-                    lastMoveSquare={lastMoveSquare}
-                    lastMoveFromSquare={lastMoveFromSquare}
-                    moveBadge={moveBadge}
-                    kingStatus={kingStatus}
+                    extraArrows={tacticalAlternative ? [] : analysisArrow}
+                    lastMoveSquare={displayedLastMoveSquare}
+                    lastMoveFromSquare={displayedLastMoveFromSquare}
+                    moveBadge={tacticalAlternative ? null : moveBadge}
+                    kingStatus={displayedKingStatus}
                     onAnnotationsChange={handleAnnotationsChange}
                     canUndo={chess.canUndo}
                     canRedo={chess.canRedo}
@@ -1636,7 +1677,21 @@ const selectedBoard = useMemo(
                     }
                   />
                 </div>
-                <div className="col-start-2 row-start-2 min-w-0">
+                {tacticalAlternative ? (
+                  <div className="col-start-2 row-start-2 min-w-0">
+                    <TacticalVariationNotice
+                      moveSan={tacticalAlternative.moveSan}
+                      onClose={() => setSelectedTacticKey(null)}
+                    />
+                  </div>
+                ) : null}
+                <div
+                  className={
+                    tacticalAlternative
+                      ? "col-start-2 row-start-3 min-w-0"
+                      : "col-start-2 row-start-2 min-w-0"
+                  }
+                >
                   <GameEvaluationChart
                     start={selectedBoard}
                     moves={chess.moves}
@@ -1670,7 +1725,7 @@ const selectedBoard = useMemo(
                       onMateLineClick={handleMateLineClick}
                       tactics={currentTactics}
                       selectedTacticKey={selectedTacticKey}
-                      onSelectedTacticKeyChange={setSelectedTacticKey}
+                      onSelectedTacticKeyChange={handleSelectedTacticKeyChange}
                     />
                   </div>
                 ) : null}
@@ -1794,7 +1849,7 @@ const selectedBoard = useMemo(
                             onMateLineClick={handleMateLineClick}
                             tactics={currentTactics}
                             selectedTacticKey={selectedTacticKey}
-                            onSelectedTacticKeyChange={setSelectedTacticKey}
+                            onSelectedTacticKeyChange={handleSelectedTacticKeyChange}
                           />
                         </div>
                       ) : null}

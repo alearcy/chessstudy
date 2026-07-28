@@ -1,9 +1,11 @@
 import { Chess } from "chess.js";
 import type {
+  TacticalAlternative,
   TacticalPattern,
   TacticalPatternGeometry,
   TacticalReviewState,
 } from "@/types";
+import type { Square } from "chess.js";
 
 const TACTICAL_TYPES = new Set<TacticalPattern["type"]>([
   "fork",
@@ -35,16 +37,23 @@ const TACTICAL_LABELS: Record<TacticalPattern["type"], string> = {
   trapped_piece: "Pezzo intrappolato",
 };
 
-const TACTICAL_COLORS = [
-  "#0284c7",
-  "#c026d3",
-  "#ea580c",
-  "#059669",
-  "#7c3aed",
-  "#e11d48",
-  "#d97706",
-  "#0d9488",
-] as const;
+const TACTICAL_STATE_LABELS: Record<TacticalReviewState, string> = {
+  missed: "Mancata",
+  conceded: "Concessa",
+  found: "Trovata",
+};
+
+const TACTICAL_COLORS: Record<TacticalPattern["type"], string> = {
+  fork: "#0284c7",
+  pin_absolute: "#c026d3",
+  pin_relative: "#c026d3",
+  skewer: "#ea580c",
+  discovered_attack: "#059669",
+  double_check: "#7c3aed",
+  mate_threat: "#e11d48",
+  hanging_piece: "#d97706",
+  trapped_piece: "#0d9488",
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -107,6 +116,42 @@ export function tacticalPatternLabel(type: TacticalPattern["type"]): string {
   return TACTICAL_LABELS[type];
 }
 
-export function tacticalPatternColor(index: number): string {
-  return TACTICAL_COLORS[index % TACTICAL_COLORS.length];
+export function tacticalReviewStateLabel(
+  state: TacticalReviewState,
+): string {
+  return TACTICAL_STATE_LABELS[state];
+}
+
+export function tacticalPatternColor(
+  type: TacticalPattern["type"],
+): string {
+  return TACTICAL_COLORS[type];
+}
+
+export function tacticalAlternativeForSelection(
+  patterns: TacticalPattern[],
+  selectedKey: string | null,
+): TacticalPattern["alternative"] | null {
+  if (!selectedKey) return null;
+  const selected = patterns.find(
+    (pattern) => tacticalPatternKey(pattern) === selectedKey,
+  );
+  return selected?.state === "missed"
+    ? selected.alternative ?? null
+    : null;
+}
+
+export function tacticalAlternativeMoveSquares(
+  beforeFen: string,
+  alternative: TacticalAlternative,
+): { from: Square; to: Square } | null {
+  try {
+    const position = new Chess(beforeFen);
+    const move = position.move(alternative.moveSan);
+    return move
+      ? { from: move.from as Square, to: move.to as Square }
+      : null;
+  } catch {
+    return null;
+  }
 }

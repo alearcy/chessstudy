@@ -635,19 +635,17 @@ function buildDetails(
   switch (severity) {
     case "blunder":
       details.push(`${player} perde molto vantaggio.`);
-      if (tactics.length > 0) {
-        details.push("La posizione ora contiene debolezze tattiche:");
-        for (const t of tactics.slice(0, 3)) details.push(`• ${t.description}`);
-      }
+      appendTacticalDetails(details, tactics);
       if (stockfishExplains) details.push(stockfishExplains);
       break;
     case "mistake":
 details.push(`${player} concede un vantaggio importante.`);
+      appendTacticalDetails(details, tactics);
       if (stockfishExplains) details.push(stockfishExplains);
-      for (const t of tactics.slice(0, 2)) details.push(`• ${t.description}`);
       break;
     case "inaccuracy":
 details.push(`Piccola imprecisione di ${player}: la posizione peggiora leggermente.`);
+      appendTacticalDetails(details, tactics);
       if (stockfishExplains) details.push(stockfishExplains);
       break;
     case "good": {
@@ -658,11 +656,11 @@ details.push(`Piccola imprecisione di ${player}: la posizione peggiora leggermen
         details.push(`Mossa solida di ${player}, vicina alla continuazione piu precisa.`);
       }
       }
-      for (const t of tactics.slice(0, 2)) details.push(`• ${t.description}`);
+      appendTacticalDetails(details, tactics);
       break;
     case "best":
 details.push(`${player} ha giocato la continuazione piu precisa.`);
-      for (const t of tactics.slice(0, 3)) details.push(`• ${t.description}`);
+      appendTacticalDetails(details, tactics);
       break;
   }
 
@@ -671,6 +669,31 @@ details.push(`${player} ha giocato la continuazione piu precisa.`);
     details.push(`Matto in ${Math.abs(afterEval.mate)} per il ${who}.`);
   }
   return details;
+}
+
+function appendTacticalDetails(
+  details: string[],
+  tactics: TacticalPattern[],
+): void {
+  const groups: Array<{
+    state: TacticalPattern["state"];
+    label: string;
+  }> = [
+    { state: "missed", label: "Occasione tattica mancata:" },
+    { state: "conceded", label: "Tattica concessa all'avversario:" },
+    { state: "found", label: "Tattica trovata:" },
+  ];
+
+  for (const group of groups) {
+    const patterns = tactics.filter(
+      (pattern) => pattern.state === group.state,
+    );
+    if (patterns.length === 0) continue;
+    details.push(group.label);
+    for (const pattern of patterns) {
+      details.push(`• ${pattern.description}`);
+    }
+  }
 }
 
 function stockfishExplanation(

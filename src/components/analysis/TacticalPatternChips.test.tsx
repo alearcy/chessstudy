@@ -8,11 +8,15 @@ import type { TacticalPattern } from "@/types";
 const patterns: TacticalPattern[] = [
   {
     type: "fork",
-    state: "found",
+    state: "missed",
     actor: "cavallo",
     victims: ["torre", "donna"],
     squares: ["d5", "c7", "f6"],
     description: "Forchetta di cavallo.",
+    alternative: {
+      moveSan: "Nd5",
+      fen: "7k/2r5/5q2/3N4/8/8/7P/4K3 b - - 1 1",
+    },
   },
   {
     type: "skewer",
@@ -37,10 +41,16 @@ describe("TacticalPatternChips", () => {
       />,
     );
 
-    const forkButton = view.getByRole("button", { name: "Forchetta" });
+    const forkButton = view.getByRole("button", {
+      name: "Mancata · Forchetta",
+    });
     expect(forkButton.getAttribute("aria-pressed")).toBe("false");
+    expect(forkButton.getAttribute("data-tactical-state")).toBe("missed");
+    expect(forkButton.className).toContain("border-dashed");
     expect(
-      view.getByRole("button", { name: "Infilata" }).getAttribute("aria-pressed"),
+      view.getByRole("button", {
+        name: "Concessa · Infilata",
+      }).getAttribute("aria-pressed"),
     ).toBe("false");
 
     fireEvent.click(forkButton);
@@ -61,14 +71,20 @@ describe("TacticalPatternChips", () => {
     );
 
     expect(
-      view.getByRole("button", { name: "Forchetta" }).getAttribute("aria-pressed"),
+      view.getByRole("button", {
+        name: "Mancata · Forchetta",
+      }).getAttribute("aria-pressed"),
     ).toBe("true");
-    fireEvent.click(view.getByRole("button", { name: "Infilata" }));
+    fireEvent.click(view.getByRole("button", {
+      name: "Concessa · Infilata",
+    }));
     expect(onSelectedKeyChange).toHaveBeenLastCalledWith(
       tacticalPatternKey(patterns[1]),
     );
 
-    fireEvent.click(view.getByRole("button", { name: "Forchetta" }));
+    fireEvent.click(view.getByRole("button", {
+      name: "Mancata · Forchetta",
+    }));
     expect(onSelectedKeyChange).toHaveBeenLastCalledWith(null);
   });
 });
