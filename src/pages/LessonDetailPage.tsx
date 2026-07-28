@@ -60,6 +60,7 @@ import OpeningInsightsPanel from "@/components/analysis/OpeningInsightsPanel";
 import OpeningStudyDialog from "@/components/analysis/OpeningStudyDialog";
 import AnalysisSidebarTabs from "@/components/analysis/AnalysisSidebarTabs";
 import TacticalVariationNotice from "@/components/analysis/TacticalVariationNotice";
+import TacticalReviewPanel from "@/components/analysis/TacticalReviewPanel";
 import ViewportSidebar from "@/components/layout/ViewportSidebar";
 import ErrorNotice from "@/components/ErrorNotice";
 import {
@@ -100,6 +101,7 @@ import {
   tacticalPatternColor,
   tacticalPatternKey,
 } from "@/lib/tacticalPatterns";
+import { buildTacticalReview } from "@/lib/tacticalReview";
 import { initialHistoryIndexForLessonMode } from "@/lib/lessonBoardHistory";
 import {
   buildStudyPgn,
@@ -253,6 +255,10 @@ export default function LessonDetailPage() {
   const persistedMoveIdsByOrderRef = useRef<Map<number, number>>(new Map());
   const movePersistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const movePersistencePendingRef = useRef(false);
+  const pendingTacticalReviewSelectionRef = useRef<{
+    historyIndex: number;
+    tacticKey: string;
+  } | null>(null);
   const selectedBoardIdRef = useRef<number | null>(selectedBoardId);
   selectedBoardIdRef.current = selectedBoardId;
 
@@ -269,6 +275,18 @@ const selectedBoard = useMemo(
       chess.historyIndex - 1,
     );
   }, [chess.historyIndex, chess.moves, selectedBoard]);
+
+  const tacticalReview = useMemo(
+    () =>
+      buildTacticalReview(
+        selectedBoard
+          ? chess.moves.map((_, moveIndex) =>
+              resolveMoveTactics(selectedBoard, chess.moves, moveIndex),
+            )
+          : [],
+      ),
+    [chess.moves, selectedBoard],
+  );
 
   const selectedTacticIndex = currentTactics.findIndex(
     (pattern) => tacticalPatternKey(pattern) === selectedTacticKey,
@@ -293,10 +311,7 @@ const selectedBoard = useMemo(
       ]);
 
   useEffect(() => {
-    setSelectedTacticKey(null);
-  }, [chess.historyIndex, mateLinePreviewFen, selectedBoardId]);
-
-  useEffect(() => {
+    if (pendingTacticalReviewSelectionRef.current) return;
     if (
       selectedTacticKey &&
       !currentTactics.some(
@@ -306,6 +321,28 @@ const selectedBoard = useMemo(
       setSelectedTacticKey(null);
     }
   }, [currentTactics, selectedTacticKey]);
+
+  useEffect(() => {
+    const pendingSelection = pendingTacticalReviewSelectionRef.current;
+    if (pendingSelection?.historyIndex === chess.historyIndex) {
+      pendingTacticalReviewSelectionRef.current = null;
+      setSelectedTacticKey(pendingSelection.tacticKey);
+      return;
+    }
+    pendingTacticalReviewSelectionRef.current = null;
+    setSelectedTacticKey(null);
+  }, [chess.historyIndex]);
+
+  useEffect(() => {
+    if (!mateLinePreviewFen) return;
+    pendingTacticalReviewSelectionRef.current = null;
+    setSelectedTacticKey(null);
+  }, [mateLinePreviewFen]);
+
+  useEffect(() => {
+    pendingTacticalReviewSelectionRef.current = null;
+    setSelectedTacticKey(null);
+  }, [selectedBoardId]);
 
   // Inizializza l'hook scacchiera quando viene selezionata una nuova board:
   // carica il FEN di partenza, le mosse persistite e le annotazioni di partenza.
@@ -1496,6 +1533,23 @@ const selectedBoard = useMemo(
     [clearMateLinePreview],
   );
 
+  const handleSelectTacticalReviewMoment = useCallback(
+    (moveIndex: number, tacticKey: string) => {
+      const targetHistoryIndex = moveIndex + 1;
+      clearMateLinePreview();
+      if (chess.historyIndex === targetHistoryIndex) {
+        setSelectedTacticKey(tacticKey);
+        return;
+      }
+      pendingTacticalReviewSelectionRef.current = {
+        historyIndex: targetHistoryIndex,
+        tacticKey,
+      };
+      chess.goToMove(targetHistoryIndex);
+    },
+    [chess, clearMateLinePreview],
+  );
+
 
   if (loading) {
     return (
@@ -1706,6 +1760,11 @@ const selectedBoard = useMemo(
           <AnalysisSidebarTabs
             movesContent={
               <>
+                <TacticalReviewPanel
+                  key={selectedBoard.id}
+                  review={tacticalReview}
+                  onSelectMoment={handleSelectTacticalReviewMoment}
+                />
                 <MoveCommentPreview
                   currentMove={chess.currentMove}
                   historyIndex={chess.historyIndex}
