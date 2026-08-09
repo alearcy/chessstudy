@@ -76,9 +76,9 @@ function buildPageQuery(options: LessonPageQuery) {
   }
   const terms = normalizeSearchTerms([options.query ?? ""]);
   if (terms.length > 0) {
-    query = query.textSearch("search_text", terms.join(" "), {
+    const prefixQuery = terms.map((term) => `${term}:*`).join(" & ");
+    query = query.textSearch("search_text", prefixQuery, {
       config: "simple",
-      type: "websearch",
     });
   }
   return query

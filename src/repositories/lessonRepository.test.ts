@@ -51,8 +51,8 @@ describe("Supabase lesson repository", () => {
     expect(builder.eq).toHaveBeenCalledWith("is_favorite", true);
     expect(builder.textSearch).toHaveBeenCalledWith(
       "search_text",
-      "kasparov b07",
-      { config: "simple", type: "websearch" },
+      "kasparov:* & b07:*",
+      { config: "simple" },
     );
     expect(builder.order).toHaveBeenNthCalledWith(
       1, "created_at", { ascending: false },
@@ -71,5 +71,19 @@ describe("Supabase lesson repository", () => {
         createdAt: new Date("2026-07-18T10:00:00.000Z"),
       }],
     });
+  });
+
+  it("searches each normalized term as a full-text prefix", async () => {
+    await getLessonsPage({
+      query: "  Ippò, ippò!  ",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(builder.textSearch).toHaveBeenCalledWith(
+      "search_text",
+      "ippo:*",
+      { config: "simple" },
+    );
   });
 });

@@ -2,6 +2,14 @@
 
 ## Completed
 
+- FEAT-015 Ricerca homepage per prefisso
+  - [x] Definire il comportamento della ricerca per parole parziali
+  - [x] Aggiungere la copertura RED per prefissi e query multi-termine
+  - [x] Implementare la query full-text per prefisso
+  - [x] Verificare test, lint e build
+  - [x] Confermare il comportamento nell'app
+  - Spec: `docs/specs/ricerca-homepage-per-prefisso.md`
+
 - FEAT-014 Revisione tattica per stato
   - [x] Classificare e persistere tattiche trovate, mancate e concesse
   - [x] Differenziare i chip e mostrare la posizione alternativa delle tattiche mancate
