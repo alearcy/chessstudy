@@ -318,4 +318,16 @@
 
 - Mi piacerebbe che quando viene trovato un matto (ad esempio il commento "matto in 5" o "matto in 1"), cliccando sulla frase "matto in 5" o "matto in 1" la scacchiera cambia mostrandomi la sequenza di mosse per quel matto. E posso ovviamente navigare tra quelle mosse. Solo quelle mosse, non quelle di tutta la partita, ma solo quelle relative al matto trovato. Un pulsante poi mi permette di tornare alla sequenza di mosse di tutta la partita. Il colore della scacchiera potrebbe essere più opaco quando si visualizza una sequenza di mosse di un matto specifico rispetto alla sequenza di mosse di tutta la partita. Fammi una proposta di come lo faresti.
 
+## In Progress
+
+- FEAT-016 Precisione dei giocatori nell'analisi
+  - [x] Definire e testare il calcolo deterministico della precisione
+  - [x] Mostrare la percentuale accanto al giocatore corretto
+  - [x] Verificare test, lint e build
+  - [ ] Confermare la resa nell'app
+  - Spec: `docs/specs/precisione-giocatori-analisi.md`
+
 ## Todo
+
+- Aggiungere il copyright in footer con l'anno corrente e dammi indicazioni riguardo la licenza open source e cosa scrivere in eventuali credits.
+- Implementa le icons per ogni dispositivo e la favicon generandole tu partendo da @public/logo.png

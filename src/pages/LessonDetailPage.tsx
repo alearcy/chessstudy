@@ -98,6 +98,7 @@ import {
 import { useMoveKeyboardNavigation } from "@/hooks/useMoveKeyboardNavigation";
 import { analyzeGameOpenings } from "@/services/openingBookService";
 import { classifyMoveAtIndex } from "@/services/moveAnnotationService";
+import { calculatePlayerAccuracies } from "@/services/gameAccuracyService";
 import { lessonBoardLayoutClass } from "@/lib/lessonBoardLayout";
 import {
   tacticalAlternativeForSelection,
@@ -1125,6 +1126,13 @@ const selectedBoard = useMemo(
     chess.historyIndex === 0
       ? (selectedBoard?.evalBestMoveUci ?? null)
       : (chess.currentMove?.evalBestMoveUci ?? null);
+  const playerAccuracies = useMemo(
+    () =>
+      lesson?.mode === "analysis" && selectedBoard
+        ? calculatePlayerAccuracies(selectedBoard, chess.moves)
+        : { white: null, black: null },
+    [chess.moves, lesson?.mode, selectedBoard],
+  );
   const analysisArrow: BoardArrow[] = (() => {
     // In modalità Analisi (historyIndex > 0): mostra la best move della
     // posizione PRECEDENTE — cosa Stockfish suggeriva al giocatore che ha mosso.
@@ -1737,6 +1745,8 @@ const selectedBoard = useMemo(
                         blackName={selectedBoard.blackName}
                         whiteElo={selectedBoard.headers?.WhiteElo}
                         blackElo={selectedBoard.headers?.BlackElo}
+                        whiteAccuracy={playerAccuracies.white}
+                        blackAccuracy={playerAccuracies.black}
                       />
                     }
                     bottomPlayerLabel={
@@ -1748,6 +1758,8 @@ const selectedBoard = useMemo(
                         blackName={selectedBoard.blackName}
                         whiteElo={selectedBoard.headers?.WhiteElo}
                         blackElo={selectedBoard.headers?.BlackElo}
+                        whiteAccuracy={playerAccuracies.white}
+                        blackAccuracy={playerAccuracies.black}
                       />
                     }
                     toolbarStatus={

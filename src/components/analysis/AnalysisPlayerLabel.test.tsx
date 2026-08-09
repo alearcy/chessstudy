@@ -45,6 +45,34 @@ describe("AnalysisPlayerLabel", () => {
     );
   });
 
+  it("mostra la precisione accanto al giocatore corretto e la scambia ruotando", () => {
+    const view = render(
+      <>
+        <AnalysisPlayerLabel
+          {...players}
+          orientation="black"
+          position="top"
+          whiteAccuracy={93}
+          blackAccuracy={87}
+        />
+        <AnalysisPlayerLabel
+          {...players}
+          orientation="black"
+          position="bottom"
+          whiteAccuracy={93}
+          blackAccuracy={87}
+        />
+      </>,
+    );
+
+    expect(view.getByTestId("analysis-player-top").textContent).toBe(
+      "Garry Kasparov(2812)Precisione 93%",
+    );
+    expect(view.getByTestId("analysis-player-bottom").textContent).toBe(
+      "Veselin Topalov(2700)Precisione 87%",
+    );
+  });
+
   it("omette valori assenti senza mostrare placeholder", () => {
     const view = render(
       <AnalysisPlayerLabel
@@ -81,5 +109,19 @@ describe("AnalysisPlayerLabel", () => {
 
     expect(view.getByTestId("analysis-player-top").textContent).toBe("Solo nome");
     expect(view.getByTestId("analysis-player-bottom").textContent).toBe("(2450)");
+  });
+
+  it("non mostra un placeholder di precisione quando il calcolo non e disponibile", () => {
+    const view = render(
+      <AnalysisPlayerLabel
+        {...players}
+        orientation="white"
+        position="bottom"
+        whiteAccuracy={null}
+        blackAccuracy={null}
+      />,
+    );
+
+    expect(view.queryByText(/Precisione/)).toBeNull();
   });
 });
