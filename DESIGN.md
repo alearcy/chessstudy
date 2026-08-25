@@ -1,5 +1,5 @@
 ---
-name: Chess Study
+name: Chessstudy
 description: Un banco di lavoro scacchistico calmo, preciso e ordinato per studiare e capire le partite.
 colors:
   graphite-base: "oklch(0.145 0 0)"
@@ -119,13 +119,13 @@ components:
     padding: "24px"
 ---
 
-# Design System: Chess Study
+# Design System: Chessstudy
 
 ## Overview
 
 **Creative North Star: "Il Banco del Coach"**
 
-Chess Study è un banco di lavoro digitale per osservare, annotare e capire: non una sala giochi e non una dashboard aziendale. L'ambiente scuro riduce il rumore attorno alla scacchiera, mentre la gerarchia compatta mantiene sempre vicini mosse, commenti e strumenti. Il carattere è calmo, preciso e ordinato.
+Chessstudy è un banco di lavoro digitale per osservare, annotare e capire: non una sala giochi e non una dashboard aziendale. L'ambiente scuro riduce il rumore attorno alla scacchiera, mentre la gerarchia compatta mantiene sempre vicini mosse, commenti e strumenti. Il carattere è calmo, preciso e ordinato.
 
 I componenti devono risultare precisi e rassicuranti. Bordi sottili, superfici tonali e ombre contenute separano gli strumenti senza teatralità; il colore compare quando porta informazione scacchistica o segnala uno stato. Gli accenti corallo e oro del logo restano una firma del marchio, non una licenza per colorare indiscriminatamente l'interfaccia.
 

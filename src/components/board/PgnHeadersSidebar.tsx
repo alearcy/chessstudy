@@ -91,7 +91,7 @@ export default function PgnHeadersSidebar({ headers }: PgnHeadersSidebarProps) {
             >
               <Icon className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {label}
                 </div>
                 {asLink && isUrl(value) ? (

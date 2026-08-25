@@ -8,7 +8,7 @@
 
 ## Context
 
-Chess Study e attualmente distribuita come applicazione desktop Tauri. Il
+Chessstudy e attualmente distribuita come applicazione desktop Tauri. Il
 frontend React/Vite usa Dexie/IndexedDB per la persistenza locale e delega
 l'analisi principale a Stockfish 18 nativo tramite comandi Rust/Tauri,
 mantenendo Stockfish WASM single-threaded come fallback nel browser.
@@ -24,7 +24,7 @@ prodotto:
 - mantiene un backend Rust il cui scopo principale scompare portando
   persistenza e analisi nel browser.
 
-Il nuovo requisito e distribuire Chess Study come applicazione web statica
+Il nuovo requisito e distribuire Chessstudy come applicazione web statica
 React/Vite, accessibile soltanto a utenti invitati dall'amministratore. Ogni
 utente deve poter leggere e modificare esclusivamente i propri dati. La
 persistenza deve essere remota tramite Supabase e Stockfish deve continuare a
@@ -65,7 +65,7 @@ La soluzione deve inoltre:
 
 ## Decision
 
-Adottare l'opzione 1: Chess Study diventa una SPA React/Vite full-client,
+Adottare l'opzione 1: Chessstudy diventa una SPA React/Vite full-client,
 pubblicabile su hosting statico, con Supabase come servizio gestito per
 autenticazione e persistenza e Stockfish.js eseguito localmente nel browser.
 

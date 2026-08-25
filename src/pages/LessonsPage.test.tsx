@@ -100,8 +100,16 @@ describe("LessonsPage database queries", () => {
     expect(card?.className).toContain("py-3");
     expect(header).toBeTruthy();
     expect(content).toBeTruthy();
-    expect(within(header as HTMLElement).getByTitle("Modifica")).toBeTruthy();
-    expect(within(header as HTMLElement).getByTitle("Elimina")).toBeTruthy();
+    expect(
+      view.getByRole("link", { name: "Apri Partita importata" }).getAttribute("href"),
+    ).toBe("/lesson/1");
+    expect(within(header as HTMLElement).getByRole("button", {
+      name: "Modifica Partita importata",
+    })).toBeTruthy();
+    expect(within(header as HTMLElement).getByRole("button", {
+      name: "Elimina Partita importata",
+    })).toBeTruthy();
+    expect(within(content as HTMLElement).getByText("Analisi")).toBeTruthy();
     expect(within(content as HTMLElement).getByText("13 luglio 2026")).toBeTruthy();
     expect(within(content as HTMLElement).getByText("Lichess")).toBeTruthy();
   });

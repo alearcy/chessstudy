@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-25T14:28:02Z",
-  "title": "Design System: Chess Study",
+  "generatedAt": "2026-08-14T14:48:48Z",
+  "title": "Design System: Chessstudy",
   "extensions": {
     "colorMeta": {
       "graphite-base": {
@@ -244,7 +244,7 @@
   ],
   "narrative": {
     "northStar": "Il Banco del Coach",
-    "overview": "Chess Study è un banco di lavoro digitale per osservare, annotare e capire: non una sala giochi e non una dashboard aziendale. L'ambiente scuro riduce il rumore attorno alla scacchiera, mentre la gerarchia compatta mantiene sempre vicini mosse, commenti e strumenti. Il carattere è calmo, preciso e ordinato.\n\nI componenti devono risultare precisi e rassicuranti. Bordi sottili, superfici tonali e ombre contenute separano gli strumenti senza teatralità; il colore compare quando porta informazione scacchistica o segnala uno stato. Gli accenti corallo e oro del logo restano una firma del marchio, non una licenza per colorare indiscriminatamente l'interfaccia.",
+    "overview": "Chessstudy è un banco di lavoro digitale per osservare, annotare e capire: non una sala giochi e non una dashboard aziendale. L'ambiente scuro riduce il rumore attorno alla scacchiera, mentre la gerarchia compatta mantiene sempre vicini mosse, commenti e strumenti. Il carattere è calmo, preciso e ordinato.\n\nI componenti devono risultare precisi e rassicuranti. Bordi sottili, superfici tonali e ombre contenute separano gli strumenti senza teatralità; il colore compare quando porta informazione scacchistica o segnala uno stato. Gli accenti corallo e oro del logo restano una firma del marchio, non una licenza per colorare indiscriminatamente l'interfaccia.",
     "keyCharacteristics": [
       "Campo di lavoro scuro e neutro, con contrasto chiaro e controllato.",
       "Densità operativa adatta a scacchiera, mosse e pannelli affiancati.",

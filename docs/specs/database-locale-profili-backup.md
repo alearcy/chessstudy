@@ -2,7 +2,7 @@
 
 ## Contesto
 
-Chess Study salva oggi lezioni, scacchiere e mosse in IndexedDB tramite
+Chessstudy salva oggi lezioni, scacchiere e mosse in IndexedDB tramite
 Dexie. Il database deve restare affidabile anche con archivi più grandi,
 supportare ricerca e paginazione senza caricare tutte le lezioni in memoria e
 permettere un backup locale ripristinabile dopo la reinstallazione.

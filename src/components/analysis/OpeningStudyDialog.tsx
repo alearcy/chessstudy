@@ -203,7 +203,7 @@ export default function OpeningStudyDialog({
                   />
                   <span>{destination.title}</span>
                   {destination.related ? (
-                    <span className="ml-auto text-[10px] font-medium uppercase text-primary">
+                    <span className="ml-auto text-xs font-medium uppercase text-primary">
                       Stessa famiglia
                     </span>
                   ) : null}

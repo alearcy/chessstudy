@@ -682,7 +682,7 @@ export default function ChessBoardView({
         <div className="w-full max-w-[480px] flex items-center gap-2">
           <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-primary transition-all"
+              className="h-full bg-primary transition-[width]"
               style={{
                 width: `${
                   analysisProgress.total
@@ -728,7 +728,7 @@ export default function ChessBoardView({
                   <div key={square} className="relative">
                     {showBadge && (
                       <span
-                        className="absolute -bottom-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full text-[13px] font-bold leading-none shadow-sm"
+                        className="absolute -bottom-1.5 -right-1.5 flex size-6 items-center justify-center rounded-full text-xs font-bold leading-none shadow-sm"
                         style={{
                           backgroundColor: moveBadge!.color,
                           color: "white",

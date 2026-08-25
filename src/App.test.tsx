@@ -80,10 +80,16 @@ afterEach(() => {
 });
 
 describe("App toolbar", () => {
-  it("uses the Chess Study PNG as the home link", () => {
+  it("shows the current year copyright in the private shell", () => {
     const view = render(<App />);
-    const homeLink = view.getByRole("link", { name: "Chess Study" });
-    const logo = view.getByRole("img", { name: "Chess Study" });
+
+    expect(view.getByText(`© ${new Date().getFullYear()} Alessandro Arcidiaco`)).toBeTruthy();
+  });
+
+  it("uses the Chessstudy PNG as the home link", () => {
+    const view = render(<App />);
+    const homeLink = view.getByRole("link", { name: "Chessstudy" });
+    const logo = view.getByRole("img", { name: "Chessstudy" });
 
     expect(homeLink.getAttribute("href")).toBe("/");
     expect(homeLink.contains(logo)).toBe(true);
@@ -155,5 +161,6 @@ describe("App toolbar", () => {
 
     expect(view.getByText("Accesso pubblico")).toBeTruthy();
     expect(view.queryByRole("status", { name: "Ruota il dispositivo" })).toBeNull();
+    expect(view.queryByText(`© ${new Date().getFullYear()} Alessandro Arcidiaco`)).toBeNull();
   });
 });

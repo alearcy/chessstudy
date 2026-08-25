@@ -1,4 +1,4 @@
-# Chess Study App - Piano di Sviluppo
+# Chessstudy App - Piano di Sviluppo
 
 ## Panoramica
 App locale per studiare gli scacchi. Permette di creare lezioni, ognuna con più scacchiere. Ogni scacchiera ha una serie di mosse con varianti e commenti. Export PGN e backup/import JSON.

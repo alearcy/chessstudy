@@ -65,10 +65,13 @@ function PrivateAppShell() {
   if (portraitGuardActive) return <PortraitOrientationGuard />;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <header className="border-b border-border/50">
         <div className="mx-auto flex w-full max-w-[96rem] items-center gap-3 px-6 py-4">
-          <Link to="/" className="inline-flex shrink-0">
+          <Link
+            to="/"
+            className="inline-flex shrink-0 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
             <BrandLogo className="w-40 sm:w-44" />
           </Link>
           <div className="flex-1" />
@@ -94,9 +97,14 @@ function PrivateAppShell() {
           <ErrorNotice message={logoutError} onDismiss={() => setLogoutError(null)} />
         </div>
       )}
-      <main className="mx-auto w-full max-w-[96rem] px-4 py-4">
+      <main className="mx-auto w-full max-w-[96rem] flex-1 px-4 py-4">
         <Outlet />
       </main>
+      <footer className="border-t border-border/50">
+        <div className="mx-auto w-full max-w-[96rem] px-4 py-3 text-center text-xs text-muted-foreground">
+          © {new Date().getFullYear()} Alessandro Arcidiaco
+        </div>
+      </footer>
       <Dialog
         open={logoutConfirmOpen}
         onOpenChange={(open) => {

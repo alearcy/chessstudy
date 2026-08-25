@@ -14,13 +14,13 @@ Non è previsto, per ora, di estendere il prodotto a un pubblico ampio, a organi
 
 ## Product Purpose
 
-Chess Study permette di studiare scacchi creando studi strutturati e, soprattutto, di analizzare gratuitamente le partite con il supporto di un coach virtuale.
+Chessstudy permette di studiare scacchi creando studi strutturati e, soprattutto, di analizzare gratuitamente le partite con il supporto di un coach virtuale.
 
 Il risultato atteso è che l'utente possa importare o ricostruire una partita, individuare i momenti critici, comprendere gli errori e trasformare l'analisi in materiale riutilizzabile per lo studio, mantenendo il prodotto sostenibile sui piani gratuiti dei servizi utilizzati.
 
 ## Positioning
 
-Chess Study combina nello stesso archivio personale:
+Chessstudy combina nello stesso archivio personale:
 
 - studi composti da più scacchiere, mosse, varianti e commenti;
 - partite importate e analizzate nel browser con Stockfish;
@@ -50,7 +50,7 @@ La posizione di riferimento è rendere accessibile gratuitamente, per uso person
 
 ## Brand Commitments
 
-- Nome del prodotto: **Chess Study**.
+- Nome del prodotto: **Chessstudy**.
 - Lingua e voce: italiano chiaro, concreto ed educativo; le spiegazioni non devono presentare euristiche o commenti del coach come verità più certe dei dati scacchistici che li supportano.
 - Asset principale esistente: `public/chessstudy.png`.
 

@@ -20,7 +20,7 @@ interface OpeningRowProps {
 function OpeningRow({ label, opening, onSelect }: OpeningRowProps) {
   return (
     <li className="rounded-md bg-muted/40 px-2.5 py-2">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       {opening ? (

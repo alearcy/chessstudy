@@ -22,7 +22,7 @@ export default function PortraitOrientationGuard() {
           Ruota il dispositivo
         </h1>
         <p className="mt-3 text-pretty text-sm leading-6 text-muted-foreground">
-          Usa Chess Study in orizzontale per visualizzare comodamente
+          Usa Chessstudy in orizzontale per visualizzare comodamente
           scacchiera e mosse.
         </p>
       </div>

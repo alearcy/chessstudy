@@ -10,7 +10,7 @@ export default function BrandLogo({ className, ...props }: BrandLogoProps) {
   return (
     <img
       src="/chessstudy.png"
-      alt="Chess Study"
+      alt="Chessstudy"
       width={1679}
       height={342}
       className={cn("block h-auto", className)}

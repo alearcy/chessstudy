@@ -327,7 +327,22 @@
 
 ## In Progress
 
+- UI-016 Audit UI e coerenza con il prodotto
+  - [x] Verificare componenti e superfici rispetto a PRODUCT.md e DESIGN.md
+  - [x] Correggere accessibilità, gerarchia neutra e drift del design system
+  - [x] Verificare test, lint, build e detector Impeccable
+  - [ ] Confermare la resa desktop/tablet landscape nell'app
+  - Spec: `docs/specs/audit-ui-coerenza-prodotto.md`
+
+- UI-015 Footer copyright e indicazioni open source
+  - [x] Mostrare il copyright con anno corrente nella shell privata
+  - [x] Verificare test, lint e build
+  - [x] Fornire indicazioni su licenza e credits senza cambiare la licenza del repository
+  - [x] Aggiungere licenza GPL-3.0-or-later e notice delle dipendenze
+  - [x] Uniformare il nome del prodotto a Chessstudy
+  - [ ] Confermare la resa del footer nell'app
+  - Spec: `docs/specs/footer-copyright-licenza.md`
+
 ## Todo
 
-- Aggiungere il copyright in footer con l'anno corrente e dammi indicazioni riguardo la licenza open source e cosa scrivere in eventuali credits.
 - Implementa le icons per ogni dispositivo e la favicon generandole tu partendo da @public/logo.png

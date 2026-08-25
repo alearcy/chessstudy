@@ -2,7 +2,7 @@
 
 ## Business goal
 
-Rendere Chess Study accessibile come applicazione web multiutente gratuita, con
+Rendere Chessstudy accessibile come applicazione web multiutente gratuita, con
 dati personali sincronizzati e analisi Stockfish nel browser, senza dipendenze
 dal runtime desktop Tauri.
 
@@ -41,7 +41,7 @@ produzione.
 - rimozione del runtime Tauri, del backend Rust, dei binari nativi e delle
   relative dipendenze frontend;
 - uso del logo `public/chessstudy.png` nei punti in cui il nome
-  "Chess Study" identifica il marchio, inclusi testata e login;
+  "Chessstudy" identifica il marchio, inclusi testata e login;
 - configurazione Vite e hosting statico per isolamento cross-origin e fallback
   delle route SPA.
 
@@ -118,7 +118,7 @@ produzione.
     toolchain Rust; in produzione, un refresh su una route valida della SPA non
     restituisce 404.
 23. La testata privata e il form di login mostrano il logo PNG con testo
-    alternativo "Chess Study"; i titoli descrittivi delle altre pagine restano
+    alternativo "Chessstudy"; i titoli descrittivi delle altre pagine restano
     testo.
 
 ## Data and contract impact
@@ -335,7 +335,7 @@ del diff prima di passare alla successiva.
   amministrative;
 - migrazioni, tipi generati e configurazione deploy sono versionati;
 - testata e login usano il logo PNG senza perdere il nome accessibile
-  "Chess Study";
+  "Chessstudy";
 - test frontend e integrazione RLS passano, `npm run build` e
   `git diff --check` sono verdi;
 - Tauri, Cargo, Dexie e dipendenze non più usate sono rimossi dal progetto.

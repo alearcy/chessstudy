@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen,
   Plus,
@@ -34,7 +34,6 @@ import {
 import {
   Card,
   CardHeader,
-  CardTitle,
   CardContent,
 } from "@/components/ui/card";
 import ImportPgnDialog from "@/components/board/ImportPgnDialog";
@@ -518,21 +517,26 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
           {lessons.map((lesson) => (
             <Card
               key={lesson.id}
-              className="gap-0 border-border/70 py-3 transition-colors hover:border-primary/40 hover:bg-muted/40"
-              onClick={() => navigate(`/lesson/${lesson.id}`)}
+              className="relative gap-0 border-border/70 py-3 transition-colors hover:border-primary/40 hover:bg-muted/40"
             >
               <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 pb-1">
                 <div className="min-w-0">
-                  <CardTitle className="flex min-w-0 items-center gap-2">
+                  <Link
+                    to={`/lesson/${lesson.id}`}
+                    aria-label={`Apri ${lesson.title}`}
+                    className="flex min-w-0 items-center gap-2 rounded-sm outline-none after:absolute after:inset-0 after:rounded-xl focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
+                  >
                     {lesson.mode === "study" ? (
-                      <BookOpen className="size-4 text-blue-500 shrink-0" />
+                      <BookOpen className="size-4 shrink-0 text-muted-foreground" />
                     ) : (
-                      <Microscope className="size-4 text-orange-500 shrink-0" />
+                      <Microscope className="size-4 shrink-0 text-muted-foreground" />
                     )}
-                    <span className="truncate">{lesson.title}</span>
-                  </CardTitle>
+                    <span className="truncate text-base font-semibold leading-none">
+                      {lesson.title}
+                    </span>
+                  </Link>
                 </div>
-                <div className="flex shrink-0 gap-1">
+                <div className="relative z-10 flex shrink-0 gap-1">
                   {lesson.mode === "analysis" && (
                     <LessonFavoriteButton
                       lessonTitle={lesson.title}
@@ -550,6 +554,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
                       setDialogOpen(true);
                     }}
                     title="Modifica"
+                    aria-label={`Modifica ${lesson.title}`}
                   >
                     <Pencil className="size-3" />
                   </Button>
@@ -561,6 +566,7 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
                       setDeletingLesson(lesson);
                     }}
                     title="Elimina"
+                    aria-label={`Elimina ${lesson.title}`}
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="size-3" />
@@ -568,6 +574,8 @@ export default function LessonsPage({ onOpenSettings }: { onOpenSettings?: () =>
                 </div>
               </CardHeader>
               <CardContent className="flex items-center gap-2 px-4 pb-0 text-xs text-muted-foreground">
+                <span>{lesson.mode === "study" ? "Studio" : "Analisi"}</span>
+                <span aria-hidden="true">·</span>
                 <span>
                   {lesson.createdAt.toLocaleDateString("it-IT", {
                     day: "numeric",

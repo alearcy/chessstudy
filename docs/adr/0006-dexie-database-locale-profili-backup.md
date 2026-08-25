@@ -5,7 +5,7 @@
 
 ## Context
 
-Chess Study salva lezioni, scacchiere e mosse in IndexedDB tramite Dexie. Il
+Chessstudy salva lezioni, scacchiere e mosse in IndexedDB tramite Dexie. Il
 database deve supportare archivi più grandi senza caricare tutti i contenuti
 in memoria, ricerca e paginazione efficienti, migrazioni conservative e un
 backup locale ripristinabile dopo la reinstallazione.
