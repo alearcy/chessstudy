@@ -372,6 +372,7 @@ export default function ChessBoardView({
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const apiRef = useRef<Api | null>(null);
+  const animationResumeRef = useRef<number | null>(null);
   const annotationStartRef = useRef<{
     pointerId: number;
     square: Square;
@@ -531,6 +532,10 @@ export default function ChessBoardView({
     const api = Chessground(boardRef.current, config);
     apiRef.current = api;
     return () => {
+      if (animationResumeRef.current !== null) {
+        cancelAnimationFrame(animationResumeRef.current);
+        animationResumeRef.current = null;
+      }
       api.destroy();
       boardRef.current?.replaceChildren();
       apiRef.current = null;
@@ -540,7 +545,23 @@ export default function ChessBoardView({
   useEffect(() => {
     const api = apiRef.current;
     if (!api) return;
-    api.set(config);
+    const interruptAnimation =
+      animationResumeRef.current !== null ||
+      (api.state.animation.current && api.getFen() !== config.fen);
+    // Rapid seeks must not restart an animation with an older queued frame.
+    if (interruptAnimation) api.stop();
+    api.set(
+      interruptAnimation
+        ? { ...config, animation: { ...config.animation, enabled: false } }
+        : config,
+    );
+    if (interruptAnimation && animationResumeRef.current === null) {
+      // Let the canceled animation's queued frame drain before enabling another.
+      animationResumeRef.current = requestAnimationFrame(() => {
+        animationResumeRef.current = null;
+        api.set({ animation: config.animation });
+      });
+    }
     api.setShapes(userShapes);
     api.setAutoShapes(autoShapes);
   }, [config, userShapes, autoShapes]);
@@ -679,22 +700,30 @@ export default function ChessBoardView({
       </div>
 
       {analyzing && analysisProgress && (
-        <div className="w-full max-w-[480px] flex items-center gap-2">
-          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-[width]"
-              style={{
-                width: `${
-                  analysisProgress.total
-                    ? (analysisProgress.done / analysisProgress.total) * 100
-                    : 0
-                }%`,
-              }}
-            />
+        <div className="w-full max-w-[480px] space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{
+                  width: `${
+                    analysisProgress.total
+                      ? (analysisProgress.done / analysisProgress.total) * 100
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+              {analysisProgress.done}/{analysisProgress.total}
+            </span>
           </div>
-          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-            {analysisProgress.done}/{analysisProgress.total}
-          </span>
+          <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 aria-hidden="true" className="size-3 shrink-0 animate-spin motion-reduce:animate-none" />
+            {analysisProgress.total > 0 && analysisProgress.done >= analysisProgress.total
+              ? "Finalizzazione analisi…"
+              : "Analisi in corso…"}
+          </div>
         </div>
       )}
 

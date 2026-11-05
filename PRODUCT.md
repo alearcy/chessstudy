@@ -40,7 +40,7 @@ La posizione di riferimento è rendere accessibile gratuitamente, per uso person
 
 - Creazione e gestione di studi con più scacchiere, sequenze di mosse, varianti, commenti e annotazioni sulla scacchiera.
 - Importazione di partite tramite PGN, Chess.com e Lichess.
-- Analisi automatica nel browser con Stockfish 18 WASM, con modalità multi-thread quando supportata e fallback single-thread.
+- Analisi automatica nel browser con Stockfish 19 WASM, con modalità multi-thread quando supportata e fallback single-thread.
 - Classificazione delle mosse, individuazione dei momenti critici e spiegazioni educative deterministiche basate sui risultati del motore e su diagnostiche scacchistiche.
 - Esportazione degli studi e backup/ripristino dei dati tramite file.
 - Persistenza e autenticazione tramite Supabase; distribuzione web tramite Cloudflare.

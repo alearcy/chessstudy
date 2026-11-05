@@ -1,7 +1,7 @@
 import type { EvalFields } from "@/types";
 
-const MULTI_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-18-lite.js";
-const SINGLE_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-18-lite-single.js";
+const MULTI_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-19-lite.js";
+const SINGLE_ENGINE_URL = import.meta.env.BASE_URL + "stockfish/stockfish-19-lite-single.js";
 export const AUTOMATIC_STOCKFISH_DEPTH = 15;
 export const AUTOMATIC_STOCKFISH_THREADS = 2;
 
@@ -360,7 +360,7 @@ let analysisQueueRunning = false;
  * Analizza una sequenza di posizioni (FEN) in ordine. Risolve con gli eval
  * (POV Bianco). Interruzione cooperativa via `signal.cancelled`.
  *
- * Usa Stockfish 18 lite WASM multi-threaded quando il browser e isolato;
+ * Usa Stockfish 19 lite WASM multi-threaded quando il browser e isolato;
  * altrimenti forza il worker single-threaded in modalita compatibilita.
  */
 export async function analyzePositions(

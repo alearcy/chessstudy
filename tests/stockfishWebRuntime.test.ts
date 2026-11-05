@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 
 describe("Stockfish web distribution", () => {
   it.each([
-    "stockfish-18-lite.js",
-    "stockfish-18-lite.wasm",
-    "stockfish-18-lite-single.js",
-    "stockfish-18-lite-single.wasm",
+    "stockfish-19-lite.js",
+    "stockfish-19-lite.wasm",
+    "stockfish-19-lite-single.js",
+    "stockfish-19-lite-single.wasm",
     "Copying.txt",
     "SOURCE.txt",
   ])("ships %s", (asset) => {

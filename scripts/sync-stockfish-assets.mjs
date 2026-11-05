@@ -7,10 +7,10 @@ const packageRoot = resolve(projectRoot, "node_modules/stockfish");
 const outputRoot = resolve(projectRoot, "public/stockfish");
 
 const assets = [
-  ["bin/stockfish-18-lite.js", "stockfish-18-lite.js"],
-  ["bin/stockfish-18-lite.wasm", "stockfish-18-lite.wasm"],
-  ["bin/stockfish-18-lite-single.js", "stockfish-18-lite-single.js"],
-  ["bin/stockfish-18-lite-single.wasm", "stockfish-18-lite-single.wasm"],
+  ["bin/stockfish-19-lite.js", "stockfish-19-lite.js"],
+  ["bin/stockfish-19-lite.wasm", "stockfish-19-lite.wasm"],
+  ["bin/stockfish-19-lite-single.js", "stockfish-19-lite-single.js"],
+  ["bin/stockfish-19-lite-single.wasm", "stockfish-19-lite-single.wasm"],
   ["Copying.txt", "Copying.txt"],
 ];
 

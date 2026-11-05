@@ -103,7 +103,7 @@ describe("automatic Stockfish analysis", () => {
   });
 });
 
-describe("Stockfish 18 web runtime", () => {
+describe("Stockfish 19 web runtime", () => {
   it("selects the multi-threaded lite worker only in an isolated browser", () => {
     expect(selectStockfishRuntime({
       crossOriginIsolated: true,
@@ -113,7 +113,7 @@ describe("Stockfish 18 web runtime", () => {
       flavor: "multi",
       threads: 4,
       compatibilityMode: false,
-      workerUrl: expect.stringContaining("stockfish-18-lite.js"),
+      workerUrl: expect.stringContaining("stockfish-19-lite.js"),
     });
   });
 
@@ -126,7 +126,7 @@ describe("Stockfish 18 web runtime", () => {
       flavor: "single",
       threads: 1,
       compatibilityMode: true,
-      workerUrl: expect.stringContaining("stockfish-18-lite-single.js"),
+      workerUrl: expect.stringContaining("stockfish-19-lite-single.js"),
     });
   });
 

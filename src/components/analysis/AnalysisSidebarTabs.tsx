@@ -74,6 +74,10 @@ export default function AnalysisSidebarTabs({
       >
         {activeTab === "moves" ? movesContent : openingsContent}
       </div>
+
+      <p className="shrink-0 text-center text-xs text-muted-foreground">
+        Powered by Stockfish 19
+      </p>
     </ViewportSidebar>
   );
 }

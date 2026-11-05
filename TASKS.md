@@ -2,6 +2,13 @@
 
 ## Completed
 
+- Aggiornamento a Stockfish 19
+  - [x] Aggiornare pacchetto, worker Lite multi/single-thread e asset distribuiti
+  - [x] Aggiornare test, riferimenti alla versione e sorgenti GPL
+  - [x] Verificare UCI delle due build WASM, test, lint e build
+  - Evidenza 2026-11-05: 235 test superati; lint senza errori (6 warning); build superata. Prova UCI via Node riuscita per entrambe le build; browser e deploy non verificati.
+  - Spec: `docs/specs/aggiornamento-stockfish-19.md`
+
 - FEAT-016 Precisione dei giocatori nell'analisi
   - [x] Definire e testare il calcolo deterministico della precisione
   - [x] Mostrare la percentuale accanto al giocatore corretto

@@ -12,8 +12,8 @@ Copyright (C) 2026 Alessandro Arcidiaco.
 | Component | Version | License | Upstream |
 | --- | ---: | --- | --- |
 | @lichess-org/chessground (Chessground) | 10.1.1 | GPL-3.0-or-later | https://github.com/lichess-org/chessground |
-| Stockfish.js | 18.0.8 | GPL-3.0 | https://github.com/nmrugg/stockfish.js |
-| Stockfish | 18 | GPL-3.0 | https://github.com/official-stockfish/Stockfish |
+| Stockfish.js | 19.0.1 | GPL-3.0 | https://github.com/nmrugg/stockfish.js |
+| Stockfish | 19 | GPL-3.0 | https://github.com/official-stockfish/Stockfish |
 
 The Stockfish WebAssembly builds are distributed in `public/stockfish/`.
 Their GPL text is reproduced in `public/stockfish/Copying.txt`, and

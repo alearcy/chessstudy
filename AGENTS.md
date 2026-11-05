@@ -12,7 +12,7 @@ All commands must be run from `chessstudy/`.
 - `npm run lint` — `eslint .`
 
 ## Stack (actual, not plan.md)
-React **19** (not 18), React Router **v7** (not v6), Tailwind CSS **v4** via `@tailwindcss/vite` plugin (not v3+PostCSS), chess.js v1, Chessground, Supabase JS v2, Stockfish 18 WASM, Shadcn/ui New York style.
+React **19** (not 18), React Router **v7** (not v6), Tailwind CSS **v4** via `@tailwindcss/vite` plugin (not v3+PostCSS), chess.js v1, Chessground, Supabase JS v2, Stockfish 19 WASM, Shadcn/ui New York style.
 
 `docs/plan.md` is the design document but its dependency versions are outdated. Trust `package.json`.
 

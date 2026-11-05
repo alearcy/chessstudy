@@ -11,6 +11,7 @@ const { apiSetMock, chessgroundMock } = vi.hoisted(() => {
   return {
     apiSetMock,
     chessgroundMock: vi.fn(() => ({
+    state: { animation: {} },
     destroy: vi.fn(),
     selectSquare: vi.fn(),
     set: apiSetMock,
@@ -48,6 +49,8 @@ function renderBoard(
     onExportPgn?: () => void;
     onExportImage?: () => void;
     onAnalyze?: () => void;
+    analyzing?: boolean;
+    analysisProgress?: { done: number; total: number } | null;
     lastMoveSquare?: "e4";
     lastMoveFromSquare?: "e2";
   } = {},
@@ -74,6 +77,8 @@ function renderBoard(
       onExportPgn={options.onExportPgn}
       onExportImage={options.onExportImage}
       onAnalyze={options.onAnalyze}
+      analyzing={options.analyzing}
+      analysisProgress={options.analysisProgress}
       canAnalyze
       analysisDepth={15}
       lastMoveSquare={options.lastMoveSquare}
@@ -458,6 +463,32 @@ describe("ChessBoardView esportazione Studio", () => {
 });
 
 describe("ChessBoardView analisi Stockfish", () => {
+  it.each([
+    [0, "Analisi in corso…"],
+    [96, "Analisi in corso…"],
+    [97, "Finalizzazione analisi…"],
+  ])("segnala il lavoro in corso a %i/97 posizioni", (done, message) => {
+    const view = renderBoard("analysis", {
+      analyzing: true,
+      analysisProgress: { done, total: 97 },
+    });
+
+    expect(view.getByText(`${done}/97`)).toBeTruthy();
+    const status = view.getByRole("status");
+    expect(status.textContent).toBe(message);
+    expect(status.querySelector("svg")).not.toBeNull();
+  });
+
+  it("nasconde il loader quando l'analisi termina o viene annullata", () => {
+    const view = renderBoard("analysis", {
+      analyzing: false,
+      analysisProgress: { done: 97, total: 97 },
+    });
+
+    expect(view.queryByRole("status")).toBeNull();
+    expect(view.queryByText("97/97")).toBeNull();
+  });
+
   it("non espone l'analisi nelle scacchiere di Studio", () => {
     const view = renderBoard("study", { onAnalyze: vi.fn() });
 
